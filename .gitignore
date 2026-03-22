@@ -1,0 +1,7 @@
+build/
+.pio/
+*.bin
+*.elf
+.vscode/
+*.f3d.lock
+.DS_Store
