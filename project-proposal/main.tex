@@ -94,23 +94,23 @@ We model a single leg as a 3-link serial chain rotating in the sagittal (pitch) 
 \end{figure}
 
 \vspace{0.5cm}
-\textbf{Leg model.}
+\textbf{Leg model:}
 Each leg consists of three links: $L_1$ (shoulder to hip joint, length $r_1$), $L_2$ (hip to knee, length $r_2$), and $L_3$ (knee to foot tip, length $r_3$).
 The hip and knee motors act on pitch axes and bear static gravity torque, while the shoulder motor acts on a yaw axis (parallel to gravity) and bears only dynamic rotational inertia during swing phase.
 
 \vspace{0.5cm}
-\textbf{Knee motor torque.}
+\textbf{Knee motor torque:}
 The knee servo supports link $L_3$ and the tip load $m_{\text{tip}}$.
 All relevant masses lie along $L_3$, so a single angle $\theta_{\text{knee}}$ governs the gravity projection:
 %
 \begin{align*}
   \tau_{L_3}
-  &= \left( m_{L_3} \cdot \frac{r_3}{2}
+   & = \left( m_{L_3} \cdot \frac{r_3}{2}
   + m_{\text{tip}} \cdot r_3 \right)
   \cos\theta_{\text{knee}}
 \end{align*}
 
-\textbf{Hip motor torque.}
+\textbf{Hip motor torque:}
 The hip servo supports $L_2$, the knee servo mass, $L_3$, and the tip load.
 Because the hip and knee angles are independent, masses on $L_2$ project by
 $\cos\theta_{\text{hip}}$ while masses on $L_3$ project by
@@ -118,33 +118,33 @@ $\cos\theta_{\text{knee}}$:
 %
 \begin{align*}
   \tau_{L_2}
-  &= m_{L_2}\,\frac{r_2}{2}\,\cos\theta_{\text{hip}}
-  + m_{\text{servo,knee}}\,r_2\,\cos\theta_{\text{hip}} \\
-  &\quad + m_{L_3}\!\left(r_2\cos\theta_{\text{hip}}
-  + \frac{r_3}{2}\cos\theta_{\text{knee}}\right) \\
-  &\quad + m_{\text{tip}}\!\left(r_2\cos\theta_{\text{hip}}
+   & = m_{L_2}\,\frac{r_2}{2}\,\cos\theta_{\text{hip}}
+  + m_{\text{servo,knee}}\,r_2\,\cos\theta_{\text{hip}}       \\
+   & \quad + m_{L_3}\!\left(r_2\cos\theta_{\text{hip}}
+  + \frac{r_3}{2}\cos\theta_{\text{knee}}\right)              \\
+   & \quad + m_{\text{tip}}\!\left(r_2\cos\theta_{\text{hip}}
   + r_3\cos\theta_{\text{knee}}\right)
 \end{align*}
 
-\textbf{Inverse solver - weight budget.}
+\textbf{Inverse solver to find the weight budget:}
 With the motor choice settled, the practical question is how much total mass we can allocate to the chassis, electronics, and payload.
 Setting each torque equal to the rated stall torque and solving for $m_{\text{tip}}$ yields the per-leg load capacity.
 For the hip:
 %
 \begin{align*}
   m_{\text{tip,max}}^{\text{hip}}
-  &= \frac{
-    \tau_{\text{rated}}
-    - \bigl(m_{L_2}\,\tfrac{r_2}{2}
-    + m_{\text{servo,knee}}\,r_2\bigr)\cos\theta_{\text{hip}}
-    - m_{L_3}\bigl(r_2\cos\theta_{\text{hip}}
-    + \tfrac{r_3}{2}\cos\theta_{\text{knee}}\bigr)
-  }{
-    r_2\cos\theta_{\text{hip}} + r_3\cos\theta_{\text{knee}}
-  }
+   & = \frac{
+         \tau_{\text{rated}}
+         - \bigl(m_{L_2}\,\tfrac{r_2}{2}
+         + m_{\text{servo,knee}}\,r_2\bigr)\cos\theta_{\text{hip}}
+         - m_{L_3}\bigl(r_2\cos\theta_{\text{hip}}
+         + \tfrac{r_3}{2}\cos\theta_{\text{knee}}\bigr)
+       }{
+         r_2\cos\theta_{\text{hip}} + r_3\cos\theta_{\text{knee}}
+       }
 \end{align*}
 %
-The binding constraint is whichever servo saturates first.  
+The binding constraint is whichever servo saturates first.
 Total supportable body mass is then:
 %
 \[
@@ -153,10 +153,10 @@ Total supportable body mass is then:
   m_{\text{tip,max}}^{\text{hip}}\bigr)
   \times n_{\text{legs in stance}}
 \]
-For link lengths up to 10\,cm at worst-case joint angles ($\theta = 0^{\circ}$), this yields a minimum supportable body weight of 3--4\,kg across four legs --- comfortably above our target chassis mass.
+For link lengths up to 10\,cm at worst-case joint angles ($\theta = 0^{\circ}$), this yields a minimum supportable body weight of 3--4\,kg across four legs, comfortably above our target chassis mass.
 
 \vspace{0.5cm}
-\textbf{Dynamic yaw torque.}
+\textbf{Dynamic yaw torque:}
 As a secondary analysis, we compute the moment of inertia of the fully extended leg about the shoulder yaw axis (using the parallel-axis theorem for each link and point mass) and derive the required yaw torque $\tau_{\text{yaw}} = I_{\text{leg}} \cdot \alpha$ for a target swing-phase angular acceleration $\alpha$.
 Checking the simulation across the full parameter range confirms comfortable margins for any realistic leg configuration given the 15\,kg\,cm rated torque of our servos.
 
@@ -169,7 +169,6 @@ An interactive Jupyter notebook (\texttt{torque\_calculations.ipynb}) allows exp
   \caption{Screenshot of the interactive Jupyter notebook widget, which allows exploration of the torque equations across the full range of joint angles and design parameters.}
   \label{fig:interactive-notebook}
 \end{figure}
-
 
 \subsubsection{Central Processing Unit}
 
@@ -238,21 +237,21 @@ is visualized in the following logic flow:
   \begin{tikzpicture}[
       node distance=1.5cm,
       block/.style={
-        rectangle, draw, fill=teal!10, text width=4cm,
-        text centered, rounded corners, minimum height=1.2cm
-      },
+          rectangle, draw, fill=teal!10, text width=4cm,
+          text centered, rounded corners, minimum height=1.2cm
+        },
       core/.style={
-        rectangle, draw, fill=violet!10, text width=8cm,
-        text centered, minimum height=1.4cm, font=\bfseries
-      },
+          rectangle, draw, fill=violet!10, text width=8cm,
+          text centered, minimum height=1.4cm, font=\bfseries
+        },
       shared/.style={
-        rectangle, draw, fill=orange!10, text width=6cm,
-        text centered, rounded corners, minimum height=1.2cm
-      },
+          rectangle, draw, fill=orange!10, text width=6cm,
+          text centered, rounded corners, minimum height=1.2cm
+        },
       output/.style={
-        rectangle, draw, fill=gray!10, text width=5cm,
-        text centered, rounded corners, minimum height=1.2cm
-      },
+          rectangle, draw, fill=gray!10, text width=5cm,
+          text centered, rounded corners, minimum height=1.2cm
+        },
       arrow/.style={thick, ->, >=stealth}
     ]
 
@@ -263,17 +262,17 @@ is visualized in the following logic flow:
     %% Core 1
     \node (core1) [core, below=1.5cm of input, xshift=3cm]
     {Core 1 \textnormal{(Brain)} \\[2pt]
-    \normalfont\small JSON Parsing \& PID Calculation};
+      \normalfont\small JSON Parsing \& PID Calculation};
 
     %% Shared state
     \node (state) [shared, below=1.4cm of core1]
     {\textbf{Shared GlobalState} \\[2pt]
-    \normalfont\small \texttt{data.h} — inter-core data bus};
+      \normalfont\small \texttt{data.h} — inter-core data bus};
 
     %% Core 0
     \node (core0) [core, below=1.4cm of state]
     {Core 0 \textnormal{(Nervous System)} \\[2pt]
-    \normalfont\small Inverse Kinematics (IK) Engine};
+      \normalfont\small Inverse Kinematics (IK) Engine};
 
     %% Output
     \node (out) [output, below=1.4cm of core0]
@@ -303,9 +302,9 @@ The following directory tree illustrates the modular separation of the robot's c
         level 3/.style={sibling distance=1.3cm,  level distance=3.5cm},
         edge from parent/.style={draw, -latex, thick},
         every node/.style={
-          rectangle, draw, rounded corners,
-          fill=gray!8, inner sep=6pt, font=\small
-        },
+            rectangle, draw, rounded corners,
+            fill=gray!8, inner sep=6pt, font=\small
+          },
         dir/.style     ={fill=gray!15, font=\small\bfseries},
         nervous/.style ={fill=red!8,    draw=red!40},
         brain/.style   ={fill=teal!8,   draw=teal!40},
@@ -313,24 +312,24 @@ The following directory tree illustrates the modular separation of the robot's c
       ]
       \node [dir] {/code}
       child { node [dir] {/firmware}
-        child { node {main.cpp} }
-        child { node [shared] {/shared}
-          child { node [shared] {data.h} }
-          child { node [shared] {config.h} }
+          child { node {main.cpp} }
+          child { node [shared] {/shared}
+              child { node [shared] {data.h} }
+              child { node [shared] {config.h} }
+            }
+          child { node [nervous] {/nervous\_system}
+              child { node [nervous] {leg.cpp} }
+              child { node [nervous] {movements.cpp} }
+            }
+          child { node [brain] {/brain}
+              child { node [brain] {sensors.cpp} }
+              child { node [brain] {network.cpp} }
+            }
         }
-        child { node [nervous] {/nervous\_system}
-          child { node [nervous] {leg.cpp} }
-          child { node [nervous] {movements.cpp} }
-        }
-        child { node [brain] {/brain}
-          child { node [brain] {sensors.cpp} }
-          child { node [brain] {network.cpp} }
-        }
-      }
       child { node [dir] {/web\_dashboard}
-        child { node {index.html} }
-        child { node {dashboard.js} }
-      };
+          child { node {index.html} }
+          child { node {dashboard.js} }
+        };
     \end{tikzpicture}%
   }
 \end{center}
@@ -360,37 +359,37 @@ For Ferdinand
 
 \begin{enumerate}
   \item \textbf{Weight, leg lever-arms, and servo strength (torque margin)} \\
-    \textit{What could go wrong:} BeetleBot identified weight/servo strength as a main project risk and later reported that early leg designs were too long/heavy, making it hard or impossible to stand/walk without overloading servos; even after optimization, servos still struggled. For our \textbf{quadruped}, this risk is higher because each leg carries a larger fraction of the total load and there is less redundancy than a hexapod. If torque margin is insufficient, we will fail to achieve a stable stand and any walking demo. \\
-    \textit{Mitigation (prototype + when):} By \textbf{Week 6}, prototype a \textbf{single-leg + hip load test} (or 2-leg front module) to validate stall/hold performance at the worst joint angles. We will explicitly design for short lever arms (legs closer under the body), keep heavy components low/central, and reduce printed mass (cutouts, low infill where safe). If results are marginal, we will (i) reduce leg length/stance height and (ii) upgrade only the most loaded joints to higher-torque servos before procurement is locked.
+        \textit{What could go wrong:} BeetleBot identified weight/servo strength as a main project risk and later reported that early leg designs were too long/heavy, making it hard or impossible to stand/walk without overloading servos; even after optimization, servos still struggled. For our \textbf{quadruped}, this risk is higher because each leg carries a larger fraction of the total load and there is less redundancy than a hexapod. If torque margin is insufficient, we will fail to achieve a stable stand and any walking demo. \\
+        \textit{Mitigation (prototype + when):} By \textbf{Week 6}, prototype a \textbf{single-leg + hip load test} (or 2-leg front module) to validate stall/hold performance at the worst joint angles. We will explicitly design for short lever arms (legs closer under the body), keep heavy components low/central, and reduce printed mass (cutouts, low infill where safe). If results are marginal, we will (i) reduce leg length/stance height and (ii) upgrade only the most loaded joints to higher-torque servos before procurement is locked.
 
   \item \textbf{LiPo power delivery and brownouts during peak servo load} \\
-    \textit{What could go wrong:} BeetleBot flagged LiPo + regulation as risky: many servos moving together can cause voltage drops, resets, and servo glitches. Our system similarly uses a single battery with a 5V rail feeding many servos (via PCA9685) plus the ESP32; sudden current peaks (startup/stall) can reset the ESP32 or cause unstable behavior that appears as a software issue. \\
-    \textit{Mitigation (prototype + when):} By \textbf{Week 6--7}, bench-test the full power chain (LiPo $\rightarrow$ buck $\rightarrow$ servo rail + logic rail) with worst-case motion patterns. Use thick wiring for the servo rail, star grounding, and bulk capacitance near the servo supply. Implement software-side current shaping: avoid commanding all joints to step simultaneously (ramping/interpolation) and enforce conservative acceleration/step height. If necessary, split rails (separate regulator for ESP32) or keep an optional second battery plan.
+        \textit{What could go wrong:} BeetleBot flagged LiPo + regulation as risky: many servos moving together can cause voltage drops, resets, and servo glitches. Our system similarly uses a single battery with a 5V rail feeding many servos (via PCA9685) plus the ESP32; sudden current peaks (startup/stall) can reset the ESP32 or cause unstable behavior that appears as a software issue. \\
+        \textit{Mitigation (prototype + when):} By \textbf{Week 6--7}, bench-test the full power chain (LiPo $\rightarrow$ buck $\rightarrow$ servo rail + logic rail) with worst-case motion patterns. Use thick wiring for the servo rail, star grounding, and bulk capacitance near the servo supply. Implement software-side current shaping: avoid commanding all joints to step simultaneously (ramping/interpolation) and enforce conservative acceleration/step height. If necessary, split rails (separate regulator for ESP32) or keep an optional second battery plan.
 
   \item \textbf{Servo coordination, timing, and smoothness (control loop reliability)} \\
-    \textit{What could go wrong:} BeetleBot explicitly noted that coordinating many servos is challenging (timing, synchronization, responsiveness). For our quadruped, control jitter or blocking code will directly translate into instability (falls) and will slow tuning significantly. \\
-    \textit{Mitigation (prototype + when):} Use a fixed-rate motion update loop on ESP32 (target $50$--$100$ Hz) and keep time-critical motor updates isolated from network and sensor tasks (FreeRTOS priorities / dual-core split). Start with \textbf{basic primitives} (stand, shift weight, lift one foot) before full gaits, and use interpolation/ramping for smooth trajectories.
+        \textit{What could go wrong:} BeetleBot explicitly noted that coordinating many servos is challenging (timing, synchronization, responsiveness). For our quadruped, control jitter or blocking code will directly translate into instability (falls) and will slow tuning significantly. \\
+        \textit{Mitigation (prototype + when):} Use a fixed-rate motion update loop on ESP32 (target $50$--$100$ Hz) and keep time-critical motor updates isolated from network and sensor tasks (FreeRTOS priorities / dual-core split). Start with \textbf{basic primitives} (stand, shift weight, lift one foot) before full gaits, and use interpolation/ramping for smooth trajectories.
 
   \item \textbf{IK implementation sensitivity to real-world measurements and calibration} \\
-    \textit{What could go wrong:} BeetleBot’s proposal and README both show IK is measurement-sensitive: small differences in link lengths/servo positions can produce inaccurate motion, and tuning can become time-consuming late in the project. If our CAD measurements do not match the built robot, gaits will drift, legs may bind, and stability control will be unreliable. \\
-    \textit{Mitigation (prototype + when):} By \textbf{Week 7--8}, implement a calibration mode: center servos, store per-servo offsets, enforce joint limits, and verify foot positions on a test stand. Measure real link lengths and update IK constants accordingly. Maintain a fallback “hardcoded stance / crawl” mode (like BeetleBot’s compromise approach) so integration/testing can proceed even if IK is still being refined.
+        \textit{What could go wrong:} BeetleBot’s proposal and README both show IK is measurement-sensitive: small differences in link lengths/servo positions can produce inaccurate motion, and tuning can become time-consuming late in the project. If our CAD measurements do not match the built robot, gaits will drift, legs may bind, and stability control will be unreliable. \\
+        \textit{Mitigation (prototype + when):} By \textbf{Week 7--8}, implement a calibration mode: center servos, store per-servo offsets, enforce joint limits, and verify foot positions on a test stand. Measure real link lengths and update IK constants accordingly. Maintain a fallback “hardcoded stance / crawl” mode (like BeetleBot’s compromise approach) so integration/testing can proceed even if IK is still being refined.
 
   \item \textbf{Gait stability for a quadruped (risk of spending too long on dynamic gaits)} \\
-    \textit{What could go wrong:} BeetleBot emphasized stability and balance (center of mass must remain within support polygon) and planned both static and dynamic stability work. A quadruped has tighter stability constraints than a hexapod; attempting dynamic gaits (trot/dance) too early can lead to repeated failures and jeopardize the demo. \\
-    \textit{Mitigation (prototype + when):} By \textbf{Week 8--9}, target a robust \textbf{static crawl} (3 feet down) and stable pose transitions (sit/stand). Only after this baseline works will we attempt faster gaits as \textbf{optional extensions}. PID-based leveling (IMU) will be introduced progressively: first validate open-loop crawl, then add stabilization and re-tune step sizes.
+        \textit{What could go wrong:} BeetleBot emphasized stability and balance (center of mass must remain within support polygon) and planned both static and dynamic stability work. A quadruped has tighter stability constraints than a hexapod; attempting dynamic gaits (trot/dance) too early can lead to repeated failures and jeopardize the demo. \\
+        \textit{Mitigation (prototype + when):} By \textbf{Week 8--9}, target a robust \textbf{static crawl} (3 feet down) and stable pose transitions (sit/stand). Only after this baseline works will we attempt faster gaits as \textbf{optional extensions}. PID-based leveling (IMU) will be introduced progressively: first validate open-loop crawl, then add stabilization and re-tune step sizes.
 
   \item \textbf{Remote control over WiFi/WebSocket: integration complexity and coupling to motion control} \\
-    \textit{What could go wrong:} BeetleBot identified remote control as an additional complexity layer and noted that WiFi/Web APIs require background knowledge; tight coupling between comms and walking logic increases debugging difficulty. For our system, network latency or parsing delays could interfere with control timing if not isolated. \\
-    \textit{Mitigation (prototype + when):} Keep communication logic modular and separate from motion control (queue commands from “brain” task to “nervous system” task). Define a minimal protocol (small JSON messages is acceptable if rate-limited). Validate the web interface early on a bench setup (ESP32 + PCA9685 + 1--2 servos). Maintain a serial “manual override” fallback for debugging if WiFi issues appear.
+        \textit{What could go wrong:} BeetleBot identified remote control as an additional complexity layer and noted that WiFi/Web APIs require background knowledge; tight coupling between comms and walking logic increases debugging difficulty. For our system, network latency or parsing delays could interfere with control timing if not isolated. \\
+        \textit{Mitigation (prototype + when):} Keep communication logic modular and separate from motion control (queue commands from “brain” task to “nervous system” task). Define a minimal protocol (small JSON messages is acceptable if rate-limited). Validate the web interface early on a bench setup (ESP32 + PCA9685 + 1--2 servos). Maintain a serial “manual override” fallback for debugging if WiFi issues appear.
 
   \item \textbf{Demount/remount difficulty (maintenance and iteration speed)} \\
-    \textit{What could go wrong:} Based on prior legged-robot experience (e.g., BeetleBot’s emphasis on complex cable management and frequent hardware access), a major schedule risk is having a design that is hard to open, service, or reassemble. If servos, the PCA9685, sensors, or the ESP32 are not easily accessible, every failure (servo replacement, wire debugging, re-printing one part, re-routing cables) becomes a long operation. This slows down iteration, increases the chance of wiring mistakes after reassembly, and can block integration/testing late in the project. \\
-    \textit{Mitigation (prototype + when):} By \textbf{Week 6--7}, enforce a \textbf{serviceable mechanical/electrical design}:
-    (i) split the chassis into modules (e.g., leg modules + electronics bay),
-    (ii) use a lid/cover with a small number of standard fasteners and clear access to the PCA9685 and power chain,
-    (iii) add strain relief and tie points so cable bundles keep their shape during opening/closing,
-    (iv) label connectors and define a fixed pin map,
-    (v) time a “maintenance drill” (open body, replace one servo, close body) and iterate CAD until it can be done quickly and repeatably.
+        \textit{What could go wrong:} Based on prior legged-robot experience (e.g., BeetleBot’s emphasis on complex cable management and frequent hardware access), a major schedule risk is having a design that is hard to open, service, or reassemble. If servos, the PCA9685, sensors, or the ESP32 are not easily accessible, every failure (servo replacement, wire debugging, re-printing one part, re-routing cables) becomes a long operation. This slows down iteration, increases the chance of wiring mistakes after reassembly, and can block integration/testing late in the project. \\
+        \textit{Mitigation (prototype + when):} By \textbf{Week 6--7}, enforce a \textbf{serviceable mechanical/electrical design}:
+        (i) split the chassis into modules (e.g., leg modules + electronics bay),
+        (ii) use a lid/cover with a small number of standard fasteners and clear access to the PCA9685 and power chain,
+        (iii) add strain relief and tie points so cable bundles keep their shape during opening/closing,
+        (iv) label connectors and define a fixed pin map,
+        (v) time a “maintenance drill” (open body, replace one servo, close body) and iterate CAD until it can be done quickly and repeatably.
 \end{enumerate}
 
 \section{Bill of Materials}
@@ -401,100 +400,99 @@ For Ferdinand
 For the bill of materials we will need (see Table 1):
 
 \begin{table}[h]
-  \centering
-  \footnotesize
-    \begin{tabular}{|p{4cm}|l|l|r|}
-      \hline
-      \textbf{Item} & \textbf{Qty} & \textbf{Source / Link} & \textbf{Price (CHF)} \\
-      \hline
-      ESP32 Devkit V1 Wifi/Bluetooth Dual core & 1 & \href{https://www.conrad.ch/fr/p/carte-de-developpement-joy-it-sbc-nodemcu-esp32-node-mcu-esp32-modul-1656367.html}{Link to buy} & 8\\
-      \hline
-      PCA9685 PWM Multiplexer & 1 & \href{https://www.conrad.ch/de/p/iduino-me234-motortreiber-1-st-passend-fuer-entwicklungskits-arduino-2315243.html}{Link to buy} & 11\\
-      \hline
-      15Kg/cm 270° Servo DSS-M15S with Metal Gear & 12 & \href{https://www.mouser.ch/ProductDetail/DFRobot/SER0038?qs=lqAf%2FiVYw9jKMX2bo90oYQ%3D%3D}{Link to buy} & 145\\
-          \hline
-          Li-Po 2S 7,4V 30C 1.300 mAh, contact JST-RCY (BEC) & 1 & \href{https://www.galaxus.ch/fr/s5/product/hacker-lipo-pack-tf-eco-x-1300mah-3s-mtag-1110-v-1300-mah-batterie-rc-12684610}{Link to buy} & 20 \\
-          \hline
-          IMU MPU6050 Accelerometer + Gyroscope & 1 & \href{https://www.galaxus.ch/fr/s1/product/purecrea-mpu-6050-accelerometre-3-axes-avec-gyroscope-carte-de-developpement-kit-36359715}{Link to buy} & 13 \\
-          \hline
-          VL53L0X (ToF) I2C Laser Distance Sensor & 5 & \href{https://www.mouser.ch/ProductDetail/DFRobot/SEN0245?qs=vdi0iO8H4N2%252ByTl%252BC%252Bk6RA%3D%3D}{Link to buy} & 30 \\
-            \hline
-            %300W 20A DC-DC Step-down Module, Constant Voltage and Constant Current Adjustable Vehicle Charging Module & 2 & \href{https://www.joom.com/en/products/67037cacc862c801406e069c?currency=CHF&utm_productid=67037cacc862c801406e069c&utm_feed=web&utm_hash=ea390b582ec73a07e0936cb0dc64965b&variant_id=67037cacc862c848406e069e&gsAttrs=eyJyZWdpb24iOiJDSCIsICJzcGVjaWFsUHJpY2VVc2VkIjpmYWxzZX0g&exp_price=MTMuMSAg&country=CH&utm_audienceid=advertising_web_impact_2d&click_id=ydnRCJx3yxyZRkB1PQUgoReHUkuwMsQe0TXsQQ0&sharedid=&utm_medium=partners&utm_source=impact&utm_campaign=2414876&irgwc=1&afsrc=1}{Link to buy} & 25 \\
-            %\hline
+\centering
+\footnotesize
+\begin{tabular}{|p{4cm}|l|l|r|}
+\hline
+\textbf{Item} & \textbf{Qty} & \textbf{Source / Link} & \textbf{Price (CHF)} \\
+\hline
+ESP32 Devkit V1 Wifi/Bluetooth Dual core & 1 & \href{https://www.conrad.ch/fr/p/carte-de-developpement-joy-it-sbc-nodemcu-esp32-node-mcu-esp32-modul-1656367.html}{Link to buy} & 8\\
+\hline
+PCA9685 PWM Multiplexer & 1 & \href{https://www.conrad.ch/de/p/iduino-me234-motortreiber-1-st-passend-fuer-entwicklungskits-arduino-2315243.html}{Link to buy} & 11\\
+\hline
+15Kg/cm 270° Servo DSS-M15S with Metal Gear & 12 & \href{https://www.mouser.ch/ProductDetail/DFRobot/SER0038?qs=lqAf%2FiVYw9jKMX2bo90oYQ%3D%3D}{Link to buy} & 145\\
+\hline
+Li-Po 2S 7,4V 30C 1.300 mAh, contact JST-RCY (BEC) & 1 & \href{https://www.galaxus.ch/fr/s5/product/hacker-lipo-pack-tf-eco-x-1300mah-3s-mtag-1110-v-1300-mah-batterie-rc-12684610}{Link to buy} & 20 \\
+\hline
+IMU MPU6050 Accelerometer + Gyroscope & 1 & \href{https://www.galaxus.ch/fr/s1/product/purecrea-mpu-6050-accelerometre-3-axes-avec-gyroscope-carte-de-developpement-kit-36359715}{Link to buy} & 13 \\
+\hline
+VL53L0X (ToF) I2C Laser Distance Sensor & 5 & \href{https://www.mouser.ch/ProductDetail/DFRobot/SEN0245?qs=vdi0iO8H4N2%252ByTl%252BC%252Bk6RA%3D%3D}{Link to buy} & 30 \\
+\hline
+%300W 20A DC-DC Step-down Module & 2 & \href{https://www.joom.com/en/products/67037cacc862c801406e069c}{Link to buy} & 25 \\
+%\hline
+LM2596 DC-DC Step-Down Converter Module with Display to connect with ESP32 controller + sensors & 1 & \href{https://www.bastelgarage.ch/components/power-supplies-electricity/dc-dc-converter-step-down/lm2596-dc-dc-step-down-converter-module-with-display}{Link to buy} & 10 \\
+\hline
+Female XT60 connector & 2 & \href{https://www.conrad.ch/fr/p/reely-re-6702318-prise-femelle-pour-batterie-xt60-dore-e-1-pc-s-2234106.html}{Link to buy} & 2 \\
+\hline
+Male XT60 connector & 2 & \href{https://www.conrad.ch/fr/p/reely-re-6586515-fiche-male-pour-batterie-xt60-3-5-mm-a-souder-1-pc-s-2195505.html}{Link to buy} & 2 \\
+\hline
+ON/OFF switch & 1 & \href{https://www.mouser.ch/ProductDetail/Bulgin/C7510T110R?qs=yc9RBI4tIAKVWqYUySD3pw%3D%3D}{Link to buy} & 1 \\
+\hline
+I2C multiplexer & 1 & \href{https://www.mouser.ch/ProductDetail/Adafruit/2717?qs=FXKxjuMTmBk%252BXQsxVhda7A%3D%3D}{Link to buy} & 5 \\
+\hline
+Battery protection module for lipo 2S 1300 mAh 30C (39A) & 1 & \href{}{Link to buy} & 10 \\
+\hline
+XT60 Charging cable & 1 & \href{https://www.swaytronic.ch/en/SWAYTRONIC-charging-cable-XT60}{Link to buy} & 5 \\
+\hline
+SBC-OLED01V2 128x64 pixels I2C screen & 1 & \href{https://www.galaxus.ch/fr/s1/product/joy-it-sbc-oled01v2-module-daffichage-24-cm-096-pouce-128-x-64-pixels-carte-de-developpement-kit-49727962}{Link to buy} & 10 \\
+\hline
+\multicolumn{3}{|r|}{\textbf{Total}} & \textbf{272} \\
+\hline
+\end{tabular}
+\caption{Bill of Materials}
+\end{table}
 
-            LM2596 DC-DC Step-Down Converter Module with Display to connect with ESP32 controller + sensors & 1 & \href{https://www.bastelgarage.ch/components/power-supplies-electricity/dc-dc-converter-step-down/lm2596-dc-dc-step-down-converter-module-with-display}{Link to buy} & 10 \\
-            \hline
-            Female XT60 connector & 2 & \href{https://www.conrad.ch/fr/p/reely-re-6702318-prise-femelle-pour-batterie-xt60-dore-e-1-pc-s-2234106.html}{Link to buy} & 2 \\
-            \hline
-            Male XT60 connector & 2 & \href{https://www.conrad.ch/fr/p/reely-re-6586515-fiche-male-pour-batterie-xt60-3-5-mm-a-souder-1-pc-s-2195505.html}{Link to buy} & 2 \\
-            \hline
-            ON/OFF switch & 1 & \href{https://www.mouser.ch/ProductDetail/Bulgin/C7510T110R?qs=yc9RBI4tIAKVWqYUySD3pw%3D%3D}{Link to buy} & 1 \\
-            \hline
-            I2C multiplexer & 1 & \href{https://www.mouser.ch/ProductDetail/Adafruit/2717?qs=FXKxjuMTmBk%252BXQsxVhda7A%3D%3D}{Link to buy} & 5 \\
-            \hline
-            Battery protection module for lipo 2S 1300 mAh 30C (39A) & 1 & \href{}{Link to buy} & 10 \\
-            \hline
-            XT60 Charging cable & 1 & \href{https://www.swaytronic.ch/en/SWAYTRONIC-charging-cable-XT60}{Link to buy} & 5 \\
-            \hline
-            SBC-OLED01V2 128x64 pixels I2C screen & 1 & \href{https://www.galaxus.ch/fr/s1/product/joy-it-sbc-oled01v2-module-daffichage-24-cm-096-pouce-128-x-64-pixels-carte-de-developpement-kit-49727962}{Link to buy} & 10 \\
-            \hline
-            \multicolumn{3}{|r|}{\textbf{Total}} & \textbf{272} \\
-            \hline
-          \end{tabular}
-        \caption{Bill of Materials}
-      \end{table}
+\section{Work Breakdown}
+% ============================================================
+% SECTION 5: WORK BREAKDOWN
+% ============================================================
+\newpage
+\begin{landscape}
+  \begin{figure}[]
+    \centering
+    \includegraphics[ scale=0.45]{gantt_chart.png}
+  \end{figure}
+\end{landscape}
+\newpage
+\section{Future of the FaceHugger}
+The current version of the FaceHugger serves as a high-performance 12-DOF baseline. Future iterations could focus on transitioning the robot from a teleoperated machine to an autonomous, environment-aware agent:
 
-      \section{Work Breakdown}
-      % ============================================================
-      % SECTION 5: WORK BREAKDOWN
-      % ============================================================
-      \newpage
-      \begin{landscape}
-        \begin{figure}[]
-          \centering
-          \includegraphics[ scale=0.45]{gantt_chart.png}
-        \end{figure}
-      \end{landscape}
-      \newpage
-      \section{Future of the FaceHugger}
-      The current version of the FaceHugger serves as a high-performance 12-DOF baseline. Future iterations could focus on transitioning the robot from a teleoperated machine to an autonomous, environment-aware agent:
+\begin{itemize}
+  \item \textbf{Vision-Based Spatial Awareness:} By integrating an \textbf{ESP32-CAM} or a small \textbf{LiDAR} module, the robot could move beyond simple ToF distance measurements. This would allow for SLAM (Simultaneous Localization and Mapping), enabling the FaceHugger to navigate complex indoor environments and autonomously plan paths around obstacles.
 
-      \begin{itemize}
-        \item \textbf{Vision-Based Spatial Awareness:} By integrating an \textbf{ESP32-CAM} or a small \textbf{LiDAR} module, the robot could move beyond simple ToF distance measurements. This would allow for SLAM (Simultaneous Localization and Mapping), enabling the FaceHugger to navigate complex indoor environments and autonomously plan paths around obstacles.
+  \item \textbf{Transition to Full Dynamic Stability:} As the gait engine matures, shift the 80/20 hybrid model toward a more reactive model. By utilizing high-frequency IMU feedback and ground-contact sensors in the feet, the robot could achieve "blind" stabilization—navigating stairs or slippery surfaces where hardcoded elliptical paths are insufficient.
 
-        \item \textbf{Transition to Full Dynamic Stability:} As the gait engine matures, shift the 80/20 hybrid model toward a more reactive model. By utilizing high-frequency IMU feedback and ground-contact sensors in the feet, the robot could achieve "blind" stabilization—navigating stairs or slippery surfaces where hardcoded elliptical paths are insufficient.
+  \item \textbf{Terrain Adaptation and Obstacle Scaling:} With the 270\textdegree{} range of the \textbf{DSM 15-270} servos, the FaceHugger has the mechanical potential for extreme reach. Future software updates would include a "High-Step" mode, where the robot uses its ToF sensors to measure the height of a ledge and dynamically recalculates its Inverse Kinematics to mount obstacles up to 10cm in height.
 
-        \item \textbf{Terrain Adaptation and Obstacle Scaling:} With the 270\textdegree{} range of the \textbf{DSM 15-270} servos, the FaceHugger has the mechanical potential for extreme reach. Future software updates would include a "High-Step" mode, where the robot uses its ToF sensors to measure the height of a ledge and dynamically recalculates its Inverse Kinematics to mount obstacles up to 10cm in height.
+  \item \textbf{Edge-AI for Gesture Control:} Utilizing the dual-core capability further, Core 1 could run lightweight Machine Learning models to recognize hand gestures or follow a specific person without the need for a Bluetooth beacon, making the interaction more organic.
+\end{itemize}
 
-        \item \textbf{Edge-AI for Gesture Control:} Utilizing the dual-core capability further, Core 1 could run lightweight Machine Learning models to recognize hand gestures or follow a specific person without the need for a Bluetooth beacon, making the interaction more organic.
-      \end{itemize}
+\section{References and Inspirations}
 
-      \section{References and Inspirations}
+\textbf{BeetleBot — EPFL CS-358 (2025 Hexapod)} \\
+\textit{Source:} \url{https://github.com/epfl-cs358/2025sp-beetlebot} \\
+\textit{Relevance:} Provided the baseline for the ESP32/PCA9685 wiring topology and highlighted the critical need to upgrade from SG90 to high-torque servos to avoid structural failure.
+\\
 
-      \textbf{BeetleBot — EPFL CS-358 (2025 Hexapod)} \\
-      \textit{Source:} \url{https://github.com/epfl-cs358/2025sp-beetlebot} \\
-      \textit{Relevance:} Provided the baseline for the ESP32/PCA9685 wiring topology and highlighted the critical need to upgrade from SG90 to high-torque servos to avoid structural failure.
-      \\
+\textbf{ResearchGate — Four-Legged 12-Joint Robot CAD Model}
+\textit{Source:} \\
+\url{https://www.researchgate.net/figure/fig2_384894431} \\
+\textit{Relevance:} Serves as the primary structural blueprint for our 3-DOF leg assembly, specifically guiding the placement of the abduction servos to maximize lateral stability. \\
 
-      \textbf{ResearchGate — Four-Legged 12-Joint Robot CAD Model}
-      \textit{Source:} \\
-      \url{https://www.researchgate.net/figure/fig2_384894431} \\
-      \textit{Relevance:} Serves as the primary structural blueprint for our 3-DOF leg assembly, specifically guiding the placement of the abduction servos to maximize lateral stability. \\
+\textbf{Petoi OpenCat / Bittle (Quadruped)} \\
+\textit{Source:} \url{https://github.com/PetoiCamp/OpenCatEsp32} \\
+\textit{Relevance:} Validated that a dual-core ESP32 can handle 12-DOF Inverse Kinematics on-chip and served as the primary reference for gait-switching logic (Walk vs. Trot). \\
 
-      \textbf{Petoi OpenCat / Bittle (Quadruped)} \\
-      \textit{Source:} \url{https://github.com/PetoiCamp/OpenCatEsp32} \\
-      \textit{Relevance:} Validated that a dual-core ESP32 can handle 12-DOF Inverse Kinematics on-chip and served as the primary reference for gait-switching logic (Walk vs. Trot). \\
+\textbf{Stanford Pupper (Research Quadruped)} \\
+\textit{Source:} \url{https://github.com/stanfordroboticsclub/StanfordQuadruped} \\
+\textit{Relevance:} Informed our 80/20 hybrid control philosophy, specifically the use of parametric elliptical trajectories for the swing phase and stance-width calculations. \\
 
-      \textbf{Stanford Pupper (Research Quadruped)} \\
-      \textit{Source:} \url{https://github.com/stanfordroboticsclub/StanfordQuadruped} \\
-      \textit{Relevance:} Informed our 80/20 hybrid control philosophy, specifically the use of parametric elliptical trajectories for the swing phase and stance-width calculations. \\
+\textbf{Sesame Robot (Expressive Quadruped)} \\
+\textit{Source:} \url{https://github.com/dorianborian/sesame-robot} \\
+\textit{Relevance:} Inspired the "emotive" extensions of our project, demonstrating how an OLED face can sync with state-machine transitions to indicate robot "mood" or battery status. \\
 
-      \textbf{Sesame Robot (Expressive Quadruped)} \\
-      \textit{Source:} \url{https://github.com/dorianborian/sesame-robot} \\
-      \textit{Relevance:} Inspired the "emotive" extensions of our project, demonstrating how an OLED face can sync with state-machine transitions to indicate robot "mood" or battery status. \\
+\textbf{Instructables Spider Robot (Minimal Quadruped)} \\
+\textit{Source:} \url{https://www.instructables.com/Spider-Robot-DIY-Quadruped} \\
+\textit{Relevance:} Served as a fundamental proof-of-concept for the I2C communication chain and the basic 8-DOF coordinate mapping for 3D-printed quadruped limbs. \\
 
-      \textbf{Instructables Spider Robot (Minimal Quadruped)} \\
-      \textit{Source:} \url{https://www.instructables.com/Spider-Robot-DIY-Quadruped} \\
-      \textit{Relevance:} Served as a fundamental proof-of-concept for the I2C communication chain and the basic 8-DOF coordinate mapping for 3D-printed quadruped limbs. \\
-
-      \end{document}
+\end{document}
