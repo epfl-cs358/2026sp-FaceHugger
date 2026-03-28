@@ -1,0 +1,99 @@
+
+% ============================================================
+% TODO — Torque Analysis subsection
+%   - Add real numeric values from CAD (link lengths, masses, servo ratings)
+%   - Include a figure/diagram of the 3-link leg model
+%   - Report the computed max body weight for our chosen servo + geometry
+%   - Expand prose once prototype measurements are available
+% ============================================================
+\subsubsection{Torque Analysis}
+
+We selected high-torque servos so that body weight does not become a binding design constraint.
+To quantify the actual limits this gives us, we invert the
+static torque equations and solve for the \textbf{maximum body weight} the leg can support as a function of link geometry and joint angles.
+We model a single leg as a 3-link serial chain rotating in the sagittal (pitch) plane.
+
+% TODO: add a tikz or included figure of the 3-link model here
+
+\vspace{0.5cm}
+\textbf{Leg model.}
+Each leg consists of three links: $L_1$ (shoulder to hip joint, length $r_1$),
+$L_2$ (hip to knee, length $r_2$), and $L_3$ (knee to foot tip, length $r_3$).
+The hip and knee motors act on pitch axes and bear static gravity torque, while
+the shoulder motor acts on a yaw axis (parallel to gravity) and bears only
+dynamic rotational inertia during swing phase.
+
+\vspace{0.5cm}
+\textbf{Knee motor torque.}
+The knee servo supports link $L_3$ and the ground-reaction tip load $m_{\text{tip}}$.
+All relevant masses lie along $L_3$, so a single angle $\theta_{\text{knee}}$
+governs the gravity projection:
+%
+\begin{align*}
+  \tau_{L_3}
+  &= \left( m_{L_3} \cdot \frac{r_3}{2}
+  + m_{\text{tip}} \cdot r_3 \right)
+  \cos\theta_{\text{knee}}
+\end{align*}
+
+\textbf{Hip motor torque.}
+The hip servo supports $L_2$, the knee servo mass, $L_3$, and the tip load.
+Because the hip and knee angles are independent, masses on $L_2$ project by
+$\cos\theta_{\text{hip}}$ while masses on $L_3$ project by
+$\cos\theta_{\text{knee}}$:
+%
+\begin{align*}
+  \tau_{L_2}
+  &= m_{L_2}\,\frac{r_2}{2}\,\cos\theta_{\text{hip}}
+  + m_{\text{servo,knee}}\,r_2\,\cos\theta_{\text{hip}} \\
+  &\quad + m_{L_3}\!\left(r_2\cos\theta_{\text{hip}}
+  + \frac{r_3}{2}\cos\theta_{\text{knee}}\right) \\
+  &\quad + m_{\text{tip}}\!\left(r_2\cos\theta_{\text{hip}}
+  + r_3\cos\theta_{\text{knee}}\right)
+\end{align*}
+
+\textbf{Inverse solver - weight budget.}
+With the motor choice settled, the practical question is how much total mass
+we can allocate to the chassis, electronics, and payload. Setting each torque
+equal to the rated stall torque and solving for $m_{\text{tip}}$ yields the
+per-leg load capacity.
+% TODO: insert actual numeric results once CAD measurements are finalized
+For the hip:
+%
+\begin{align*}
+  m_{\text{tip,max}}^{\text{hip}}
+  &= \frac{
+    \tau_{\text{rated}}
+    - \bigl(m_{L_2}\,\tfrac{r_2}{2}
+    + m_{\text{servo,knee}}\,r_2\bigr)\cos\theta_{\text{hip}}
+    - m_{L_3}\bigl(r_2\cos\theta_{\text{hip}}
+    + \tfrac{r_3}{2}\cos\theta_{\text{knee}}\bigr)
+  }{
+    r_2\cos\theta_{\text{hip}} + r_3\cos\theta_{\text{knee}}
+  }
+\end{align*}
+%
+The binding constraint is whichever servo saturates first.  Total supportable
+body mass is then:
+%
+\[
+  m_{\text{body}}
+  = \min\!\bigl(m_{\text{tip,max}}^{\text{knee}},\;
+  m_{\text{tip,max}}^{\text{hip}}\bigr)
+  \times n_{\text{legs in stance}}
+\]
+
+\vspace{0.5cm}
+\textbf{Dynamic yaw torque.}
+As a secondary analysis, we compute the moment of inertia of the fully extended
+leg about the shoulder yaw axis (using the parallel-axis theorem for each link
+and point mass) and derive the required yaw torque
+$\tau_{\text{yaw}} = I_{\text{leg}} \cdot \alpha$ for a target swing-phase
+angular acceleration $\alpha$.
+% TODO: report numerical I_leg and required yaw torque
+
+\vspace{0.5cm}
+An interactive Jupyter notebook
+(\texttt{quadruped-mit/notebooks/torque\_calculations.py}) allows exploration
+of these equations across the full range of joint angles and design parameters.
+% TODO: reference the notebook more precisely once repo structure is finalized
