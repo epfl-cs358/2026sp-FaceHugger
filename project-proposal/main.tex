@@ -72,6 +72,105 @@ Those servos will receive their signals via a PCA 9685 PWM multiplexer and their
 \vspace{0.5cm}
 The only problem we can think about with this is that when the battery is fully charged (around 8V) it surpasses the maximum recommended operating voltage of the servos, but the professor told us it should not be a problem, if it is we will just use a DC-DC buck converter that supports large currents (around 10-15A) to step down the voltage of the battery.
 
+\subsubsection{Torque Analysis}
+
+We selected high-torque servos, so that body weight does not become a binding design constraint.
+To quantify the actual limits this gives us, we invert the static torque equations and solve for the \textbf{maximum body weight} the leg can support as a function of link geometry and joint angles.
+We model a single leg as a 3-link serial chain rotating in the sagittal (pitch) plane.
+
+\begin{figure}[ht]
+  \centering
+  \begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{./img/robot-leg-figure.png}
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{./img/robot-leg-figure-bent.png}
+  \end{minipage}
+  \caption{3-link leg model in extended (left) and bent (right) configurations, illustrating the joint angles and link lengths used in the torque analysis.}
+  \label{fig:leg-model}
+\end{figure}
+
+\vspace{0.5cm}
+\textbf{Leg model.}
+Each leg consists of three links: $L_1$ (shoulder to hip joint, length $r_1$), $L_2$ (hip to knee, length $r_2$), and $L_3$ (knee to foot tip, length $r_3$).
+The hip and knee motors act on pitch axes and bear static gravity torque, while the shoulder motor acts on a yaw axis (parallel to gravity) and bears only dynamic rotational inertia during swing phase.
+
+\vspace{0.5cm}
+\textbf{Knee motor torque.}
+The knee servo supports link $L_3$ and the tip load $m_{\text{tip}}$.
+All relevant masses lie along $L_3$, so a single angle $\theta_{\text{knee}}$ governs the gravity projection:
+%
+\begin{align*}
+  \tau_{L_3}
+  &= \left( m_{L_3} \cdot \frac{r_3}{2}
+  + m_{\text{tip}} \cdot r_3 \right)
+  \cos\theta_{\text{knee}}
+\end{align*}
+
+\textbf{Hip motor torque.}
+The hip servo supports $L_2$, the knee servo mass, $L_3$, and the tip load.
+Because the hip and knee angles are independent, masses on $L_2$ project by
+$\cos\theta_{\text{hip}}$ while masses on $L_3$ project by
+$\cos\theta_{\text{knee}}$:
+%
+\begin{align*}
+  \tau_{L_2}
+  &= m_{L_2}\,\frac{r_2}{2}\,\cos\theta_{\text{hip}}
+  + m_{\text{servo,knee}}\,r_2\,\cos\theta_{\text{hip}} \\
+  &\quad + m_{L_3}\!\left(r_2\cos\theta_{\text{hip}}
+  + \frac{r_3}{2}\cos\theta_{\text{knee}}\right) \\
+  &\quad + m_{\text{tip}}\!\left(r_2\cos\theta_{\text{hip}}
+  + r_3\cos\theta_{\text{knee}}\right)
+\end{align*}
+
+\textbf{Inverse solver - weight budget.}
+With the motor choice settled, the practical question is how much total mass we can allocate to the chassis, electronics, and payload.
+Setting each torque equal to the rated stall torque and solving for $m_{\text{tip}}$ yields the per-leg load capacity.
+For the hip:
+%
+\begin{align*}
+  m_{\text{tip,max}}^{\text{hip}}
+  &= \frac{
+    \tau_{\text{rated}}
+    - \bigl(m_{L_2}\,\tfrac{r_2}{2}
+    + m_{\text{servo,knee}}\,r_2\bigr)\cos\theta_{\text{hip}}
+    - m_{L_3}\bigl(r_2\cos\theta_{\text{hip}}
+    + \tfrac{r_3}{2}\cos\theta_{\text{knee}}\bigr)
+  }{
+    r_2\cos\theta_{\text{hip}} + r_3\cos\theta_{\text{knee}}
+  }
+\end{align*}
+%
+The binding constraint is whichever servo saturates first.  
+Total supportable body mass is then:
+%
+\[
+  m_{\text{body}}
+  = \min\!\bigl(m_{\text{tip,max}}^{\text{knee}},\;
+  m_{\text{tip,max}}^{\text{hip}}\bigr)
+  \times n_{\text{legs in stance}}
+\]
+For link lengths up to 10\,cm at worst-case joint angles ($\theta = 0^{\circ}$), this yields a minimum supportable body weight of 3--4\,kg across four legs --- comfortably above our target chassis mass.
+
+\vspace{0.5cm}
+\textbf{Dynamic yaw torque.}
+As a secondary analysis, we compute the moment of inertia of the fully extended leg about the shoulder yaw axis (using the parallel-axis theorem for each link and point mass) and derive the required yaw torque $\tau_{\text{yaw}} = I_{\text{leg}} \cdot \alpha$ for a target swing-phase angular acceleration $\alpha$.
+Checking the simulation across the full parameter range confirms comfortable margins for any realistic leg configuration given the 15\,kg\,cm rated torque of our servos.
+
+\vspace{0.5cm}
+An interactive Jupyter notebook (\texttt{torque\_calculations.ipynb}) allows exploration of these equations across the full range of joint angles and design parameters.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.8\textwidth]{./img/interactive-figure-image.png}
+  \caption{Screenshot of the interactive Jupyter notebook widget, which allows exploration of the torque equations across the full range of joint angles and design parameters.}
+  \label{fig:interactive-notebook}
+\end{figure}
+
+
 \subsubsection{Central Processing Unit}
 
 For the brain of our robot, we chose an \textbf{ESP32 Devkit V1 Wifi/Bluetooth Dual Core micro controller}. The dual core setup enables us to divide our software architecture in two parts (see below): core 1 handles the \textbf{JSON parsing of the packets} coming from our remote control app while core 2 handles the \textbf{nervous system} of the robot (inverse kinematics engine). The \textbf{Wifi/Bluetooth} functionality enables us to \textbf{remotely control} the robot via our Command API and the numerous ports enable us to equip our robot with the sensors required via an \textbf{I2C multiplexer}.
@@ -303,7 +402,7 @@ For the bill of materials we will need (see Table 1):
 
 \begin{table}[h]
   \centering
-  \resizebox{\textwidth}{!}{%
+  \footnotesize
     \begin{tabular}{|p{4cm}|l|l|r|}
       \hline
       \textbf{Item} & \textbf{Qty} & \textbf{Source / Link} & \textbf{Price (CHF)} \\
@@ -312,91 +411,90 @@ For the bill of materials we will need (see Table 1):
       \hline
       PCA9685 PWM Multiplexer & 1 & \href{https://www.conrad.ch/de/p/iduino-me234-motortreiber-1-st-passend-fuer-entwicklungskits-arduino-2315243.html}{Link to buy} & 11\\
       \hline
-      15Kg/cm 270° Servo DSS-M15S with Metal Gear & 12 & \href{https://www.mouser.ch/ProductDetail/DFRobot/SER0038}{Link to buy} & 145\\
-      \hline
-      Li-Po 2S 7,4V 30C 1.300 mAh, contact JST-RCY (BEC) & 1 & \href{https://www.galaxus.ch/fr/s5/product/hacker-lipo-pack-tf-eco-x-1300mah-3s-mtag-1110-v-1300-mah-batterie-rc-12684610}{Link to buy} & 20 \\
-      \hline
-      IMU MPU6050 Accelerometer + Gyroscope & 1 & \href{https://www.galaxus.ch/fr/s1/product/purecrea-mpu-6050-accelerometre-3-axes-avec-gyroscope-carte-de-developpement-kit-36359715}{Link to buy} & 13 \\
-      \hline
-      VL53L0X (ToF) I2C Laser Distance Sensor & 5 & \href{https://www.mouser.ch/ProductDetail/DFRobot/SEN0245}{Link to buy} & 30 \\
-      \hline
-      %300W 20A DC-DC Step-down Module, Constant Voltage and Constant Current Adjustable Vehicle Charging Module & 2 & \href{https://www.joom.com/en/products/67037cacc862c801406e069c?currency=CHF&utm_productid=67037cacc862c801406e069c&utm_feed=web&utm_hash=ea390b582ec73a07e0936cb0dc64965b&variant_id=67037cacc862c848406e069e&gsAttrs=eyJyZWdpb24iOiJDSCIsICJzcGVjaWFsUHJpY2VVc2VkIjpmYWxzZX0g&exp_price=MTMuMSAg&country=CH&utm_audienceid=advertising_web_impact_2d&click_id=ydnRCJx3yxyZRkB1PQUgoReHUkuwMsQe0TXsQQ0&sharedid=&utm_medium=partners&utm_source=impact&utm_campaign=2414876&irgwc=1&afsrc=1}{Link to buy} & 25 \\
-      %\hline
+      15Kg/cm 270° Servo DSS-M15S with Metal Gear & 12 & \href{https://www.mouser.ch/ProductDetail/DFRobot/SER0038?qs=lqAf%2FiVYw9jKMX2bo90oYQ%3D%3D}{Link to buy} & 145\\
+          \hline
+          Li-Po 2S 7,4V 30C 1.300 mAh, contact JST-RCY (BEC) & 1 & \href{https://www.galaxus.ch/fr/s5/product/hacker-lipo-pack-tf-eco-x-1300mah-3s-mtag-1110-v-1300-mah-batterie-rc-12684610}{Link to buy} & 20 \\
+          \hline
+          IMU MPU6050 Accelerometer + Gyroscope & 1 & \href{https://www.galaxus.ch/fr/s1/product/purecrea-mpu-6050-accelerometre-3-axes-avec-gyroscope-carte-de-developpement-kit-36359715}{Link to buy} & 13 \\
+          \hline
+          VL53L0X (ToF) I2C Laser Distance Sensor & 5 & \href{https://www.mouser.ch/ProductDetail/DFRobot/SEN0245?qs=vdi0iO8H4N2%252ByTl%252BC%252Bk6RA%3D%3D}{Link to buy} & 30 \\
+            \hline
+            %300W 20A DC-DC Step-down Module, Constant Voltage and Constant Current Adjustable Vehicle Charging Module & 2 & \href{https://www.joom.com/en/products/67037cacc862c801406e069c?currency=CHF&utm_productid=67037cacc862c801406e069c&utm_feed=web&utm_hash=ea390b582ec73a07e0936cb0dc64965b&variant_id=67037cacc862c848406e069e&gsAttrs=eyJyZWdpb24iOiJDSCIsICJzcGVjaWFsUHJpY2VVc2VkIjpmYWxzZX0g&exp_price=MTMuMSAg&country=CH&utm_audienceid=advertising_web_impact_2d&click_id=ydnRCJx3yxyZRkB1PQUgoReHUkuwMsQe0TXsQQ0&sharedid=&utm_medium=partners&utm_source=impact&utm_campaign=2414876&irgwc=1&afsrc=1}{Link to buy} & 25 \\
+            %\hline
 
-      LM2596 DC-DC Step-Down Converter Module with Display to connect with ESP32 controller + sensors & 1 & \href{https://www.bastelgarage.ch/components/power-supplies-electricity/dc-dc-converter-step-down/lm2596-dc-dc-step-down-converter-module-with-display}{Link to buy} & 10 \\
-      \hline
-      Female XT60 connector & 2 & \href{https://www.conrad.ch/fr/p/reely-re-6702318-prise-femelle-pour-batterie-xt60-dore-e-1-pc-s-2234106.html}{Link to buy} & 2 \\
-      \hline
-      Male XT60 connector & 2 & \href{https://www.bastelgarage.ch/components/power-supplies-electricity/dc-dc-converter-step-down/lm2596-dc-dc-step-down-converter-module-with-display}{Link to buy} & 2 \\
-      \hline
-      ON/OFF switch & 1 & \href{https://www.mouser.ch/ProductDetail/Bulgin/C7510T110R}{Link to buy} & 1 \\
-      \hline
-      I2C multiplexer & 1 & \href{https://www.mouser.ch/ProductDetail/Adafruit/2717}{Link to buy} & 5 \\
-      \hline
-      Battery protection module for lipo 2S 1300 mAh 30C (39A) & 1 & \href{}{Link to buy} & 10 \\
-      \hline
-      XT60 Charging cable & 1 & \href{https://www.swaytronic.ch/en/SWAYTRONIC-charging-cable-XT60}{Link to buy} & 5 \\
-      \hline
-      SBC-OLED01V2 128x64 pixels I2C screen & 1 & \href{https://www.galaxus.ch/fr/s1/product/joy-it-sbc-oled01v2-module-daffichage-24-cm-096-pouce-128-x-64-pixels-carte-de-developpement-kit-49727962}{Link to buy} & 10 \\
-      \hline
-      \multicolumn{3}{|r|}{\textbf{Total}} & \textbf{272} \\
-      \hline
-    \end{tabular}%
-  }
-  \caption{Bill of Materials}
-\end{table}
+            LM2596 DC-DC Step-Down Converter Module with Display to connect with ESP32 controller + sensors & 1 & \href{https://www.bastelgarage.ch/components/power-supplies-electricity/dc-dc-converter-step-down/lm2596-dc-dc-step-down-converter-module-with-display}{Link to buy} & 10 \\
+            \hline
+            Female XT60 connector & 2 & \href{https://www.conrad.ch/fr/p/reely-re-6702318-prise-femelle-pour-batterie-xt60-dore-e-1-pc-s-2234106.html}{Link to buy} & 2 \\
+            \hline
+            Male XT60 connector & 2 & \href{https://www.conrad.ch/fr/p/reely-re-6586515-fiche-male-pour-batterie-xt60-3-5-mm-a-souder-1-pc-s-2195505.html}{Link to buy} & 2 \\
+            \hline
+            ON/OFF switch & 1 & \href{https://www.mouser.ch/ProductDetail/Bulgin/C7510T110R?qs=yc9RBI4tIAKVWqYUySD3pw%3D%3D}{Link to buy} & 1 \\
+            \hline
+            I2C multiplexer & 1 & \href{https://www.mouser.ch/ProductDetail/Adafruit/2717?qs=FXKxjuMTmBk%252BXQsxVhda7A%3D%3D}{Link to buy} & 5 \\
+            \hline
+            Battery protection module for lipo 2S 1300 mAh 30C (39A) & 1 & \href{}{Link to buy} & 10 \\
+            \hline
+            XT60 Charging cable & 1 & \href{https://www.swaytronic.ch/en/SWAYTRONIC-charging-cable-XT60}{Link to buy} & 5 \\
+            \hline
+            SBC-OLED01V2 128x64 pixels I2C screen & 1 & \href{https://www.galaxus.ch/fr/s1/product/joy-it-sbc-oled01v2-module-daffichage-24-cm-096-pouce-128-x-64-pixels-carte-de-developpement-kit-49727962}{Link to buy} & 10 \\
+            \hline
+            \multicolumn{3}{|r|}{\textbf{Total}} & \textbf{272} \\
+            \hline
+          \end{tabular}
+        \caption{Bill of Materials}
+      \end{table}
 
-\section{Work Breakdown}
-% ============================================================
-% SECTION 5: WORK BREAKDOWN
-% ============================================================
-\newpage
-\begin{landscape}
-  \begin{figure}[]
-    \centering
-    \includegraphics[ scale=0.45]{gantt_chart.png}
-  \end{figure}
-\end{landscape}
-\newpage
-\section{Future of the FaceHugger}
-The current version of the FaceHugger serves as a high-performance 12-DOF baseline. Future iterations could focus on transitioning the robot from a teleoperated machine to an autonomous, environment-aware agent:
+      \section{Work Breakdown}
+      % ============================================================
+      % SECTION 5: WORK BREAKDOWN
+      % ============================================================
+      \newpage
+      \begin{landscape}
+        \begin{figure}[]
+          \centering
+          \includegraphics[ scale=0.45]{gantt_chart.png}
+        \end{figure}
+      \end{landscape}
+      \newpage
+      \section{Future of the FaceHugger}
+      The current version of the FaceHugger serves as a high-performance 12-DOF baseline. Future iterations could focus on transitioning the robot from a teleoperated machine to an autonomous, environment-aware agent:
 
-\begin{itemize}
-  \item \textbf{Vision-Based Spatial Awareness:} By integrating an \textbf{ESP32-CAM} or a small \textbf{LiDAR} module, the robot could move beyond simple ToF distance measurements. This would allow for SLAM (Simultaneous Localization and Mapping), enabling the FaceHugger to navigate complex indoor environments and autonomously plan paths around obstacles.
+      \begin{itemize}
+        \item \textbf{Vision-Based Spatial Awareness:} By integrating an \textbf{ESP32-CAM} or a small \textbf{LiDAR} module, the robot could move beyond simple ToF distance measurements. This would allow for SLAM (Simultaneous Localization and Mapping), enabling the FaceHugger to navigate complex indoor environments and autonomously plan paths around obstacles.
 
-  \item \textbf{Transition to Full Dynamic Stability:} As the gait engine matures, shift the 80/20 hybrid model toward a more reactive model. By utilizing high-frequency IMU feedback and ground-contact sensors in the feet, the robot could achieve "blind" stabilization—navigating stairs or slippery surfaces where hardcoded elliptical paths are insufficient.
+        \item \textbf{Transition to Full Dynamic Stability:} As the gait engine matures, shift the 80/20 hybrid model toward a more reactive model. By utilizing high-frequency IMU feedback and ground-contact sensors in the feet, the robot could achieve "blind" stabilization—navigating stairs or slippery surfaces where hardcoded elliptical paths are insufficient.
 
-  \item \textbf{Terrain Adaptation and Obstacle Scaling:} With the 270\textdegree{} range of the \textbf{DSM 15-270} servos, the FaceHugger has the mechanical potential for extreme reach. Future software updates would include a "High-Step" mode, where the robot uses its ToF sensors to measure the height of a ledge and dynamically recalculates its Inverse Kinematics to mount obstacles up to 10cm in height.
+        \item \textbf{Terrain Adaptation and Obstacle Scaling:} With the 270\textdegree{} range of the \textbf{DSM 15-270} servos, the FaceHugger has the mechanical potential for extreme reach. Future software updates would include a "High-Step" mode, where the robot uses its ToF sensors to measure the height of a ledge and dynamically recalculates its Inverse Kinematics to mount obstacles up to 10cm in height.
 
-  \item \textbf{Edge-AI for Gesture Control:} Utilizing the dual-core capability further, Core 1 could run lightweight Machine Learning models to recognize hand gestures or follow a specific person without the need for a Bluetooth beacon, making the interaction more organic.
-\end{itemize}
+        \item \textbf{Edge-AI for Gesture Control:} Utilizing the dual-core capability further, Core 1 could run lightweight Machine Learning models to recognize hand gestures or follow a specific person without the need for a Bluetooth beacon, making the interaction more organic.
+      \end{itemize}
 
-\section{References and Inspirations}
+      \section{References and Inspirations}
 
-\textbf{BeetleBot — EPFL CS-358 (2025 Hexapod)} \\
-\textit{Source:} \url{https://github.com/epfl-cs358/2025sp-beetlebot} \\
-\textit{Relevance:} Provided the baseline for the ESP32/PCA9685 wiring topology and highlighted the critical need to upgrade from SG90 to high-torque servos to avoid structural failure.
-\\
+      \textbf{BeetleBot — EPFL CS-358 (2025 Hexapod)} \\
+      \textit{Source:} \url{https://github.com/epfl-cs358/2025sp-beetlebot} \\
+      \textit{Relevance:} Provided the baseline for the ESP32/PCA9685 wiring topology and highlighted the critical need to upgrade from SG90 to high-torque servos to avoid structural failure.
+      \\
 
-\textbf{ResearchGate — Four-Legged 12-Joint Robot CAD Model}
-\textit{Source:} \\
-\url{https://www.researchgate.net/figure/fig2_384894431} \\
-\textit{Relevance:} Serves as the primary structural blueprint for our 3-DOF leg assembly, specifically guiding the placement of the abduction servos to maximize lateral stability. \\
+      \textbf{ResearchGate — Four-Legged 12-Joint Robot CAD Model}
+      \textit{Source:} \\
+      \url{https://www.researchgate.net/figure/fig2_384894431} \\
+      \textit{Relevance:} Serves as the primary structural blueprint for our 3-DOF leg assembly, specifically guiding the placement of the abduction servos to maximize lateral stability. \\
 
-\textbf{Petoi OpenCat / Bittle (Quadruped)} \\
-\textit{Source:} \url{https://github.com/PetoiCamp/OpenCatEsp32} \\
-\textit{Relevance:} Validated that a dual-core ESP32 can handle 12-DOF Inverse Kinematics on-chip and served as the primary reference for gait-switching logic (Walk vs. Trot). \\
+      \textbf{Petoi OpenCat / Bittle (Quadruped)} \\
+      \textit{Source:} \url{https://github.com/PetoiCamp/OpenCatEsp32} \\
+      \textit{Relevance:} Validated that a dual-core ESP32 can handle 12-DOF Inverse Kinematics on-chip and served as the primary reference for gait-switching logic (Walk vs. Trot). \\
 
-\textbf{Stanford Pupper (Research Quadruped)} \\
-\textit{Source:} \url{https://github.com/stanfordroboticsclub/StanfordQuadruped} \\
-\textit{Relevance:} Informed our 80/20 hybrid control philosophy, specifically the use of parametric elliptical trajectories for the swing phase and stance-width calculations. \\
+      \textbf{Stanford Pupper (Research Quadruped)} \\
+      \textit{Source:} \url{https://github.com/stanfordroboticsclub/StanfordQuadruped} \\
+      \textit{Relevance:} Informed our 80/20 hybrid control philosophy, specifically the use of parametric elliptical trajectories for the swing phase and stance-width calculations. \\
 
-\textbf{Sesame Robot (Expressive Quadruped)} \\
-\textit{Source:} \url{https://github.com/dorianborian/sesame-robot} \\
-\textit{Relevance:} Inspired the "emotive" extensions of our project, demonstrating how an OLED face can sync with state-machine transitions to indicate robot "mood" or battery status. \\
+      \textbf{Sesame Robot (Expressive Quadruped)} \\
+      \textit{Source:} \url{https://github.com/dorianborian/sesame-robot} \\
+      \textit{Relevance:} Inspired the "emotive" extensions of our project, demonstrating how an OLED face can sync with state-machine transitions to indicate robot "mood" or battery status. \\
 
-\textbf{Instructables Spider Robot (Minimal Quadruped)} \\
-\textit{Source:} \url{https://www.instructables.com/Spider-Robot-DIY-Quadruped} \\
-\textit{Relevance:} Served as a fundamental proof-of-concept for the I2C communication chain and the basic 8-DOF coordinate mapping for 3D-printed quadruped limbs. \\
+      \textbf{Instructables Spider Robot (Minimal Quadruped)} \\
+      \textit{Source:} \url{https://www.instructables.com/Spider-Robot-DIY-Quadruped} \\
+      \textit{Relevance:} Served as a fundamental proof-of-concept for the I2C communication chain and the basic 8-DOF coordinate mapping for 3D-printed quadruped limbs. \\
 
-\end{document}
+      \end{document}
