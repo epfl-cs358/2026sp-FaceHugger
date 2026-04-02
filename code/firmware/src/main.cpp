@@ -1,23 +1,17 @@
 #include <Arduino.h>
-#include "shared/config.h"
-#include "brain/sensors.h"
-#include "nervous_system/movements.h"
+#include "brain/network.h"
+#include "shared/data.h"
 
 void setup() {
     Serial.begin(115200);
-    initSensors();
-    Serial.println("FaceHugger Boot Complete.");
+    
+    // Initialize the network stack
+    initNetwork();
+    
+    Serial.println("FaceHugger OS Online.");
 }
 
 void loop() {
-    int dist = getDistance();
-    Serial.print("Current Distance: ");
-    Serial.println(dist);
-
-    if (dist < 150) {
-        Serial.println("Obstacle detected!");
-        executeWalk(); 
-    }
-
-    delay(1000);
+    // Keep the WebSocket server alive and listening
+    updateNetwork();
 }
