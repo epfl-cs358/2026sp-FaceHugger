@@ -7,11 +7,20 @@
 WebSocketsServer webSocket = WebSocketsServer(81);
 
 void initNetwork() {
-    // Setup ESP32 as an Access Point
-    WiFi.softAP("FaceHugger_Net", "12345678");
-    Serial.println("WiFi AP Started: FaceHugger_Net");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.softAPIP());
+    // 1. Explicitly set mode to Access Point
+    WiFi.mode(WIFI_AP); 
+
+    // 2. Configure the AP (SSID, Password, Channel, Hidden, Max Connections)
+    // Using Channel 6 to avoid interference, allowing 4 simultaneous users
+    bool success = WiFi.softAP("FaceHugger_Net", "12345678", 6, 0, 4);
+
+    if (success) {
+        Serial.println("\n======================================");
+        Serial.println("ROSS (Robot OS) Network Online");
+        Serial.print("SSID: FaceHugger_Net\nIP:   ");
+        Serial.println(WiFi.softAPIP());
+        Serial.println("======================================\n");
+    }
 
     webSocket.begin();
     webSocket.onEvent(onWebSocketEvent);
