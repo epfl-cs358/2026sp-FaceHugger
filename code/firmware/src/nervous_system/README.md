@@ -1,43 +1,52 @@
-# 🦵 Nervous System Abstraction
+# 🦵 Nervous System Abstraction (80/20 Movement Logic) v1.0
 
-This directory serves as the "Peripheral Nervous System" of the FaceHugger quadruped. It handles the transformation of high-level movement intent into electrical pulses for the 12 servo motors.
+This directory serves as the "Peripheral Nervous System" of the FaceHugger quadruped. It handles the translation of high-level movement intent into electrical pulses for the 12 servo motors using a **Pose-Based** approach.
 
 ## 🏗️ 3-Layer Architecture
 
-To manage the complexity of a 12-DOF (Degree of Freedom) robot, we use a tiered abstraction approach:
+We utilize an "80% Hardcode / 20% Calibration" philosophy to ensure stability and rapid hardware integration:
 
 ### 1. The Movement Layer (`movements.cpp`)
 **Role:** The Choreographer / Gait Engine.
 * **Primary Function:** `updateGait()`
-* **Logic:** Orchestrates the timing of all four legs. It determines the "Swing" (leg in air) and "Stance" (leg on ground) phases to maintain balance and achieve the velocity vector $(v_x, v_y, \omega)$ requested by the user.
+* **Logic:** Orchestrates the timing of the legs by blending between hardcoded **Poses** (Stand, Sit, Lift, Step). 
+* **Interpolation:** Uses time-based smoothing to transition between poses, ensuring the robot doesn't move with "jerky" stop-and-start motions.
 
-### 2. The Kinematics Layer (`movements.cpp`)
-**Role:** The Mathematician.
-* **Primary Function:** `solveIK(float x, float y, float z)`
-* **Logic:** Implements **Inverse Kinematics (IK)** using the Law of Cosines. It translates a target 3D coordinate $(X, Y, Z)$ relative to the hip into three specific joint angles: **Coxa (Hip)**, **Femur**, and **Tibia**.
-
+### 2. The Pose Layer (`movements.cpp`)
+**Role:** The Keyframer (Replaces complex IK).
+* **Primary Functions:** `getPoseAngles()`
+* **Logic:** Instead of real-time trigonometry, this layer stores optimized angle tables for specific gait phases. 
+* **80% Hardcode:** High-level movement is defined by pre-set joint angles (e.g., "Step_Forward_Phase_1").
 
 ### 3. The Leg Layer (`leg.cpp`)
 **Role:** The Muscle / Hardware Interface.
 * **Primary Functions:** `setLegAngles()` & `writePWM()`
 * **Logic:**
-    * **Calibration:** Applies offsets from `shared/config.h` to correct for mechanical assembly errors.
+    * **20% Calibration:** Applies offsets from `shared/config.h` to the hardcoded angles to correct for mechanical misalignment and 3D-printing tolerances.
     * **Inversion:** Compensates for motors mounted in opposite orientations (Left vs. Right side).
-    * **Execution:** Maps degrees to PWM pulse widths (usually 150-600) and communicates with the PCA9685 via I2C.
+    * **Execution:** Maps calibrated degrees to PWM pulse widths (150-600) for the PCA9685 via I2C.
 
 ---
 
 ## 🔗 Functional Mapping
 
-The following table tracks which file is responsible for each step in the movement pipeline:
-
 | Phase | File | Function | Role |
 | :--- | :--- | :--- | :--- |
 | **Communication** | `brain/network.cpp` | `handleParsedMessage()` | **Interpreter:** Receives JSON and routes commands. |
-| **Path Planning** | `nervous_system/movements.cpp` | `updateGait()` | **Planner:** Decides foot placement trajectories. |
-| **IK Solving** | `nervous_system/movements.cpp` | `solveIK()` | **Solver:** Converts 3D points to angles. |
-| **Mapping** | `nervous_system/leg.cpp` | `setLegAngles()` | **Translator:** Applies offsets and maps degrees to pulses. |
+| **Gait Engine** | `nervous_system/movements.cpp` | `updateGait()` | **Planner:** Blends between hardcoded poses. |
+| **Pose Lookup** | `nervous_system/movements.cpp` | `getPoseAngles()` | **Keyframer:** Provides the "80% Hardcoded" angles. |
+| **Calibration** | `nervous_system/leg.cpp` | `setLegAngles()` | **Translator:** Applies the "20% Calibration" offsets. |
 | **Execution** | `nervous_system/leg.cpp` | `writePWM()` | **Muscle:** Calls `pwm.setPWM()` for the PCA9685. |
+
+---
+
+## 📐 Calibration Philosophy
+
+To achieve precise movement without continuous Inverse Kinematics:
+1. **Hardcode:** Define the ideal angle in code (e.g., Femur at 90° for standing).
+2. **Measure:** Observe the physical leg. If it's at 88°, the mechanical error is -2°.
+3. **Calibrate:** Set an offset of `+2` in `shared/config.h`. 
+4. **Result:** `Final_Angle = Hardcoded_Angle (90) + Offset (2) = 92°` (Physical result: 90°).
 
 ---
 
