@@ -50,6 +50,21 @@ void handleParsedMessage(uint8_t * payload) {
         case CMD_MOVE:
             Serial.printf("Moving -> X:%.2f Y:%.2f\n", (float)doc["x"], (float)doc["y"]);
             break;
+        case CMD_TELEMETRY:
+            Serial.printf("FSM state: %d, Battery voltage: %lf, In stabilization mode: %s\n", 
+                (int)doc["s"], (float)doc["b"], (int)doc["a"] ? "true": "false");
+
+            JsonArray dists = doc["d"];
+            for(int i = 0; i < dists.size(); i++) {
+                int d = dists[i];
+                Serial.print("D");
+                Serial.print(i);
+                Serial.print(": ");
+                Serial.print(d);
+                if (i < dists.size() - 1) Serial.print(" | ");
+            }
+            Serial.println();
+            break;
     }
 }
 
