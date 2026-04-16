@@ -14,6 +14,9 @@
   <material name="light_grey">
     <color rgba="0.6 0.6 0.6 1.0"/>
   </material>
+  <material name="leg">
+    <color rgba="0.78 0.80 0.84 1.0"/>
+  </material>
 
   <!-- ===================== BODY ===================== -->
   <link name="body">
@@ -53,11 +56,12 @@
       <inertia ixx="0.000005" ixy="0" ixz="0" iyy="0.000015" iyz="0" izz="0.000015"/>
     </inertial>
     <visual>
-      <origin xyz="-0.04 0 0" rpy="0 0 0"/>
+      <!-- Shoulder segment from split leg assembly. Mesh +Y -> link -X. -->
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
-        <box size="0.080 0.025 0.025"/>
+        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="orange"/>
+      <material name="leg"/>
     </visual>
     <collision>
       <origin xyz="-0.04 0 0" rpy="0 0 0"/>
@@ -82,11 +86,12 @@
       <inertia ixx="0.000025" ixy="0" ixz="0" iyy="0.000025" iyz="0" izz="0.000005"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
+      <!-- Upper-leg segment. Offset +Z=0.080 shifts mesh Y=80 to link origin (hip). -->
+      <origin xyz="0 0 0.080" rpy="-1.5708 0 0"/>
       <geometry>
-        <box size="0.025 0.025 0.075"/>
+        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="blue"/>
+      <material name="leg"/>
     </visual>
     <collision>
       <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
@@ -111,43 +116,25 @@
       <inertia ixx="0.000035" ixy="0" ixz="0" iyy="0.000035" iyz="0" izz="0.000005"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 -0.045" rpy="0 0 0"/>
+      <!-- Lower-leg segment. Offset +Z=0.155 shifts mesh Y=155 to link origin (knee). -->
+      <origin xyz="0 0 0.155" rpy="-1.5708 0 0"/>
       <geometry>
-        <box size="0.020 0.020 0.090"/>
+        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="light_grey"/>
+      <material name="leg"/>
     </visual>
     <collision>
-      <origin xyz="0 0 -0.045" rpy="0 0 0"/>
+      <origin xyz="0 0 -0.0387" rpy="0 0 0"/>
       <geometry>
-        <box size="0.020 0.020 0.090"/>
+        <box size="0.020 0.020 0.0774"/>
       </geometry>
     </collision>
-  </link>
-
-  <!-- Foot contact sphere -->
-  <joint name="fl_foot_joint" type="fixed">
-    <parent link="fl_lower_leg"/>
-    <child link="fl_foot"/>
-    <origin xyz="0 0 -0.090" rpy="0 0 0"/>
-  </joint>
-  <link name="fl_foot">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="0.005"/>
-      <inertia ixx="0.0000001" ixy="0" ixz="0" iyy="0.0000001" iyz="0" izz="0.0000001"/>
-    </inertial>
     <collision>
+      <origin xyz="0 0 -0.0774" rpy="0 0 0"/>
       <geometry>
         <sphere radius="0.008"/>
       </geometry>
     </collision>
-    <visual>
-      <geometry>
-        <sphere radius="0.008"/>
-      </geometry>
-      <material name="orange"/>
-    </visual>
   </link>
 
   <!-- ==================== FRONT RIGHT LEG ==================== -->
@@ -165,11 +152,12 @@
       <inertia ixx="0.000005" ixy="0" ixz="0" iyy="0.000015" iyz="0" izz="0.000015"/>
     </inertial>
     <visual>
-      <origin xyz="-0.04 0 0" rpy="0 0 0"/>
+      <!-- Shoulder segment from split leg assembly. Mesh +Y -> link -X. -->
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
-        <box size="0.080 0.025 0.025"/>
+        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="orange"/>
+      <material name="leg"/>
     </visual>
     <collision>
       <origin xyz="-0.04 0 0" rpy="0 0 0"/>
@@ -193,11 +181,12 @@
       <inertia ixx="0.000025" ixy="0" ixz="0" iyy="0.000025" iyz="0" izz="0.000005"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
+      <!-- Upper-leg segment. Offset +Z=0.080 shifts mesh Y=80 to link origin (hip). -->
+      <origin xyz="0 0 0.080" rpy="-1.5708 0 0"/>
       <geometry>
-        <box size="0.025 0.025 0.075"/>
+        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="blue"/>
+      <material name="leg"/>
     </visual>
     <collision>
       <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
@@ -221,42 +210,25 @@
       <inertia ixx="0.000035" ixy="0" ixz="0" iyy="0.000035" iyz="0" izz="0.000005"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 -0.045" rpy="0 0 0"/>
+      <!-- Lower-leg segment. Offset +Z=0.155 shifts mesh Y=155 to link origin (knee). -->
+      <origin xyz="0 0 0.155" rpy="-1.5708 0 0"/>
       <geometry>
-        <box size="0.020 0.020 0.090"/>
+        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="light_grey"/>
+      <material name="leg"/>
     </visual>
     <collision>
-      <origin xyz="0 0 -0.045" rpy="0 0 0"/>
+      <origin xyz="0 0 -0.0387" rpy="0 0 0"/>
       <geometry>
-        <box size="0.020 0.020 0.090"/>
+        <box size="0.020 0.020 0.0774"/>
       </geometry>
     </collision>
-  </link>
-
-  <joint name="fr_foot_joint" type="fixed">
-    <parent link="fr_lower_leg"/>
-    <child link="fr_foot"/>
-    <origin xyz="0 0 -0.090" rpy="0 0 0"/>
-  </joint>
-  <link name="fr_foot">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="0.005"/>
-      <inertia ixx="0.0000001" ixy="0" ixz="0" iyy="0.0000001" iyz="0" izz="0.0000001"/>
-    </inertial>
     <collision>
+      <origin xyz="0 0 -0.0774" rpy="0 0 0"/>
       <geometry>
         <sphere radius="0.008"/>
       </geometry>
     </collision>
-    <visual>
-      <geometry>
-        <sphere radius="0.008"/>
-      </geometry>
-      <material name="orange"/>
-    </visual>
   </link>
 
   <!-- ==================== REAR LEFT LEG ==================== -->
@@ -274,11 +246,12 @@
       <inertia ixx="0.000005" ixy="0" ixz="0" iyy="0.000015" iyz="0" izz="0.000015"/>
     </inertial>
     <visual>
-      <origin xyz="-0.04 0 0" rpy="0 0 0"/>
+      <!-- Shoulder segment from split leg assembly. Mesh +Y -> link -X. -->
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
-        <box size="0.080 0.025 0.025"/>
+        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="orange"/>
+      <material name="leg"/>
     </visual>
     <collision>
       <origin xyz="-0.04 0 0" rpy="0 0 0"/>
@@ -302,11 +275,12 @@
       <inertia ixx="0.000025" ixy="0" ixz="0" iyy="0.000025" iyz="0" izz="0.000005"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
+      <!-- Upper-leg segment. Offset +Z=0.080 shifts mesh Y=80 to link origin (hip). -->
+      <origin xyz="0 0 0.080" rpy="-1.5708 0 0"/>
       <geometry>
-        <box size="0.025 0.025 0.075"/>
+        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="blue"/>
+      <material name="leg"/>
     </visual>
     <collision>
       <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
@@ -330,42 +304,25 @@
       <inertia ixx="0.000035" ixy="0" ixz="0" iyy="0.000035" iyz="0" izz="0.000005"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 -0.045" rpy="0 0 0"/>
+      <!-- Lower-leg segment. Offset +Z=0.155 shifts mesh Y=155 to link origin (knee). -->
+      <origin xyz="0 0 0.155" rpy="-1.5708 0 0"/>
       <geometry>
-        <box size="0.020 0.020 0.090"/>
+        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="light_grey"/>
+      <material name="leg"/>
     </visual>
     <collision>
-      <origin xyz="0 0 -0.045" rpy="0 0 0"/>
+      <origin xyz="0 0 -0.0387" rpy="0 0 0"/>
       <geometry>
-        <box size="0.020 0.020 0.090"/>
+        <box size="0.020 0.020 0.0774"/>
       </geometry>
     </collision>
-  </link>
-
-  <joint name="rl_foot_joint" type="fixed">
-    <parent link="rl_lower_leg"/>
-    <child link="rl_foot"/>
-    <origin xyz="0 0 -0.090" rpy="0 0 0"/>
-  </joint>
-  <link name="rl_foot">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="0.005"/>
-      <inertia ixx="0.0000001" ixy="0" ixz="0" iyy="0.0000001" iyz="0" izz="0.0000001"/>
-    </inertial>
     <collision>
+      <origin xyz="0 0 -0.0774" rpy="0 0 0"/>
       <geometry>
         <sphere radius="0.008"/>
       </geometry>
     </collision>
-    <visual>
-      <geometry>
-        <sphere radius="0.008"/>
-      </geometry>
-      <material name="orange"/>
-    </visual>
   </link>
 
   <!-- ==================== REAR RIGHT LEG ==================== -->
@@ -383,11 +340,12 @@
       <inertia ixx="0.000005" ixy="0" ixz="0" iyy="0.000015" iyz="0" izz="0.000015"/>
     </inertial>
     <visual>
-      <origin xyz="-0.04 0 0" rpy="0 0 0"/>
+      <!-- Shoulder segment from split leg assembly. Mesh +Y -> link -X. -->
+      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
       <geometry>
-        <box size="0.080 0.025 0.025"/>
+        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="orange"/>
+      <material name="leg"/>
     </visual>
     <collision>
       <origin xyz="-0.04 0 0" rpy="0 0 0"/>
@@ -411,11 +369,12 @@
       <inertia ixx="0.000025" ixy="0" ixz="0" iyy="0.000025" iyz="0" izz="0.000005"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
+      <!-- Upper-leg segment. Offset +Z=0.080 shifts mesh Y=80 to link origin (hip). -->
+      <origin xyz="0 0 0.080" rpy="-1.5708 0 0"/>
       <geometry>
-        <box size="0.025 0.025 0.075"/>
+        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="blue"/>
+      <material name="leg"/>
     </visual>
     <collision>
       <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
@@ -439,42 +398,25 @@
       <inertia ixx="0.000035" ixy="0" ixz="0" iyy="0.000035" iyz="0" izz="0.000005"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 -0.045" rpy="0 0 0"/>
+      <!-- Lower-leg segment. Offset +Z=0.155 shifts mesh Y=155 to link origin (knee). -->
+      <origin xyz="0 0 0.155" rpy="-1.5708 0 0"/>
       <geometry>
-        <box size="0.020 0.020 0.090"/>
+        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="light_grey"/>
+      <material name="leg"/>
     </visual>
     <collision>
-      <origin xyz="0 0 -0.045" rpy="0 0 0"/>
+      <origin xyz="0 0 -0.0387" rpy="0 0 0"/>
       <geometry>
-        <box size="0.020 0.020 0.090"/>
+        <box size="0.020 0.020 0.0774"/>
       </geometry>
     </collision>
-  </link>
-
-  <joint name="rr_foot_joint" type="fixed">
-    <parent link="rr_lower_leg"/>
-    <child link="rr_foot"/>
-    <origin xyz="0 0 -0.090" rpy="0 0 0"/>
-  </joint>
-  <link name="rr_foot">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="0.005"/>
-      <inertia ixx="0.0000001" ixy="0" ixz="0" iyy="0.0000001" iyz="0" izz="0.0000001"/>
-    </inertial>
     <collision>
+      <origin xyz="0 0 -0.0774" rpy="0 0 0"/>
       <geometry>
         <sphere radius="0.008"/>
       </geometry>
     </collision>
-    <visual>
-      <geometry>
-        <sphere radius="0.008"/>
-      </geometry>
-      <material name="orange"/>
-    </visual>
   </link>
 
 </robot>
