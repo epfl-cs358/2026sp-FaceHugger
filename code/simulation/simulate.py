@@ -5,6 +5,8 @@ Run modes:
   default     : robot loads and holds a stable standing stance
   --walk      : static walk gait (one leg swings at a time, CoM always inside
                 support triangle), with overlaid foot-trajectory debug lines.
+  --trot      : dynamic trot gait (diagonal pairs FL+RR / FR+RL swing
+                together, duty 0.5), same foot-trajectory debug overlay.
   --wall-flip : robot puts its front legs against a wall, vaults over it,
                 lands on the other side upside-down, and reconfigures its
                 legs (hip/knee pitches negated) so the inverted pose looks
@@ -441,14 +443,28 @@ NEUTRAL_FOOT = {
            + LEG_INFO["rr"]["mount"][2]),
 }
 
-# Diagonal crawl: exactly one leg in swing at a time. Order FL -> RR -> FR -> RL.
-GAIT_PHASE_OFFSET = {"fl": 0.00, "rr": 0.25, "fr": 0.50, "rl": 0.75}
-
-# Gait tunables
-WALK_PERIOD      = 2.4    # seconds per full cycle
-WALK_STEP_LENGTH = 0.04   # metres, foot sweep amplitude along body Y
-WALK_STEP_HEIGHT = 0.02   # metres, foot lift during swing
-WALK_SWING_DUTY  = 0.25   # fraction of cycle spent in swing
+# Gait registry. Each entry is a self-contained scheduler:
+#   - period / step_length / step_height / duty: trajectory shape
+#   - offsets: per-leg phase in [0, 1)
+#   - label: printed in the banner
+GAITS = {
+    "walk": {
+        "period":      2.4,
+        "step_length": 0.04,
+        "step_height": 0.02,
+        "duty":        0.25,
+        "offsets":     {"fl": 0.00, "rr": 0.25, "fr": 0.50, "rl": 0.75},
+        "label":       "Static walk (FL -> RR -> FR -> RL)",
+    },
+    "trot": {
+        "period":      0.8,
+        "step_length": 0.05,
+        "step_height": 0.025,
+        "duty":        0.5,
+        "offsets":     {"fl": 0.0, "rr": 0.0, "fr": 0.5, "rl": 0.5},
+        "label":       "Trot (diagonal pairs: FL+RR | FR+RL)",
+    },
+}
 
 # Debug overlay of planned foot trajectories in the GUI
 SHOW_FOOT_TRAJECTORIES = True
@@ -518,8 +534,7 @@ def leg_ik(foot_body, leg_id):
     return theta_s, theta_h, theta_k
 
 
-def foot_target(leg_id, phase, step_length=WALK_STEP_LENGTH,
-                step_height=WALK_STEP_HEIGHT, duty=WALK_SWING_DUTY):
+def foot_target(leg_id, phase, step_length, step_height, duty):
     """Body-frame foot target for a given leg at a given per-leg phase [0, 1)."""
     nx, ny, nz = NEUTRAL_FOOT[leg_id]
     if phase < duty:
@@ -533,12 +548,15 @@ def foot_target(leg_id, phase, step_length=WALK_STEP_LENGTH,
     return (nx, ny + dy, nz + dz)
 
 
-def gait_joint_targets(t, period=WALK_PERIOD, step_length=WALK_STEP_LENGTH,
-                       step_height=WALK_STEP_HEIGHT, duty=WALK_SWING_DUTY):
+def gait_joint_targets(t, cfg):
     """Return {joint_name: angle} for all 12 joints at elapsed time t."""
+    period = cfg["period"]
+    step_length = cfg["step_length"]
+    step_height = cfg["step_height"]
+    duty = cfg["duty"]
     global_phase = (t / period) % 1.0
     targets = {}
-    for leg_id, offset in GAIT_PHASE_OFFSET.items():
+    for leg_id, offset in cfg["offsets"].items():
         phase = (global_phase - offset) % 1.0
         foot = foot_target(leg_id, phase, step_length, step_height, duty)
         theta_s, theta_h, theta_k = leg_ik(foot, leg_id)
@@ -618,8 +636,14 @@ def _verify_neutral_ik():
               f"h={math.degrees(h):+6.2f}  k={math.degrees(k):+6.2f}  [{tag}]")
 
 
-def run_walk(gui=True):
-    """Static walk gait: one leg swings at a time, diagonal-crawl order."""
+def run_gait(gait_name, gui=True):
+    """Run a named gait from the GAITS registry."""
+    if gait_name not in GAITS:
+        raise ValueError(
+            f"Unknown gait '{gait_name}'. Known: {sorted(GAITS)}"
+        )
+    cfg = GAITS[gait_name]
+
     p.connect(p.GUI if gui else p.DIRECT)
     if gui:
         p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
@@ -655,14 +679,13 @@ def run_walk(gui=True):
         cameraTargetPosition=[0, 0, 0.1],
     )
 
-    print("\n=== FaceHugger Static Walk ===")
-    print(f"  period={WALK_PERIOD:.2f}s  step_len={WALK_STEP_LENGTH*1000:.0f}mm  "
-          f"step_h={WALK_STEP_HEIGHT*1000:.0f}mm  duty={WALK_SWING_DUTY:.2f}")
-    print("  Swing order: FL -> RR -> FR -> RL")
+    print(f"\n=== FaceHugger {cfg['label']} ===")
+    print(f"  period={cfg['period']:.2f}s  step_len={cfg['step_length']*1000:.0f}mm  "
+          f"step_h={cfg['step_height']*1000:.0f}mm  duty={cfg['duty']:.2f}")
     _verify_neutral_ik()
 
-    cycles = _precompute_foot_cycle(WALK_STEP_LENGTH, WALK_STEP_HEIGHT,
-                                    WALK_SWING_DUTY)
+    cycles = _precompute_foot_cycle(cfg["step_length"], cfg["step_height"],
+                                    cfg["duty"])
     line_ids = {}
     marker_ids = {}
     draw_overlay = gui and SHOW_FOOT_TRAJECTORIES
@@ -672,7 +695,7 @@ def run_walk(gui=True):
     step_count = 0
     try:
         while p.isConnected():
-            targets = gait_joint_targets(t)
+            targets = gait_joint_targets(t, cfg)
             for joint_name, angle in targets.items():
                 idx = joint_map.get(joint_name)
                 if idx is None:
@@ -685,10 +708,13 @@ def run_walk(gui=True):
 
             if draw_overlay and step_count % draw_every == 0:
                 current_targets = {}
-                global_phase = (t / WALK_PERIOD) % 1.0
-                for leg_id, offset in GAIT_PHASE_OFFSET.items():
+                global_phase = (t / cfg["period"]) % 1.0
+                for leg_id, offset in cfg["offsets"].items():
                     phase = (global_phase - offset) % 1.0
-                    current_targets[leg_id] = foot_target(leg_id, phase)
+                    current_targets[leg_id] = foot_target(
+                        leg_id, phase,
+                        cfg["step_length"], cfg["step_height"], cfg["duty"],
+                    )
                 _draw_foot_trajectories(robot_id, cycles, line_ids,
                                         marker_ids, current_targets)
 
@@ -714,6 +740,8 @@ def main():
                         help="Run the wall-flip sequence instead of standing.")
     parser.add_argument("--walk", action="store_true",
                         help="Run the static walk gait.")
+    parser.add_argument("--trot", action="store_true",
+                        help="Run the dynamic trot gait (diagonal pairs).")
     parser.add_argument("--headless", action="store_true",
                         help="Run without GUI (useful for CI / quick checks).")
     args = parser.parse_args()
@@ -721,7 +749,9 @@ def main():
     if args.wall_flip:
         run_wall_flip(gui=not args.headless)
     elif args.walk:
-        run_walk(gui=not args.headless)
+        run_gait("walk", gui=not args.headless)
+    elif args.trot:
+        run_gait("trot", gui=not args.headless)
     else:
         run_stand(gui=not args.headless)
 
