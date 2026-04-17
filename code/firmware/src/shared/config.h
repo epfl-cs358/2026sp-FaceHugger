@@ -13,4 +13,11 @@
 #define MIN_PULSE 500
 #define MAX_PULSE 2500
 
+struct Calibration {
+    int hipOffset;
+    int thighOffset;
+    int kneeOffset;
+    bool inverted;
+};
+
 #endif

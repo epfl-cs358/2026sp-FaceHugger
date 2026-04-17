@@ -3,8 +3,10 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include "shared/data.h"
+#include "../nervous_system/spinal_cord.h"
 
 WebSocketsServer webSocket = WebSocketsServer(81);
+extern SpinalCord spinalCord;
 
 void initNetwork() {
     // 1. Explicitly set mode to Access Point
@@ -44,9 +46,13 @@ void handleParsedMessage(uint8_t * payload) {
         case CMD_STATE:
             Serial.printf("State Change Request: %d\n", (int)doc["s"]);
             break;
-        case CMD_CALIBRATE:
-            Serial.printf("Calibrating Servo %d to Pulse %d\n", (int)doc["id"], (int)doc["p"]);
+        case CMD_CALIBRATE: 
+            int channel = doc["id"] | 0;
+            int angle = doc["a"] | 90; 
+
+            spinalCord.applyCalibration(channel, angle);
             break;
+        
         case CMD_MOVE:
             Serial.printf("Moving -> X:%.2f Y:%.2f\n", (float)doc["x"], (float)doc["y"]);
             break;

@@ -35,9 +35,9 @@ void Leg::setPose(float x, float y, float z) {
 }
 
 void Leg::updateServos(){
-    setServoAngle(hipPCAChannel, hipAngle);
-    setServoAngle(thighPCAChannel, thighAngle);
-    setServoAngle(kneePCAChannel, kneeAngle);
+    setServoAngle(hipPCAChannel, hipAngle, 0); // Angles offsets set to 0 for the moment, calibrations will be done during testing
+    setServoAngle(thighPCAChannel, thighAngle, 0);
+    setServoAngle(kneePCAChannel, kneeAngle, 0);
 }
 
 void Leg::returnToDefaultAngles(){
@@ -47,7 +47,23 @@ void Leg::returnToDefaultAngles(){
     updateServos();
 }
 
-void Leg::setServoAngle(uint8_t channel, double angle){
-    uint16_t pulse = map(angle, 0, 270, MIN_PULSE, MAX_PULSE);
+void Leg::setServoAngle(uint8_t channel, double angle, int offset) {
+    // 20% Logic: Apply Calibration before mapping
+    double calibratedAngle = angle + offset; 
+    
+    // Safety clamp
+    calibratedAngle = constrain(calibratedAngle, 0, 180); //Changed angle limit to 180
+
+    uint16_t pulse = map(calibratedAngle, 0, 180, MIN_PULSE, MAX_PULSE);
     pwm.setPWM(channel, 0, pulse);
+}
+
+// Test function to send raw angles to the leg directly
+void Leg::identifyAndMove(uint8_t channel, double angle) {
+    if (channel == hipPCAChannel) hipAngle = angle;
+    else if (channel == thighPCAChannel) thighAngle = angle;
+    else if (channel == kneePCAChannel) kneeAngle = angle;
+    else return; // This channel doesn't belong to this leg
+
+    updateServos();
 }

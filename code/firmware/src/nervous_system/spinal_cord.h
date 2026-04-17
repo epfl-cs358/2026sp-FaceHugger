@@ -13,6 +13,7 @@ class SpinalCord{
         void rest();
         void jump();
         void update();
+        void applyCalibration(int channel, int angle);
     private:
         volatile RobotState robotState;
         Adafruit_PWMServoDriver driver;

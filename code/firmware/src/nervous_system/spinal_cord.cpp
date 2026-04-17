@@ -27,6 +27,15 @@ void SpinalCord::jump(){
     robotState = STATE_ACTION;
 }
 
+void SpinalCord::applyCalibration(int channel, int angle) {
+    // We call identifyAndMove on every leg. 
+    // Leg class logic ensures only the correct leg reacts.
+    leg1.identifyAndMove(channel, (double)angle);
+    leg2.identifyAndMove(channel, (double)angle);
+    leg3.identifyAndMove(channel, (double)angle);
+    leg4.identifyAndMove(channel, (double)angle);
+}
+
 void SpinalCord::update(){
     switch(robotState){
         case STATE_WALK:
