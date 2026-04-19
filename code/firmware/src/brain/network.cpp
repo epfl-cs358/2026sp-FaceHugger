@@ -26,6 +26,8 @@ void initNetwork() {
 
     webSocket.begin();
     webSocket.onEvent(onWebSocketEvent);
+    Serial.print("AP IP address: ");
+    Serial.println(WiFi.softAPIP());
 }
 
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
@@ -46,13 +48,14 @@ void handleParsedMessage(uint8_t * payload) {
         case CMD_STATE:
             Serial.printf("State Change Request: %d\n", (int)doc["s"]);
             break;
-        case CMD_CALIBRATE: 
+        case CMD_CALIBRATE: { 
             int channel = doc["id"] | 0;
             int angle = doc["a"] | 90; 
 
             spinalCord.applyCalibration(channel, angle);
+            Serial.printf("Calibrating servo %d to %d", channel, angle);
             break;
-        
+        }
         case CMD_MOVE:
             Serial.printf("Moving -> X:%.2f Y:%.2f\n", (float)doc["x"], (float)doc["y"]);
             break;

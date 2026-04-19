@@ -1,14 +1,16 @@
 #ifndef LEG_H
 #define LEG_H
+#include <stdint.h>
+#include <Adafruit_PWMServoDriver.h>
 
 
 
 class Leg {
   public:
-    Leg(Adafruit_PWMServoDriver& pwm, int legID, uint8_t hipPCAChannel, uint8_t thighPCAChannel, uint8_t kneePCAChannel, uint16_t hipDefaultAngle, uint16_t thighDefaultAngle, uint16_t kneeDefaultAngle); // Constructor
+    Leg(Adafruit_PWMServoDriver &pwm, int legID, uint8_t hipPCAChannel, uint8_t thighPCAChannel, uint8_t kneePCAChannel, uint16_t hipDefaultAngle, uint16_t thighDefaultAngle, uint16_t kneeDefaultAngle); // Constructor
     void setPose(float x, float y, float z); // Inverse Kinematics target
     void returnToDefaultAngles();
-    void Leg::identifyAndMove(uint8_t channel, double angle);
+    void identifyAndMove(uint8_t channel, double angle);
   private:
     int id;
     uint8_t hipPCAChannel;

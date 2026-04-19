@@ -24,7 +24,6 @@ Leg::Leg(Adafruit_PWMServoDriver &pwm,
       thighAngle(thighDefaultAngle),
       kneeAngle(kneeDefaultAngle)
 {
-    updateServos();
 }
 
 void Leg::setPose(float x, float y, float z) {
@@ -55,11 +54,13 @@ void Leg::setServoAngle(uint8_t channel, double angle, int offset) {
     calibratedAngle = constrain(calibratedAngle, 0, 180); //Changed angle limit to 180
 
     uint16_t pulse = map(calibratedAngle, 0, 180, MIN_PULSE, MAX_PULSE);
+    Serial.printf("DEBUG [Leg %d]: Ch %d -> Angle: %.2f | Pulse: %d\n", id, channel, calibratedAngle, pulse);
     pwm.setPWM(channel, 0, pulse);
 }
 
 // Test function to send raw angles to the leg directly
 void Leg::identifyAndMove(uint8_t channel, double angle) {
+    Serial.printf("Leg with channel %d rotating to angle %d", channel, angle);
     if (channel == hipPCAChannel) hipAngle = angle;
     else if (channel == thighPCAChannel) thighAngle = angle;
     else if (channel == kneePCAChannel) kneeAngle = angle;

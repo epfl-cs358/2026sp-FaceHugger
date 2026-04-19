@@ -8,6 +8,7 @@ SpinalCord spinalCord(0);
 void setup() {
     Serial.begin(115200);
     
+    spinalCord.begin();
     // Initialize the network stack
     initNetwork();
     

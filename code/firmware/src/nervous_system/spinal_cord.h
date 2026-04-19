@@ -9,6 +9,7 @@
 class SpinalCord{
     public:
         SpinalCord(uint8_t pcaDriverAddress);
+        void begin();
         void walk();
         void rest();
         void jump();
