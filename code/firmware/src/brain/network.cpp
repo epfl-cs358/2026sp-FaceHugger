@@ -31,8 +31,29 @@ void initNetwork() {
 }
 
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
-    if (type == WStype_TEXT) {
-        handleParsedMessage(payload);
+    switch(type) {
+        case WStype_DISCONNECTED:
+            Serial.printf("[%u] ❌ Event: Disconnected!\n", num);
+            break;
+            
+        case WStype_CONNECTED: {
+            IPAddress ip = webSocket.remoteIP(num);
+            Serial.printf("[%u] ✅ Event: Connected from %s | URL: %s\n", num, ip.toString().c_str(), payload);
+            break;
+        }
+
+        case WStype_TEXT:
+            Serial.printf("[%u] 📩 Received Text: %s\n", num, payload);
+            handleParsedMessage(payload);
+            break;
+
+        case WStype_ERROR:
+            Serial.printf("[%u] ⚠️ Error Event occurred! Length: %u\n", num, length);
+            break;
+            
+        case WStype_BIN:
+            Serial.printf("[%u] 📦 Received Binary. Length: %u\n", num, length);
+            break;
     }
 }
 
