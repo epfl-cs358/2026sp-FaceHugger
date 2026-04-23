@@ -1,0 +1,102 @@
+# facehugger_config.yaml
+# Defines the robot hierarchy and maps Fusion geometry to URDF structure.
+# All angles in degrees — generate_urdf.py converts to radians for URDF output.
+# All positions come from fusion_export.json (no hardcoded coords here).
+
+robot_name: facehugger
+mesh_dir: meshes/
+
+# ---------------------------------------------------------------------------
+# Base link: which occurrences make up the chassis
+# ---------------------------------------------------------------------------
+base_link:
+  name: base_link
+  mesh: QuadrupedBody.stl
+  occurrences:
+    - FlexibleSkeleton:1/BottomPlate:1
+    - FlexibleSkeleton:1/MotorMountFR:1
+    - FlexibleSkeleton:1/MotorMountFL:1
+    - FlexibleSkeleton:1/MotorMountBR:1
+    - FlexibleSkeleton:1/MotorMountBL:1
+
+# ---------------------------------------------------------------------------
+# Leg template: joint/link definitions for one leg.
+# The generator instantiates this 4x using the legs list below.
+#
+# axis_key / point_key: names of construction geometry in fusion_export.json
+#   under the leg assembly occurrence (FaceHuggerLegAssembly:1)
+# parent/child: logical names — prefixed with leg id at generation time
+#   e.g. link1 → fr_link1
+# limits_deg: [lower, upper] servo range
+# ---------------------------------------------------------------------------
+leg_template:
+  leg_assembly_occurrence: "FaceHuggerLegAssembly:1"
+
+  joints:
+    - name: shoulder          # body → link1, yaw
+      axis_key:  BodyToLink1Axis
+      point_key: BodyToLink1Point
+      parent: base_link       # special: stays base_link for all legs
+      child:  link1
+      limits_deg: [-90, 90]
+
+    - name: hip               # link1 → link2, pitch
+      axis_key:  Link1ToLink2Axis
+      point_key: Link1ToLink2Point
+      parent: link1
+      child:  link2
+      limits_deg: [-90, 90]
+
+    - name: knee              # link2 → link3, pitch
+      axis_key:  Link2ToLink3Axis
+      point_key: Link2ToLink3Point
+      parent: link2
+      child:  link3
+      limits_deg: [-135, 30]
+
+  links:
+    link1:
+      occurrence: "FaceHuggerLegAssembly:1/Link1:1"
+      mesh: leg_shoulder.stl
+
+    link2:
+      occurrence: "FaceHuggerLegAssembly:1/Link2:1"
+      mesh: leg_upper.stl
+
+    link3:
+      occurrence: "FaceHuggerLegAssembly:1/Link3:1"
+      mesh: leg_lower.stl
+
+# ---------------------------------------------------------------------------
+# 4 leg instances.
+# mount_point: name of a construction point on FlexibleSkeleton:1 that
+#   defines where this leg's shoulder joint sits in body frame.
+# rpy_z_deg: rotation around Z applied to the shoulder joint frame.
+#   0   = same orientation as the template leg (FR/BL)
+#   180 = mirrored (FL/BR)
+# ---------------------------------------------------------------------------
+legs:
+  - id: fr
+    mount_point: LegMountFR
+    rpy_z_deg: 0
+
+  - id: fl
+    mount_point: LegMountFL
+    rpy_z_deg: 180
+
+  - id: br
+    mount_point: LegMountBR
+    rpy_z_deg: 180
+
+  - id: bl
+    mount_point: LegMountBL
+    rpy_z_deg: 0
+
+# ---------------------------------------------------------------------------
+# Servo physical properties (used for inertial blocks if physics export
+# is unavailable or incomplete for individual servo occurrences)
+# ---------------------------------------------------------------------------
+servo:
+  mass_kg: 0.060        # DFRobot SER0038 spec
+  effort_nm: 2.94       # 30 kg·cm to N·m
+  velocity_rad_s: 5.0

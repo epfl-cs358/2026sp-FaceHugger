@@ -1,0 +1,55 @@
+============================================================
+FaceHugger Fusion Export
+Document   : FullBodyAssembly
+Visible only: True  |  Physics: True
+============================================================
+
+FaceHuggerLegAssembly:1 [xref]
+  world_origin_mm: (-55.401, 34.251, -4.8)
+  body: QuadrupedBodySample | bbox_center_mm: (1.85, -30.475, 13.175)
+  caxis: BodyToLink1Axis | origin_mm: (11.97, -0.0, -0.2) | dir: (0.0, 0.0, 1.0)
+  caxis: Link1ToLink2Axis | origin_mm: (34.565, 50.92, 10.246) | dir: (1.0, 0.0, -0.0)
+  caxis: Link2ToLink3Axis | origin_mm: (34.57, 145.62, 10.246) | dir: (1.0, 0.0, -0.0)
+  cpoint: BodyToLink1Point | pos_mm: (11.97, -0.0, -4.2)
+  cpoint: Link1ToLink2Point | pos_mm: (34.565, 50.92, 10.246)
+  cpoint: Link2ToLink3Point | pos_mm: (34.57, 145.62, 10.246)
+  mass: 6.165029 kg | com_mm: (-20.856, -19.822, 8.166)
+  Link1:1
+    world_origin_mm: (0.0, 0.0, 0.0)
+    body: Link1 | bbox_center_mm: (4.195, 20.56, 20.433)
+    mass: 0.144017 kg | com_mm: (9.973, 33.774, 23.955)
+  Link2:1
+    world_origin_mm: (0.0, 0.0, 0.0)
+    body: Link2 | bbox_center_mm: (14.12, 98.27, 10.246)
+    mass: 0.173381 kg | com_mm: (21.566, 98.294, 10.073)
+  Link3:1
+    world_origin_mm: (0.0, 0.0, 0.0)
+    body: Link3 | bbox_center_mm: (4.195, 180.671, 10.246)
+    mass: 0.111653 kg | com_mm: (8.288, 166.816, 10.246)
+FlexibleSkeleton:1 [xref]
+  world_origin_mm: (0.0, 0.0, 0.0)
+  cpoint: LegMountFL | pos_mm: (-55.401, 46.222, -9.0)
+  cpoint: LegMountBL | pos_mm: (-55.401, -46.222, -9.0)
+  cpoint: LegMountBR | pos_mm: (55.401, -46.222, -9.0)
+  cpoint: LegMountFR | pos_mm: (55.401, 46.222, -9.0)
+  mass: 0.741395 kg | com_mm: (0.17, 2.851, 10.242)
+  BottomPlate:1
+    world_origin_mm: (0.0, 0.0, 0.0)
+    body: Plate | bbox_center_mm: (0.0, -0.0, 20.5)
+    mass: 0.367331 kg | com_mm: (0.503, 3.745, 10.852)
+  MotorMountBR:1
+    world_origin_mm: (39.0, -36.0, 10.0)
+    body: Body1 | bbox_center_mm: (13.0, 0.0, -0.25)
+    mass: 0.061885 kg | com_mm: (45.343, -36.903, 8.974)
+  MotorMountFL:1
+    world_origin_mm: (-39.0, 36.0, 10.0)
+    body: Body1 | bbox_center_mm: (13.0, 0.0, -0.25)
+    mass: 0.061885 kg | com_mm: (-45.343, 36.903, 8.974)
+  MotorMountFR:1
+    world_origin_mm: (39.0, 36.0, 10.0)
+    body: Body2 | bbox_center_mm: (13.0, 0.0, 0.25)
+    mass: 0.061885 kg | com_mm: (45.343, 36.903, 8.974)
+  MotorMountBL:1
+    world_origin_mm: (-39.0, -36.0, 10.0)
+    body: Body2 | bbox_center_mm: (13.0, 0.0, 0.25)
+    mass: 0.061885 kg | com_mm: (-45.343, -36.903, 8.974)

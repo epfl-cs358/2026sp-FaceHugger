@@ -1,0 +1,509 @@
+{
+  "document": "FullBodyAssembly",
+  "visible_only": true,
+  "collect_physics": true,
+  "root_axes": [],
+  "root_points": [],
+  "occurrences": [
+    {
+      "name": "FaceHuggerLegAssembly:1",
+      "xref": true,
+      "visible": true,
+      "world_origin_mm": [
+        -55.401,
+        34.251,
+        -4.8
+      ],
+      "bodies": [
+        {
+          "name": "QuadrupedBodySample",
+          "visible": true,
+          "bbox_center_mm": [
+            1.85,
+            -30.475,
+            13.175
+          ]
+        }
+      ],
+      "axes": [
+        {
+          "name": "BodyToLink1Axis",
+          "visible": true,
+          "origin_mm": [
+            11.97,
+            -0.0,
+            -0.2
+          ],
+          "dir": [
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "name": "Link1ToLink2Axis",
+          "visible": true,
+          "origin_mm": [
+            34.565,
+            50.92,
+            10.246
+          ],
+          "dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        },
+        {
+          "name": "Link2ToLink3Axis",
+          "visible": true,
+          "origin_mm": [
+            34.57,
+            145.62,
+            10.246
+          ],
+          "dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        }
+      ],
+      "points": [
+        {
+          "name": "BodyToLink1Point",
+          "visible": true,
+          "pos_mm": [
+            11.97,
+            -0.0,
+            -4.2
+          ]
+        },
+        {
+          "name": "Link1ToLink2Point",
+          "visible": true,
+          "pos_mm": [
+            34.565,
+            50.92,
+            10.246
+          ]
+        },
+        {
+          "name": "Link2ToLink3Point",
+          "visible": true,
+          "pos_mm": [
+            34.57,
+            145.62,
+            10.246
+          ]
+        }
+      ],
+      "children": [
+        {
+          "name": "Link1:1",
+          "xref": false,
+          "visible": true,
+          "world_origin_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "bodies": [
+            {
+              "name": "Link1",
+              "visible": true,
+              "bbox_center_mm": [
+                4.195,
+                20.56,
+                20.433
+              ]
+            }
+          ],
+          "axes": [],
+          "points": [],
+          "children": [],
+          "physics": {
+            "mass_kg": 0.144017,
+            "com_mm": [
+              9.973,
+              33.774,
+              23.955
+            ],
+            "inertia_kg_m2": {
+              "ixx": 0.00038463,
+              "iyy": 0.000166889,
+              "izz": 0.000273574,
+              "ixy": -3.8915e-05,
+              "iyz": -9.603e-05,
+              "ixz": -3.8665e-05
+            }
+          }
+        },
+        {
+          "name": "Link2:1",
+          "xref": false,
+          "visible": true,
+          "world_origin_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "bodies": [
+            {
+              "name": "Link2",
+              "visible": true,
+              "bbox_center_mm": [
+                14.12,
+                98.27,
+                10.246
+              ]
+            }
+          ],
+          "axes": [],
+          "points": [],
+          "children": [],
+          "physics": {
+            "mass_kg": 0.173381,
+            "com_mm": [
+              21.566,
+              98.294,
+              10.073
+            ],
+            "inertia_kg_m2": {
+              "ixx": 0.001898729,
+              "iyy": 0.000183013,
+              "izz": 0.002034679,
+              "ixy": -0.000367526,
+              "iyz": -0.000171669,
+              "ixz": -3.717e-05
+            }
+          }
+        },
+        {
+          "name": "Link3:1",
+          "xref": false,
+          "visible": true,
+          "world_origin_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "bodies": [
+            {
+              "name": "Link3",
+              "visible": true,
+              "bbox_center_mm": [
+                4.195,
+                180.671,
+                10.246
+              ]
+            }
+          ],
+          "axes": [],
+          "points": [],
+          "children": [],
+          "physics": {
+            "mass_kg": 0.111653,
+            "com_mm": [
+              8.288,
+              166.816,
+              10.246
+            ],
+            "inertia_kg_m2": {
+              "ixx": 0.003205754,
+              "iyy": 4.2563e-05,
+              "izz": 0.00320303,
+              "ixy": -0.000166056,
+              "iyz": -0.000190829,
+              "ixz": -9.481e-06
+            }
+          }
+        }
+      ],
+      "physics": {
+        "mass_kg": 6.165029,
+        "com_mm": [
+          -20.856,
+          -19.822,
+          8.166
+        ],
+        "inertia_kg_m2": {
+          "ixx": 0.03782705,
+          "iyy": 0.053568722,
+          "izz": 0.087766831,
+          "ixy": 0.016185968,
+          "iyz": 0.000499142,
+          "ixz": 0.001439488
+        }
+      }
+    },
+    {
+      "name": "FlexibleSkeleton:1",
+      "xref": true,
+      "visible": true,
+      "world_origin_mm": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bodies": [],
+      "axes": [],
+      "points": [
+        {
+          "name": "LegMountFL",
+          "visible": true,
+          "pos_mm": [
+            -55.401,
+            46.222,
+            -9.0
+          ]
+        },
+        {
+          "name": "LegMountBL",
+          "visible": true,
+          "pos_mm": [
+            -55.401,
+            -46.222,
+            -9.0
+          ]
+        },
+        {
+          "name": "LegMountBR",
+          "visible": true,
+          "pos_mm": [
+            55.401,
+            -46.222,
+            -9.0
+          ]
+        },
+        {
+          "name": "LegMountFR",
+          "visible": true,
+          "pos_mm": [
+            55.401,
+            46.222,
+            -9.0
+          ]
+        }
+      ],
+      "children": [
+        {
+          "name": "BottomPlate:1",
+          "xref": false,
+          "visible": true,
+          "world_origin_mm": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "bodies": [
+            {
+              "name": "Plate",
+              "visible": true,
+              "bbox_center_mm": [
+                0.0,
+                -0.0,
+                20.5
+              ]
+            }
+          ],
+          "axes": [],
+          "points": [],
+          "children": [],
+          "physics": {
+            "mass_kg": 0.367331,
+            "com_mm": [
+              0.503,
+              3.745,
+              10.852
+            ],
+            "inertia_kg_m2": {
+              "ixx": 0.00051111,
+              "iyy": 0.000397984,
+              "izz": 0.000725005,
+              "ixy": 1.3473e-05,
+              "iyz": -2.3545e-05,
+              "ixz": -1.423e-06
+            }
+          }
+        },
+        {
+          "name": "MotorMountBR:1",
+          "xref": false,
+          "visible": true,
+          "world_origin_mm": [
+            39.0,
+            -36.0,
+            10.0
+          ],
+          "bodies": [
+            {
+              "name": "Body1",
+              "visible": true,
+              "bbox_center_mm": [
+                13.0,
+                0.0,
+                -0.25
+              ]
+            }
+          ],
+          "axes": [],
+          "points": [],
+          "children": [],
+          "physics": {
+            "mass_kg": 0.061885,
+            "com_mm": [
+              45.343,
+              -36.903,
+              8.974
+            ],
+            "inertia_kg_m2": {
+              "ixx": 0.000116056,
+              "iyy": 0.000148627,
+              "izz": 0.000227584,
+              "ixy": 0.000104529,
+              "iyz": 1.9322e-05,
+              "ixz": -2.3898e-05
+            }
+          }
+        },
+        {
+          "name": "MotorMountFL:1",
+          "xref": false,
+          "visible": true,
+          "world_origin_mm": [
+            -39.0,
+            36.0,
+            10.0
+          ],
+          "bodies": [
+            {
+              "name": "Body1",
+              "visible": true,
+              "bbox_center_mm": [
+                13.0,
+                0.0,
+                -0.25
+              ]
+            }
+          ],
+          "axes": [],
+          "points": [],
+          "children": [],
+          "physics": {
+            "mass_kg": 0.061885,
+            "com_mm": [
+              -45.343,
+              36.903,
+              8.974
+            ],
+            "inertia_kg_m2": {
+              "ixx": 0.000116056,
+              "iyy": 0.000148627,
+              "izz": 0.000227584,
+              "ixy": 0.000104529,
+              "iyz": -1.9322e-05,
+              "ixz": 2.3898e-05
+            }
+          }
+        },
+        {
+          "name": "MotorMountFR:1",
+          "xref": false,
+          "visible": true,
+          "world_origin_mm": [
+            39.0,
+            36.0,
+            10.0
+          ],
+          "bodies": [
+            {
+              "name": "Body2",
+              "visible": true,
+              "bbox_center_mm": [
+                13.0,
+                0.0,
+                0.25
+              ]
+            }
+          ],
+          "axes": [],
+          "points": [],
+          "children": [],
+          "physics": {
+            "mass_kg": 0.061885,
+            "com_mm": [
+              45.343,
+              36.903,
+              8.974
+            ],
+            "inertia_kg_m2": {
+              "ixx": 0.000116056,
+              "iyy": 0.000148627,
+              "izz": 0.000227584,
+              "ixy": -0.000104529,
+              "iyz": -1.9322e-05,
+              "ixz": -2.3898e-05
+            }
+          }
+        },
+        {
+          "name": "MotorMountBL:1",
+          "xref": false,
+          "visible": true,
+          "world_origin_mm": [
+            -39.0,
+            -36.0,
+            10.0
+          ],
+          "bodies": [
+            {
+              "name": "Body2",
+              "visible": true,
+              "bbox_center_mm": [
+                13.0,
+                0.0,
+                0.25
+              ]
+            }
+          ],
+          "axes": [],
+          "points": [],
+          "children": [],
+          "physics": {
+            "mass_kg": 0.061885,
+            "com_mm": [
+              -45.343,
+              -36.903,
+              8.974
+            ],
+            "inertia_kg_m2": {
+              "ixx": 0.000116056,
+              "iyy": 0.000148627,
+              "izz": 0.000227584,
+              "ixy": -0.000104529,
+              "iyz": 1.9322e-05,
+              "ixz": 2.3898e-05
+            }
+          }
+        }
+      ],
+      "physics": {
+        "mass_kg": 0.741395,
+        "com_mm": [
+          0.17,
+          2.851,
+          10.242
+        ],
+        "inertia_kg_m2": {
+          "ixx": 0.001163722,
+          "iyy": 0.001057439,
+          "izz": 0.00183942,
+          "ixy": 1.922e-05,
+          "iyz": -3.7225e-05,
+          "ixz": -5.158e-06
+        }
+      }
+    }
+  ]
+}

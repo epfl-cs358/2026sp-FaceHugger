@@ -1,0 +1,15 @@
+# code/simulation/requirements.txt
+#
+# Linux / CI:
+#   pip install -r requirements.txt     (pybullet has prebuilt wheels on Linux)
+#
+# macOS (arm64, M-series):
+#   conda install -c conda-forge pybullet
+#   pip install -r requirements.txt
+#
+# pybullet has no prebuilt macOS wheel on PyPI and fails to compile from source
+# on recent clang versions. conda-forge ships a prebuilt binary for osx-arm64.
+# Install it via conda BEFORE running pip, so pip skips it as already satisfied.
+
+pybullet>=3.2
+pyyaml>=6.0

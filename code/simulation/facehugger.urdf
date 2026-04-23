@@ -1,422 +1,344 @@
 <?xml version="1.0" ?>
 <robot name="facehugger">
 
-  <!-- ===================== MATERIALS ===================== -->
-  <material name="dark_grey">
-    <color rgba="0.3 0.3 0.3 1.0"/>
-  </material>
-  <material name="orange">
-    <color rgba="0.9 0.5 0.1 1.0"/>
-  </material>
-  <material name="blue">
-    <color rgba="0.2 0.4 0.8 1.0"/>
-  </material>
-  <material name="light_grey">
-    <color rgba="0.6 0.6 0.6 1.0"/>
-  </material>
-  <material name="leg">
-    <color rgba="0.78 0.80 0.84 1.0"/>
-  </material>
-
-  <!-- ===================== BODY ===================== -->
-  <link name="body">
+  <!-- BASE LINK -->
+  <link name="base_link">
     <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="0.700"/>
-      <inertia ixx="0.0033" ixy="0" ixz="0" iyy="0.0018" iyz="0" izz="0.0045"/>
+      <origin xyz="0.000170 0.002851 0.010242" rpy="0 0 0"/>
+      <mass value="0.741395"/>
+      <inertia ixx="0.001163722" ixy="1.922e-05" ixz="-5.158e-06" iyy="0.001057439" iyz="-3.7225e-05" izz="0.00183942"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
         <mesh filename="meshes/QuadrupedBody.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="dark_grey"/>
     </visual>
     <collision>
-      <origin xyz="0 0 0.025" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <box size="0.184 0.235 0.051"/>
+        <mesh filename="meshes/QuadrupedBody.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
-  <!-- ==================== FRONT LEFT LEG ==================== -->
-  <!-- Shoulder joint: yaw (rotation around Z) -->
-  <joint name="fl_shoulder_joint" type="revolute">
-    <parent link="body"/>
-    <child link="fl_shoulder"/>
-    <origin xyz="-0.080 0.105 0.025" rpy="0 0 0"/>
-    <axis xyz="0 0 1"/>
-    <limit lower="-2.356" upper="2.356" effort="1.47" velocity="5.0"/>
-  </joint>
-  <link name="fl_shoulder">
-    <inertial>
-      <origin xyz="-0.04 0 0" rpy="0 0 0"/>
-      <mass value="0.082"/>
-      <inertia ixx="0.000005" ixy="0" ixz="0" iyy="0.000015" iyz="0" izz="0.000015"/>
-    </inertial>
-    <visual>
-      <!-- Shoulder segment from split leg assembly. Mesh +Y -> link -X. -->
-      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
-      <geometry>
-        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="leg"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.04 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.080 0.025 0.025"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <!-- Hip joint: pitch (rotation around Y) -->
-  <joint name="fl_hip_joint" type="revolute">
-    <parent link="fl_shoulder"/>
-    <child link="fl_upper_leg"/>
-    <origin xyz="-0.08 0 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-1.5708" upper="1.5708" effort="1.47" velocity="5.0"/>
-  </joint>
-  <link name="fl_upper_leg">
-    <inertial>
-      <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
-      <mass value="0.092"/>
-      <inertia ixx="0.000025" ixy="0" ixz="0" iyy="0.000025" iyz="0" izz="0.000005"/>
-    </inertial>
-    <visual>
-      <!-- Upper-leg segment. Offset +Z=0.080 shifts mesh Y=80 to link origin (hip). -->
-      <origin xyz="0 0 0.080" rpy="-1.5708 0 0"/>
-      <geometry>
-        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="leg"/>
-    </visual>
-    <collision>
-      <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.025 0.025 0.075"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <!-- Knee joint: pitch (rotation around Y) -->
-  <joint name="fl_knee_joint" type="revolute">
-    <parent link="fl_upper_leg"/>
-    <child link="fl_lower_leg"/>
-    <origin xyz="0 0 -0.075" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-2.356" upper="0.5" effort="1.47" velocity="5.0"/>
-  </joint>
-  <link name="fl_lower_leg">
-    <inertial>
-      <origin xyz="0 0 -0.045" rpy="0 0 0"/>
-      <mass value="0.092"/>
-      <inertia ixx="0.000035" ixy="0" ixz="0" iyy="0.000035" iyz="0" izz="0.000005"/>
-    </inertial>
-    <visual>
-      <!-- Lower-leg segment. Offset +Z=0.155 shifts mesh Y=155 to link origin (knee). -->
-      <origin xyz="0 0 0.155" rpy="-1.5708 0 0"/>
-      <geometry>
-        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="leg"/>
-    </visual>
-    <collision>
-      <origin xyz="0 0 -0.0387" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.020 0.020 0.0774"/>
-      </geometry>
-    </collision>
-    <collision>
-      <origin xyz="0 0 -0.0774" rpy="0 0 0"/>
-      <geometry>
-        <sphere radius="0.008"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <!-- ==================== FRONT RIGHT LEG ==================== -->
+  <!-- LEG: FR -->
   <joint name="fr_shoulder_joint" type="revolute">
-    <parent link="body"/>
-    <child link="fr_shoulder"/>
-    <origin xyz="0.080 0.105 0.025" rpy="0 0 3.14159"/>
-    <axis xyz="0 0 1"/>
-    <limit lower="-2.356" upper="2.356" effort="1.47" velocity="5.0"/>
+    <parent link="base_link"/>
+    <child link="fr_link1"/>
+    <origin xyz="0.055401 0.046222 -0.009000" rpy="0 0 0.0"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
-  <link name="fr_shoulder">
-    <inertial>
-      <origin xyz="-0.04 0 0" rpy="0 0 0"/>
-      <mass value="0.082"/>
-      <inertia ixx="0.000005" ixy="0" ixz="0" iyy="0.000015" iyz="0" izz="0.000015"/>
-    </inertial>
-    <visual>
-      <!-- Shoulder segment from split leg assembly. Mesh +Y -> link -X. -->
-      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
-      <geometry>
-        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="leg"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.04 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.080 0.025 0.025"/>
-      </geometry>
-    </collision>
-  </link>
-
   <joint name="fr_hip_joint" type="revolute">
-    <parent link="fr_shoulder"/>
-    <child link="fr_upper_leg"/>
-    <origin xyz="-0.08 0 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-1.5708" upper="1.5708" effort="1.47" velocity="5.0"/>
+    <parent link="fr_link1"/>
+    <child link="fr_link2"/>
+    <origin xyz="0.022595 0.050920 0.010446" rpy="0 0 0.0"/>
+    <axis xyz="1.0 0.0 -0.0"/>
+    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
-  <link name="fr_upper_leg">
-    <inertial>
-      <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
-      <mass value="0.092"/>
-      <inertia ixx="0.000025" ixy="0" ixz="0" iyy="0.000025" iyz="0" izz="0.000005"/>
-    </inertial>
-    <visual>
-      <!-- Upper-leg segment. Offset +Z=0.080 shifts mesh Y=80 to link origin (hip). -->
-      <origin xyz="0 0 0.080" rpy="-1.5708 0 0"/>
-      <geometry>
-        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="leg"/>
-    </visual>
-    <collision>
-      <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.025 0.025 0.075"/>
-      </geometry>
-    </collision>
-  </link>
-
   <joint name="fr_knee_joint" type="revolute">
-    <parent link="fr_upper_leg"/>
-    <child link="fr_lower_leg"/>
-    <origin xyz="0 0 -0.075" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-2.356" upper="0.5" effort="1.47" velocity="5.0"/>
+    <parent link="fr_link2"/>
+    <child link="fr_link3"/>
+    <origin xyz="0.000005 0.094700 0.000000" rpy="0 0 0.0"/>
+    <axis xyz="1.0 0.0 -0.0"/>
+    <limit lower="-2.356194" upper="0.523599" effort="2.94" velocity="5.0"/>
   </joint>
-  <link name="fr_lower_leg">
+  <link name="fr_link1">
     <inertial>
-      <origin xyz="0 0 -0.045" rpy="0 0 0"/>
-      <mass value="0.092"/>
-      <inertia ixx="0.000035" ixy="0" ixz="0" iyy="0.000035" iyz="0" izz="0.000005"/>
+      <origin xyz="0.009973 0.033774 0.023955" rpy="0 0 0"/>
+      <mass value="0.144017"/>
+      <inertia ixx="0.00038463" ixy="-3.8915e-05" ixz="-3.8665e-05" iyy="0.000166889" iyz="-9.603e-05" izz="0.000273574"/>
     </inertial>
     <visual>
-      <!-- Lower-leg segment. Offset +Z=0.155 shifts mesh Y=155 to link origin (knee). -->
-      <origin xyz="0 0 0.155" rpy="-1.5708 0 0"/>
-      <geometry>
-        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="leg"/>
-    </visual>
-    <collision>
-      <origin xyz="0 0 -0.0387" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.020 0.020 0.0774"/>
-      </geometry>
-    </collision>
-    <collision>
-      <origin xyz="0 0 -0.0774" rpy="0 0 0"/>
-      <geometry>
-        <sphere radius="0.008"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <!-- ==================== REAR LEFT LEG ==================== -->
-  <joint name="rl_shoulder_joint" type="revolute">
-    <parent link="body"/>
-    <child link="rl_shoulder"/>
-    <origin xyz="-0.080 -0.105 0.025" rpy="0 0 0"/>
-    <axis xyz="0 0 1"/>
-    <limit lower="-2.356" upper="2.356" effort="1.47" velocity="5.0"/>
-  </joint>
-  <link name="rl_shoulder">
-    <inertial>
-      <origin xyz="-0.04 0 0" rpy="0 0 0"/>
-      <mass value="0.082"/>
-      <inertia ixx="0.000005" ixy="0" ixz="0" iyy="0.000015" iyz="0" izz="0.000015"/>
-    </inertial>
-    <visual>
-      <!-- Shoulder segment from split leg assembly. Mesh +Y -> link -X. -->
-      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
         <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="leg"/>
     </visual>
     <collision>
-      <origin xyz="-0.04 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.080 0.025 0.025"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <joint name="rl_hip_joint" type="revolute">
-    <parent link="rl_shoulder"/>
-    <child link="rl_upper_leg"/>
-    <origin xyz="-0.08 0 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-1.5708" upper="1.5708" effort="1.47" velocity="5.0"/>
-  </joint>
-  <link name="rl_upper_leg">
-    <inertial>
-      <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
-      <mass value="0.092"/>
-      <inertia ixx="0.000025" ixy="0" ixz="0" iyy="0.000025" iyz="0" izz="0.000005"/>
-    </inertial>
-    <visual>
-      <!-- Upper-leg segment. Offset +Z=0.080 shifts mesh Y=80 to link origin (hip). -->
-      <origin xyz="0 0 0.080" rpy="-1.5708 0 0"/>
-      <geometry>
-        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="leg"/>
-    </visual>
-    <collision>
-      <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.025 0.025 0.075"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <joint name="rl_knee_joint" type="revolute">
-    <parent link="rl_upper_leg"/>
-    <child link="rl_lower_leg"/>
-    <origin xyz="0 0 -0.075" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-2.356" upper="0.5" effort="1.47" velocity="5.0"/>
-  </joint>
-  <link name="rl_lower_leg">
-    <inertial>
-      <origin xyz="0 0 -0.045" rpy="0 0 0"/>
-      <mass value="0.092"/>
-      <inertia ixx="0.000035" ixy="0" ixz="0" iyy="0.000035" iyz="0" izz="0.000005"/>
-    </inertial>
-    <visual>
-      <!-- Lower-leg segment. Offset +Z=0.155 shifts mesh Y=155 to link origin (knee). -->
-      <origin xyz="0 0 0.155" rpy="-1.5708 0 0"/>
-      <geometry>
-        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-      <material name="leg"/>
-    </visual>
-    <collision>
-      <origin xyz="0 0 -0.0387" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.020 0.020 0.0774"/>
-      </geometry>
-    </collision>
-    <collision>
-      <origin xyz="0 0 -0.0774" rpy="0 0 0"/>
-      <geometry>
-        <sphere radius="0.008"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <!-- ==================== REAR RIGHT LEG ==================== -->
-  <joint name="rr_shoulder_joint" type="revolute">
-    <parent link="body"/>
-    <child link="rr_shoulder"/>
-    <origin xyz="0.080 -0.105 0.025" rpy="0 0 3.14159"/>
-    <axis xyz="0 0 1"/>
-    <limit lower="-2.356" upper="2.356" effort="1.47" velocity="5.0"/>
-  </joint>
-  <link name="rr_shoulder">
-    <inertial>
-      <origin xyz="-0.04 0 0" rpy="0 0 0"/>
-      <mass value="0.082"/>
-      <inertia ixx="0.000005" ixy="0" ixz="0" iyy="0.000015" iyz="0" izz="0.000015"/>
-    </inertial>
-    <visual>
-      <!-- Shoulder segment from split leg assembly. Mesh +Y -> link -X. -->
-      <origin xyz="0 0 0" rpy="0 0 1.5708"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
         <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="leg"/>
-    </visual>
-    <collision>
-      <origin xyz="-0.04 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.080 0.025 0.025"/>
-      </geometry>
     </collision>
   </link>
-
-  <joint name="rr_hip_joint" type="revolute">
-    <parent link="rr_shoulder"/>
-    <child link="rr_upper_leg"/>
-    <origin xyz="-0.08 0 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-1.5708" upper="1.5708" effort="1.47" velocity="5.0"/>
-  </joint>
-  <link name="rr_upper_leg">
+  <link name="fr_link2">
     <inertial>
-      <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
-      <mass value="0.092"/>
-      <inertia ixx="0.000025" ixy="0" ixz="0" iyy="0.000025" iyz="0" izz="0.000005"/>
+      <origin xyz="0.021566 0.098294 0.010073" rpy="0 0 0"/>
+      <mass value="0.173381"/>
+      <inertia ixx="0.001898729" ixy="-0.000367526" ixz="-3.717e-05" iyy="0.000183013" iyz="-0.000171669" izz="0.002034679"/>
     </inertial>
     <visual>
-      <!-- Upper-leg segment. Offset +Z=0.080 shifts mesh Y=80 to link origin (hip). -->
-      <origin xyz="0 0 0.080" rpy="-1.5708 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
         <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="leg"/>
     </visual>
     <collision>
-      <origin xyz="0 0 -0.0375" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <box size="0.025 0.025 0.075"/>
+        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
-
-  <joint name="rr_knee_joint" type="revolute">
-    <parent link="rr_upper_leg"/>
-    <child link="rr_lower_leg"/>
-    <origin xyz="0 0 -0.075" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-2.356" upper="0.5" effort="1.47" velocity="5.0"/>
-  </joint>
-  <link name="rr_lower_leg">
+  <link name="fr_link3">
     <inertial>
-      <origin xyz="0 0 -0.045" rpy="0 0 0"/>
-      <mass value="0.092"/>
-      <inertia ixx="0.000035" ixy="0" ixz="0" iyy="0.000035" iyz="0" izz="0.000005"/>
+      <origin xyz="0.008288 0.166816 0.010246" rpy="0 0 0"/>
+      <mass value="0.111653"/>
+      <inertia ixx="0.003205754" ixy="-0.000166056" ixz="-9.481e-06" iyy="4.2563e-05" iyz="-0.000190829" izz="0.00320303"/>
     </inertial>
     <visual>
-      <!-- Lower-leg segment. Offset +Z=0.155 shifts mesh Y=155 to link origin (knee). -->
-      <origin xyz="0 0 0.155" rpy="-1.5708 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
         <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="leg"/>
     </visual>
     <collision>
-      <origin xyz="0 0 -0.0387" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <box size="0.020 0.020 0.0774"/>
-      </geometry>
-    </collision>
-    <collision>
-      <origin xyz="0 0 -0.0774" rpy="0 0 0"/>
-      <geometry>
-        <sphere radius="0.008"/>
+        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
+  <!-- LEG: FL -->
+  <joint name="fl_shoulder_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="fl_link1"/>
+    <origin xyz="-0.055401 0.046222 -0.009000" rpy="0 0 3.141593"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+  </joint>
+  <joint name="fl_hip_joint" type="revolute">
+    <parent link="fl_link1"/>
+    <child link="fl_link2"/>
+    <origin xyz="0.022595 0.050920 0.010446" rpy="0 0 0.0"/>
+    <axis xyz="1.0 0.0 -0.0"/>
+    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+  </joint>
+  <joint name="fl_knee_joint" type="revolute">
+    <parent link="fl_link2"/>
+    <child link="fl_link3"/>
+    <origin xyz="0.000005 0.094700 0.000000" rpy="0 0 0.0"/>
+    <axis xyz="1.0 0.0 -0.0"/>
+    <limit lower="-2.356194" upper="0.523599" effort="2.94" velocity="5.0"/>
+  </joint>
+  <link name="fl_link1">
+    <inertial>
+      <origin xyz="0.009973 0.033774 0.023955" rpy="0 0 0"/>
+      <mass value="0.144017"/>
+      <inertia ixx="0.00038463" ixy="-3.8915e-05" ixz="-3.8665e-05" iyy="0.000166889" iyz="-9.603e-05" izz="0.000273574"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="fl_link2">
+    <inertial>
+      <origin xyz="0.021566 0.098294 0.010073" rpy="0 0 0"/>
+      <mass value="0.173381"/>
+      <inertia ixx="0.001898729" ixy="-0.000367526" ixz="-3.717e-05" iyy="0.000183013" iyz="-0.000171669" izz="0.002034679"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="fl_link3">
+    <inertial>
+      <origin xyz="0.008288 0.166816 0.010246" rpy="0 0 0"/>
+      <mass value="0.111653"/>
+      <inertia ixx="0.003205754" ixy="-0.000166056" ixz="-9.481e-06" iyy="4.2563e-05" iyz="-0.000190829" izz="0.00320303"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- LEG: BR -->
+  <joint name="br_shoulder_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="br_link1"/>
+    <origin xyz="0.055401 -0.046222 -0.009000" rpy="0 0 3.141593"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+  </joint>
+  <joint name="br_hip_joint" type="revolute">
+    <parent link="br_link1"/>
+    <child link="br_link2"/>
+    <origin xyz="0.022595 0.050920 0.010446" rpy="0 0 0.0"/>
+    <axis xyz="1.0 0.0 -0.0"/>
+    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+  </joint>
+  <joint name="br_knee_joint" type="revolute">
+    <parent link="br_link2"/>
+    <child link="br_link3"/>
+    <origin xyz="0.000005 0.094700 0.000000" rpy="0 0 0.0"/>
+    <axis xyz="1.0 0.0 -0.0"/>
+    <limit lower="-2.356194" upper="0.523599" effort="2.94" velocity="5.0"/>
+  </joint>
+  <link name="br_link1">
+    <inertial>
+      <origin xyz="0.009973 0.033774 0.023955" rpy="0 0 0"/>
+      <mass value="0.144017"/>
+      <inertia ixx="0.00038463" ixy="-3.8915e-05" ixz="-3.8665e-05" iyy="0.000166889" iyz="-9.603e-05" izz="0.000273574"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="br_link2">
+    <inertial>
+      <origin xyz="0.021566 0.098294 0.010073" rpy="0 0 0"/>
+      <mass value="0.173381"/>
+      <inertia ixx="0.001898729" ixy="-0.000367526" ixz="-3.717e-05" iyy="0.000183013" iyz="-0.000171669" izz="0.002034679"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="br_link3">
+    <inertial>
+      <origin xyz="0.008288 0.166816 0.010246" rpy="0 0 0"/>
+      <mass value="0.111653"/>
+      <inertia ixx="0.003205754" ixy="-0.000166056" ixz="-9.481e-06" iyy="4.2563e-05" iyz="-0.000190829" izz="0.00320303"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- LEG: BL -->
+  <joint name="bl_shoulder_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="bl_link1"/>
+    <origin xyz="-0.055401 -0.046222 -0.009000" rpy="0 0 0.0"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+  </joint>
+  <joint name="bl_hip_joint" type="revolute">
+    <parent link="bl_link1"/>
+    <child link="bl_link2"/>
+    <origin xyz="0.022595 0.050920 0.010446" rpy="0 0 0.0"/>
+    <axis xyz="1.0 0.0 -0.0"/>
+    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+  </joint>
+  <joint name="bl_knee_joint" type="revolute">
+    <parent link="bl_link2"/>
+    <child link="bl_link3"/>
+    <origin xyz="0.000005 0.094700 0.000000" rpy="0 0 0.0"/>
+    <axis xyz="1.0 0.0 -0.0"/>
+    <limit lower="-2.356194" upper="0.523599" effort="2.94" velocity="5.0"/>
+  </joint>
+  <link name="bl_link1">
+    <inertial>
+      <origin xyz="0.009973 0.033774 0.023955" rpy="0 0 0"/>
+      <mass value="0.144017"/>
+      <inertia ixx="0.00038463" ixy="-3.8915e-05" ixz="-3.8665e-05" iyy="0.000166889" iyz="-9.603e-05" izz="0.000273574"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="bl_link2">
+    <inertial>
+      <origin xyz="0.021566 0.098294 0.010073" rpy="0 0 0"/>
+      <mass value="0.173381"/>
+      <inertia ixx="0.001898729" ixy="-0.000367526" ixz="-3.717e-05" iyy="0.000183013" iyz="-0.000171669" izz="0.002034679"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="bl_link3">
+    <inertial>
+      <origin xyz="0.008288 0.166816 0.010246" rpy="0 0 0"/>
+      <mass value="0.111653"/>
+      <inertia ixx="0.003205754" ixy="-0.000166056" ixz="-9.481e-06" iyy="4.2563e-05" iyz="-0.000190829" izz="0.00320303"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
 </robot>
