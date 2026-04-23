@@ -15,7 +15,10 @@
     <color rgba="0.6 0.6 0.6 1.0"/>
   </material>
   <material name="leg">
-    <color rgba="0.78 0.80 0.84 1.0"/>
+    <color rgba="0.831 0.333 0.0 1.0"/>
+  </material>
+  <material name="body_red">
+    <color rgba="0.05 0.05 0.05 1.0"/>
   </material>
 
   <!-- ===================== BODY ===================== -->
@@ -26,16 +29,16 @@
       <inertia ixx="0.0033" ixy="0" ixz="0" iyy="0.0018" iyz="0" izz="0.0045"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="0 0 0.030" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/QuadrupedBody.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/FlexibleSkeletonWithMotorMounts.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="dark_grey"/>
+      <material name="body_red"/>
     </visual>
     <collision>
-      <origin xyz="0 0 0.025" rpy="0 0 0"/>
+      <origin xyz="0 0 0.044" rpy="0 0 0"/>
       <geometry>
-        <box size="0.184 0.235 0.051"/>
+        <box size="0.130 0.128 0.054"/>
       </geometry>
     </collision>
   </link>
@@ -45,7 +48,7 @@
   <joint name="fl_shoulder_joint" type="revolute">
     <parent link="body"/>
     <child link="fl_shoulder"/>
-    <origin xyz="-0.080 0.105 0.025" rpy="0 0 0"/>
+    <origin xyz="-0.040 0.050 0.025" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="-2.356" upper="2.356" effort="1.47" velocity="5.0"/>
   </joint>
@@ -141,7 +144,7 @@
   <joint name="fr_shoulder_joint" type="revolute">
     <parent link="body"/>
     <child link="fr_shoulder"/>
-    <origin xyz="0.080 0.105 0.025" rpy="0 0 3.14159"/>
+    <origin xyz="0.040 0.050 0.025" rpy="0 0 3.14159"/>
     <axis xyz="0 0 1"/>
     <limit lower="-2.356" upper="2.356" effort="1.47" velocity="5.0"/>
   </joint>
@@ -235,7 +238,7 @@
   <joint name="rl_shoulder_joint" type="revolute">
     <parent link="body"/>
     <child link="rl_shoulder"/>
-    <origin xyz="-0.080 -0.105 0.025" rpy="0 0 0"/>
+    <origin xyz="-0.040 -0.050 0.025" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="-2.356" upper="2.356" effort="1.47" velocity="5.0"/>
   </joint>
@@ -329,7 +332,7 @@
   <joint name="rr_shoulder_joint" type="revolute">
     <parent link="body"/>
     <child link="rr_shoulder"/>
-    <origin xyz="0.080 -0.105 0.025" rpy="0 0 3.14159"/>
+    <origin xyz="0.040 -0.050 0.025" rpy="0 0 3.14159"/>
     <axis xyz="0 0 1"/>
     <limit lower="-2.356" upper="2.356" effort="1.47" velocity="5.0"/>
   </joint>
