@@ -9,10 +9,12 @@
 class SpinalCord{
     public:
         SpinalCord(uint8_t pcaDriverAddress);
+        void begin();
         void walk();
         void rest();
         void wallFlip();
         void update();
+        void applyCalibration(int channel, int angle);
     private:
         volatile RobotState robotState;
         Adafruit_PWMServoDriver driver;

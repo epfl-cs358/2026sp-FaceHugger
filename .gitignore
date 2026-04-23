@@ -5,6 +5,8 @@ build/
 .vscode/
 *.f3d.lock
 .DS_Store
+*.gcode
+*.bgcode
 
 # Created by https://www.toptal.com/developers/gitignore/api/c,c++,cmake,kicad,latex,linux,macos,direnv,dotenv,python,windows,virtualenv,jetbrains+all,jupyternotebooks,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=c,c++,cmake,kicad,latex,linux,macos,direnv,dotenv,python,windows,virtualenv,jetbrains+all,jupyternotebooks,visualstudiocode

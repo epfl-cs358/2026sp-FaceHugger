@@ -32,6 +32,17 @@ SpinalCord::SpinalCord(uint8_t pwm):
 {
 }
 
+void SpinalCord::begin() {
+    driver.begin();
+    driver.setPWMFreq(60); // Standard for servos
+    
+    // Now that the driver is alive, set the initial pose
+    leg1.returnToDefaultAngles();
+    leg2.returnToDefaultAngles();
+    leg3.returnToDefaultAngles();
+    leg4.returnToDefaultAngles();
+}
+
 void SpinalCord::walk(){
     robotState = STATE_WALK;
 }
@@ -44,6 +55,15 @@ void SpinalCord::wallFlip(){
     robotState = STATE_ACTION;
 }
 
+void SpinalCord::applyCalibration(int channel, int angle) {
+    // We call identifyAndMove on every leg. 
+    // Leg class logic ensures only the correct leg reacts.
+    leg1.identifyAndMove(channel, (double)angle);
+    leg2.identifyAndMove(channel, (double)angle);
+    leg3.identifyAndMove(channel, (double)angle);
+    leg4.identifyAndMove(channel, (double)angle);
+}
+
 void SpinalCord::update(){
     switch(robotState){
         case STATE_WALK:
@@ -51,10 +71,6 @@ void SpinalCord::update(){
         case STATE_ACTION:
             break;
         case STATE_IDLE:
-            leg1.returnToDefaultAngles();
-            leg2.returnToDefaultAngles();
-            leg3.returnToDefaultAngles();
-            leg4.returnToDefaultAngles();
             break;
         case STATE_FAILSAFE:
             leg1.returnToDefaultAngles();
