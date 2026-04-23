@@ -23,8 +23,8 @@ import pybullet_data
 from constants import STANCE, SERVO_FORCE, SERVO_VELOCITY, TIMESTEP, URDF_PATH
 from helpers import (all_legs, apply_per_leg_pose, build_joint_map,
                      reset_to_stance, _clamp)
-from kinematics import NEUTRAL_FOOT, foot_target, leg_ik
-from gaits import GAITS
+from kinematics import NEUTRAL_FOOT, foot_target, splayed_foot_ik
+from gaits import GAITS, pre_orient_splay
 
 
 COURSE = [
@@ -153,6 +153,11 @@ def run_terrain(gait_name, gui=True, duration=40.0, return_report=False):
     print(f"\n=== Terrain run: {cfg['label']} ===")
     print(f"  course: " + " -> ".join(cp['name'] for cp in COURSE))
 
+    pre_orient_splay(robot_id, joint_map, cfg, gui=gui)
+
+    splay = cfg.get("shoulder_splay", 0.0)
+    splay_signs = cfg.get("splay_signs", {})
+
     reached = {cp["name"]: None for cp in COURSE}
     min_z, max_tilt_seen = 1e9, 0.0
     fell, fell_at = False, None
@@ -182,7 +187,8 @@ def run_terrain(gait_name, gui=True, duration=40.0, return_report=False):
             side_cfg = steer_cfg_left if leg_id.endswith("l") else steer_cfg_right
             foot = foot_target(leg_id, phase, side_cfg["step_length"],
                                cfg["step_height"], cfg["duty"])
-            theta_s, theta_h, theta_k = leg_ik(foot, leg_id)
+            theta_s, theta_h, theta_k = splayed_foot_ik(foot, leg_id,
+                                                        splay, splay_signs)
             targets[f"{leg_id}_shoulder_joint"] = theta_s
             targets[f"{leg_id}_hip_joint"]      = theta_h
             targets[f"{leg_id}_knee_joint"]     = theta_k

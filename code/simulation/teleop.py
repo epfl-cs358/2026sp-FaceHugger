@@ -10,8 +10,8 @@ import pybullet_data
 from constants import STANCE, SERVO_FORCE, SERVO_VELOCITY, TIMESTEP, URDF_PATH
 from helpers import (all_legs, apply_per_leg_pose, build_joint_map,
                      reset_to_stance, _clamp, _wrap_pi)
-from kinematics import NEUTRAL_FOOT, foot_target, leg_ik
-from gaits import GAITS
+from kinematics import NEUTRAL_FOOT, foot_target, splayed_foot_ik
+from gaits import GAITS, pre_orient_splay
 
 
 def run_teleop(gait_name="trot", gui=True, duration=600.0):
@@ -62,6 +62,8 @@ def run_teleop(gait_name="trot", gui=True, duration=600.0):
             cameraDistance=0.85, cameraYaw=50, cameraPitch=-25,
             cameraTargetPosition=[0.0, 0.0, 0.10],
         )
+
+    pre_orient_splay(robot_id, joint_map, GAITS[gait_name], gui=gui)
 
     print(f"\n=== Teleop: {GAITS[gait_name]['label']} ===")
     print("  forward: Z / W / UP      backward: S / DOWN")
@@ -169,7 +171,11 @@ def run_teleop(gait_name="trot", gui=True, duration=600.0):
             side_cfg = steer_cfg_left if leg_id.endswith("l") else steer_cfg_right
             foot = foot_target(leg_id, phase, side_cfg["step_length"],
                                cfg["step_height"], cfg["duty"])
-            theta_s, theta_h, theta_k = leg_ik(foot, leg_id)
+            theta_s, theta_h, theta_k = splayed_foot_ik(
+                foot, leg_id,
+                cfg.get("shoulder_splay", 0.0),
+                cfg.get("splay_signs", {}),
+            )
             targets[f"{leg_id}_shoulder_joint"] = theta_s
             targets[f"{leg_id}_hip_joint"]      = theta_h
             targets[f"{leg_id}_knee_joint"]     = theta_k

@@ -8,11 +8,11 @@ Course (spawn at y = -0.10, all obstacles along +Y):
 - **STEP_UP** at y = 1.40 m (tilt budget 45 deg)
 - **FINISH** at y = 1.70 m (tilt budget 25 deg)
 
-| Gait  | UP_RAMP | PLATEAU | DOWN_RAMP | BUMPS | STEP_UP | FINISH | Status         | Reached y (m) | Min z (m) | Max tilt | Time (s) |
-|-------|---------|---------|-----------|-------|---------|--------|----------------|---------------|-----------|----------|----------|
-| walk  | -       | -       | -         | -     | -       | -      | STUCK          | +0.03         | +0.063    | 96deg    | 60.0     |
-| trot  | ok      | ok      | ok        | ok    | -       | -      | TIMEOUT        | +1.25         | +0.063    | 96deg    | 40.0     |
-| bound | -       | -       | -         | -     | -       | -      | FELL @ UP_RAMP | +0.08         | +0.059    | 100deg   | 1.0      |
+| Gait  | UP_RAMP | PLATEAU | DOWN_RAMP | BUMPS | STEP_UP | FINISH | Status   | Reached y (m) | Min z (m) | Max tilt | Time (s) |
+|-------|---------|---------|-----------|-------|---------|--------|----------|---------------|-----------|----------|----------|
+| walk  | ok      | ok      | ok        | ok    | -       | -      | TIMEOUT  | +1.10         | +0.111    | 13deg    | 60.0     |
+| trot  | ok      | ok      | ok        | ok    | ok      | ok     | FINISHED | +1.70         | +0.109    | 11deg    | 13.7     |
+| bound | ok      | ok      | ok        | -     | -       | -      | TIMEOUT  | +0.91         | +0.097    | 16deg    | 40.0     |
 
 **Legend**
 - `ok`       -- checkpoint crossed within tilt budget

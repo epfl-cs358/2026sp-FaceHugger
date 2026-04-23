@@ -153,6 +153,29 @@ def leg_ik_fixed_yaw(foot_body, leg_id, theta_s):
     return theta_s, theta_h, theta_k
 
 
+def splayed_foot_ik(foot, leg_id, splay, splay_signs):
+    """IK for a leg under shoulder splay. Rotates the rest foot around the
+    shoulder mount by splay_signs[leg_id] * splay, then adds the body-frame
+    stride offset from `foot` (relative to NEUTRAL_FOOT[leg_id]). Regular
+    leg_ik resolves shoulder yaw so the splay is kinematically honoured."""
+    if splay == 0.0:
+        return leg_ik(foot, leg_id)
+    s_angle = splay_signs.get(leg_id, 0) * splay
+    nx, ny, nz = NEUTRAL_FOOT[leg_id]
+    sx, sy, _sz = LEG_INFO[leg_id]["mount"]
+    rest_dx = nx - sx
+    rest_dy = ny - sy
+    cos_a = math.cos(s_angle)
+    sin_a = math.sin(s_angle)
+    rest_x = sx + cos_a * rest_dx - sin_a * rest_dy
+    rest_y = sy + sin_a * rest_dx + cos_a * rest_dy
+    dx = foot[0] - nx
+    dy = foot[1] - ny
+    dz = foot[2] - nz
+    foot_ik = (rest_x + dx, rest_y + dy, nz + dz)
+    return leg_ik(foot_ik, leg_id)
+
+
 def gait_joint_targets(t, cfg):
     """Return {joint_name: angle} for all 12 joints at elapsed time t."""
     period = cfg["period"]
@@ -167,27 +190,8 @@ def gait_joint_targets(t, cfg):
     for leg_id, offset in cfg["offsets"].items():
         phase = (global_phase - offset) % 1.0
         foot = foot_target(leg_id, phase, step_length, step_height, duty, axis)
-        if splay != 0.0:
-            # Splay: rotate the rest foot position around the shoulder mount
-            # by s_angle, then add the body-frame stride/lift from foot_target.
-            # Regular leg_ik resolves shoulder yaw to match; shoulder oscillates
-            # slightly around s_angle across the cycle, keeping the X-pattern.
-            s_angle = splay_signs.get(leg_id, 0) * splay
-            nx, ny, nz = NEUTRAL_FOOT[leg_id]
-            sx, sy, _sz = LEG_INFO[leg_id]["mount"]
-            rest_dx = nx - sx
-            rest_dy = ny - sy
-            cos_a = math.cos(s_angle)
-            sin_a = math.sin(s_angle)
-            rest_x = sx + cos_a * rest_dx - sin_a * rest_dy
-            rest_y = sy + sin_a * rest_dx + cos_a * rest_dy
-            dx = foot[0] - nx
-            dy = foot[1] - ny
-            dz = foot[2] - nz
-            foot_ik = (rest_x + dx, rest_y + dy, nz + dz)
-            theta_s, theta_h, theta_k = leg_ik(foot_ik, leg_id)
-        else:
-            theta_s, theta_h, theta_k = leg_ik(foot, leg_id)
+        theta_s, theta_h, theta_k = splayed_foot_ik(foot, leg_id, splay,
+                                                    splay_signs)
         targets[f"{leg_id}_shoulder_joint"] = theta_s
         targets[f"{leg_id}_hip_joint"]      = theta_h
         targets[f"{leg_id}_knee_joint"]     = theta_k

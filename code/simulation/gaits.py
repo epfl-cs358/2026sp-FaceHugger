@@ -18,6 +18,44 @@ from kinematics import (
 )
 
 
+def pre_orient_splay(robot_id, joint_map, cfg, gui=True):
+    """Ramp shoulder joints from 0 to splay_signs[leg] * shoulder_splay over
+    `pre_orient` seconds, keeping hip/knee at STANCE. No-op if either the
+    splay or pre_orient duration is zero."""
+    pre_orient = cfg.get("pre_orient", 0.0)
+    splay = cfg.get("shoulder_splay", 0.0)
+    splay_signs = cfg.get("splay_signs", {})
+    if pre_orient <= 0.0 or splay == 0.0:
+        return
+    print(f"  [pre-orient] splaying shoulders to "
+          f"{math.degrees(splay):+.0f} deg over {pre_orient:.1f}s")
+    n_steps = int(pre_orient / TIMESTEP)
+    for k in range(n_steps):
+        if not p.isConnected():
+            break
+        alpha = (k + 1) / n_steps
+        for leg_id in LEG_INFO:
+            target = alpha * splay_signs.get(leg_id, 0) * splay
+            idx = joint_map.get(f"{leg_id}_shoulder_joint")
+            if idx is not None:
+                p.setJointMotorControl2(
+                    robot_id, idx, p.POSITION_CONTROL,
+                    targetPosition=target,
+                    force=SERVO_FORCE, maxVelocity=SERVO_VELOCITY,
+                )
+            for joint in ("hip", "knee"):
+                jidx = joint_map.get(f"{leg_id}_{joint}_joint")
+                if jidx is not None:
+                    p.setJointMotorControl2(
+                        robot_id, jidx, p.POSITION_CONTROL,
+                        targetPosition=STANCE[joint],
+                        force=SERVO_FORCE, maxVelocity=SERVO_VELOCITY,
+                    )
+        p.stepSimulation()
+        if gui:
+            time.sleep(TIMESTEP)
+
+
 # Gait registry. Each entry is a self-contained scheduler:
 #   - period / step_length / step_height / duty: trajectory shape
 #   - offsets: per-leg phase in [0, 1)
@@ -278,37 +316,7 @@ def run_gait(gait_name, gui=True):
     draw_overlay = gui and SHOW_FOOT_TRAJECTORIES
     draw_every = 4  # refresh overlay every N sim steps to keep GUI snappy
 
-    pre_orient = cfg.get("pre_orient", 0.0)
-    splay = cfg.get("shoulder_splay", 0.0)
-    splay_signs = cfg.get("splay_signs", {})
-    if pre_orient > 0.0 and splay != 0.0:
-        print(f"  [pre-orient] splaying shoulders to "
-              f"{math.degrees(splay):+.0f} deg over {pre_orient:.1f}s")
-        n_steps = int(pre_orient / TIMESTEP)
-        for k in range(n_steps):
-            if not p.isConnected():
-                break
-            alpha = (k + 1) / n_steps
-            for leg_id in LEG_INFO:
-                target = alpha * splay_signs.get(leg_id, 0) * splay
-                idx = joint_map.get(f"{leg_id}_shoulder_joint")
-                if idx is not None:
-                    p.setJointMotorControl2(
-                        robot_id, idx, p.POSITION_CONTROL,
-                        targetPosition=target,
-                        force=SERVO_FORCE, maxVelocity=SERVO_VELOCITY,
-                    )
-                for joint in ("hip", "knee"):
-                    jidx = joint_map.get(f"{leg_id}_{joint}_joint")
-                    if jidx is not None:
-                        p.setJointMotorControl2(
-                            robot_id, jidx, p.POSITION_CONTROL,
-                            targetPosition=STANCE[joint],
-                            force=SERVO_FORCE, maxVelocity=SERVO_VELOCITY,
-                        )
-            p.stepSimulation()
-            if gui:
-                time.sleep(TIMESTEP)
+    pre_orient_splay(robot_id, joint_map, cfg, gui=gui)
 
     t = 0.0
     step_count = 0
