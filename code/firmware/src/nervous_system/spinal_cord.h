@@ -11,7 +11,7 @@ class SpinalCord{
         SpinalCord(uint8_t pcaDriverAddress);
         void walk();
         void rest();
-        void jump();
+        void wallFlip();
         void update();
     private:
         volatile RobotState robotState;
