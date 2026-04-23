@@ -3,23 +3,57 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include "shared/data.h"
+#include "../nervous_system/spinal_cord.h"
 
 WebSocketsServer webSocket = WebSocketsServer(81);
+extern SpinalCord spinalCord;
 
 void initNetwork() {
-    // Setup ESP32 as an Access Point
-    WiFi.softAP("FaceHugger_Net", "12345678");
-    Serial.println("WiFi AP Started: FaceHugger_Net");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.softAPIP());
+    // 1. Explicitly set mode to Access Point
+    WiFi.mode(WIFI_AP); 
+
+    // 2. Configure the AP (SSID, Password, Channel, Hidden, Max Connections)
+    // Using Channel 6 to avoid interference, allowing 4 simultaneous users
+    bool success = WiFi.softAP("FaceHugger_Net", "12345678", 6, 0, 4);
+
+    if (success) {
+        Serial.println("\n======================================");
+        Serial.println("ROSS (Robot OS) Network Online");
+        Serial.print("SSID: FaceHugger_Net\nIP:   ");
+        Serial.println(WiFi.softAPIP());
+        Serial.println("======================================\n");
+    }
 
     webSocket.begin();
     webSocket.onEvent(onWebSocketEvent);
+    Serial.print("AP IP address: ");
+    Serial.println(WiFi.softAPIP());
 }
 
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
-    if (type == WStype_TEXT) {
-        handleParsedMessage(payload);
+    switch(type) {
+        case WStype_DISCONNECTED:
+            Serial.printf("[%u] ❌ Event: Disconnected!\n", num);
+            break;
+            
+        case WStype_CONNECTED: {
+            IPAddress ip = webSocket.remoteIP(num);
+            Serial.printf("[%u] ✅ Event: Connected from %s | URL: %s\n", num, ip.toString().c_str(), payload);
+            break;
+        }
+
+        case WStype_TEXT:
+            Serial.printf("[%u] 📩 Received Text: %s\n", num, payload);
+            handleParsedMessage(payload);
+            break;
+
+        case WStype_ERROR:
+            Serial.printf("[%u] ⚠️ Error Event occurred! Length: %u\n", num, length);
+            break;
+            
+        case WStype_BIN:
+            Serial.printf("[%u] 📦 Received Binary. Length: %u\n", num, length);
+            break;
     }
 }
 
@@ -35,11 +69,31 @@ void handleParsedMessage(uint8_t * payload) {
         case CMD_STATE:
             Serial.printf("State Change Request: %d\n", (int)doc["s"]);
             break;
-        case CMD_CALIBRATE:
-            Serial.printf("Calibrating Servo %d to Pulse %d\n", (int)doc["id"], (int)doc["p"]);
+        case CMD_CALIBRATE: { 
+            int channel = doc["id"] | 0;
+            int angle = doc["a"] | 90; 
+
+            spinalCord.applyCalibration(channel, angle);
+            Serial.printf("Calibrating servo %d to %d", channel, angle);
             break;
+        }
         case CMD_MOVE:
             Serial.printf("Moving -> X:%.2f Y:%.2f\n", (float)doc["x"], (float)doc["y"]);
+            break;
+        case CMD_TELEMETRY:
+            Serial.printf("FSM state: %d, Battery voltage: %lf, In stabilization mode: %s\n", 
+                (int)doc["s"], (float)doc["b"], (int)doc["a"] ? "true": "false");
+
+            JsonArray dists = doc["d"];
+            for(int i = 0; i < dists.size(); i++) {
+                int d = dists[i];
+                Serial.print("D");
+                Serial.print(i);
+                Serial.print(": ");
+                Serial.print(d);
+                if (i < dists.size() - 1) Serial.print(" | ");
+            }
+            Serial.println();
             break;
     }
 }
