@@ -6,7 +6,6 @@ This document defines the JSON-based communication protocol between the **Web Da
 - **Protocol:** WebSocket (Bi-directional)
 - **Port:** 81
 - **Format:** Minified JSON
-
 ---
 
 ## 📥 Dashboard -> Robot (Commands)
@@ -50,7 +49,7 @@ Adjusts the orientation of the chassis while the feet stay planted. We are in `S
 
 ---
 
-### 4. Servo Calibration (`T: 4`) app -> robot
+### 4. Servo Calibration (`T: 4`)
 Direct control over a specific PWM channel for hardware bring-up and alignment.
 | Key  | Type | Description              | Range     |
 | :--- | :--- | :----------------------- | :-------- |
@@ -76,6 +75,7 @@ The ESP32 broadcasts this packet to update the UI indicators.
 | `e` | string or null | Error message observed (if any)         | 
 
 **Example:** `{"T": 10, "s": 0, "b": 8.1, "d": [200, 200, 200, 200, 150], "a": true, "e": "an error message has been observed"}`
+**Note:** `System should send status every 1-2 seconds to know that we still have a connection, or use ping pong standard way in websockets`
 
 ---
 

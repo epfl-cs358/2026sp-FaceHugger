@@ -10,8 +10,8 @@
 #define PIN_SCL 22
 
 //servos work with pulses not angles
-#define MIN_PULSE 500
-#define MAX_PULSE 2500
+#define MIN_PULSE 150
+#define MAX_PULSE 600
 
 //define PCA addresses for servos as well as default angles
 
