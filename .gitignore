@@ -829,3 +829,9 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/c,c++,cmake,kicad,latex,linux,macos,direnv,dotenv,python,windows,virtualenv,jetbrains+all,jupyternotebooks,visualstudiocode
+
+# Re-include cad/scripts/ (overrides the VirtualEnv [Ss]cripts rule above)
+!cad/scripts/
+!cad/scripts/**
+# But keep .DS_Store ignored even inside cad/scripts/
+cad/scripts/**/.DS_Store
