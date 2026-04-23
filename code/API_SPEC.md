@@ -1,4 +1,4 @@
-# FaceHugger API Specification v1.0
+# FaceHugger API Specification v1.1
 
 This document defines the JSON-based communication protocol between the **Web Dashboard** and the **ESP32 Firmware**.
 
@@ -39,7 +39,7 @@ Requests a change in the robot's high-level behavior mode.
 ---
 
 ### 3. Body Pose / Static IK (`T: 3`)
-Adjusts the orientation of the chassis while the feet stay planted.
+Adjusts the orientation of the chassis while the feet stay planted. We are in `STATE_ACTION`.
 | Key | Type  | Description              | Unit    |
 | :-- | :---- | :----------------------- | :------ |
 | `h` | int   | Chassis Height           | mm      |
@@ -50,14 +50,15 @@ Adjusts the orientation of the chassis while the feet stay planted.
 
 ---
 
-### 4. Servo Calibration (`T: 4`)
+### 4. Servo Calibration (`T: 4`) app -> robot
 Direct control over a specific PWM channel for hardware bring-up and alignment.
 | Key  | Type | Description              | Range     |
 | :--- | :--- | :----------------------- | :-------- |
-| `id` | int  | PCA9685 Channel ID       | 0 - 15    |
-| `p`  | int  | Raw PWM Pulse Width      | 150 - 600 |
+| `id` | int  | leg id                   |   0 - 3   |
+| `servo_id`| int | servo id (0: hip, 1: thigh, 2: knee) | 0 - 2|
+| `a`  | int  |         Angle            | 0-180 |
 
-**Example:** `{"T": 4, "id": 1, "p": 300}` *(Move Femur on Pin 1 to center)*
+**Example:** `{"T": 4, "id": 2, "servo_id": 2,"a": 90}` *(Move knee of leg id 2 (bottom right) to 90 degrees)*
 
 ---
 
@@ -72,8 +73,9 @@ The ESP32 broadcasts this packet to update the UI indicators.
 | `b` | float | Battery Voltage (e.g., 7.4)                      |
 | `d` | array | ToF distance readings [FL, FR, RL, RR, Center]   |
 | `a` | bool  | Stabilization/PID Status (true/false)            |
+| `e` | string or null | Error message observed (if any)         | 
 
-**Example:** `{"T": 10, "s": 0, "b": 8.1, "d": [200, 200, 200, 200, 150], "a": true}`
+**Example:** `{"T": 10, "s": 0, "b": 8.1, "d": [200, 200, 200, 200, 150], "a": true, "e": "an error message has been observed"}`
 
 ---
 
