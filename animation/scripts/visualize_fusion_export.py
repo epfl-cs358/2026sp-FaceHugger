@@ -35,6 +35,7 @@ Targets Blender 3.3 LTS specifically — uses `bpy.ops.import_mesh.stl`. On
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -410,20 +411,30 @@ def visit_root(export, ctx):
 def instance_four_legs(export, collections, ctx):
     """After the single source leg is loaded, duplicate it at the 4 chassis
     corners as independent objects (with deep-copied mesh data) so each
-    leg can be rigged and animated independently. All duplicates keep the
-    source FL orientation — only translation is applied. That way a single
-    armature/rig template can be built against one leg's local frame and
-    applied uniformly to all four.
+    leg can be rigged and animated independently.
 
-    Per-corner world placement for animation (spreading the legs into their
-    quadrants) goes into each Legs/{corner} sub-collection's root transform
-    or a parent empty — NOT into the mesh duplicates themselves.
+    FL + BL (same body-side as source FL): translation-only duplication —
+        the leg keeps its source orientation, just moved to the target
+        LegMountXX. Same local frame as the source, rigging-friendly.
+
+    FR + BR (opposite body-side): same translation PLUS a 180° rotation
+        around Z centered on each corner's LegMountXX point. The pivot
+        sits on the shoulder rotation axis (LegMountXX = BodyToLink1Point
+        are colocated on the axis), so the whole leg — including the
+        shoulder servo — swings to face the opposite body-side. Every
+        duplicated object gets the rotation: link1/link2/link3 + all
+        three servos.
+
+    Matrix composition for each duplicate at corner N:
+        M_new = T(mount_N) @ Rz(Δ) @ T(-mount_FL) @ M_src
+      where Δ = 180° for FR/BR, 0° for BL (translation-only).
 
     Collection tree:
       FusionExport/Legs/
         FL/      source leg (Link1/2/3 + 3 servos), kept in place
-        FR, BR, BL/   real duplicates of FL at the target LegMountXX,
-                      all in the source's local orientation (flat).
+        BL/      translation-only duplicate
+        FR/      translation + 180° Z rotation (pivot = LegMountFR)
+        BR/      translation + 180° Z rotation (pivot = LegMountBR)
     """
     # 1. Pull the 4 LegMountXX points from FlexibleSkeleton:1's construction points.
     mounts = {}
@@ -468,16 +479,24 @@ def instance_four_legs(export, collections, ctx):
         meshes_coll.objects.unlink(obj)
         corner_colls["FL"].objects.link(obj)
 
-    # 4. Duplicate the source leg for FR/BR/BL with translation only (no
-    # rotation — "flat" for rigging). Deep-copy mesh data so rig weights
-    # on each leg are independent.
-    fl_mount = mounts["FL"]
+    # 4. Duplicate the source leg for FR/BR/BL. FR/BR are rotated 180°
+    # around Z centered on their own LegMountXX point; BL is translation-
+    # only. Deep-copy mesh data so rig weights on each leg are independent.
+    fl_mount_v = Vector(mounts["FL"])
+    rot_by_corner = {
+        "FR": Matrix.Rotation(math.pi, 4, "Z"),
+        "BR": Matrix.Rotation(math.pi, 4, "Z"),
+        "BL": Matrix.Identity(4),
+    }
     n_dup_per_leg = 0
     for corner in ("FR", "BR", "BL"):
-        m = mounts[corner]
-        offset = Vector((m[0] - fl_mount[0],
-                         m[1] - fl_mount[1],
-                         m[2] - fl_mount[2]))
+        m_v = Vector(mounts[corner])
+        # M_new = T(mount_N) @ R @ T(-mount_FL) @ M_src
+        leg_xform = (
+            Matrix.Translation(m_v)
+            @ rot_by_corner[corner]
+            @ Matrix.Translation(-fl_mount_v)
+        )
         count = 0
         for src in source_objs:
             dup = src.copy()
@@ -488,15 +507,15 @@ def instance_four_legs(export, collections, ctx):
                 dup.name = corner + "_" + src.name[len(source_prefix):]
             else:
                 dup.name = f"{corner}_{src.name}"
-            # Translation-only: matrix_world = T(offset) @ source.matrix_world.
-            dup.matrix_world = Matrix.Translation(offset) @ src.matrix_world
+            dup.matrix_world = leg_xform @ src.matrix_world
             corner_colls[corner].objects.link(dup)
             count += 1
         n_dup_per_leg = count
 
     n_src = len(source_objs)
     print(f"[instance_legs] Legs/FL has {n_src} source objects; "
-          f"duplicated (flat) to {n_dup_per_leg} objects each in FR/BR/BL")
+          f"duplicated to {n_dup_per_leg} objects each in FR/BR/BL "
+          f"(FR/BR rotated 180° around Z about their LegMount)")
 
 
 # ---------------------------------------------------------------------------
