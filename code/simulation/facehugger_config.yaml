@@ -135,3 +135,10 @@ servo:
   mass_kg: 0.060        # DFRobot SER0038 spec
   effort_nm: 2.94       # 30 kg·cm to N·m
   velocity_rad_s: 5.0
+
+  # Uniform mesh-local rotation applied to every servo <visual>. Useful when
+  # the CAD's servo model points the wrong way — saves a CAD rename/re-export
+  # pass. Applied AFTER the per-instance rotation derived from the CAD, so a
+  # 180° X flip inverts every servo around its own shaft-axis direction.
+  # Leave at [0, 0, 0] to trust the CAD verbatim.
+  visual_flip_rpy_deg: [180, 0, 0]

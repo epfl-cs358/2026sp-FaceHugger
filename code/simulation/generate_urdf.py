@@ -407,6 +407,19 @@ def _link_rot_world(rpy_z_deg: float) -> list:
     ]
 
 
+def _euler_to_rot(rpy_rad) -> list:
+    """URDF-convention Euler → 3x3: R = Rz(yaw) @ Ry(pitch) @ Rx(roll)."""
+    r, p, y = rpy_rad
+    cr, sr = math.cos(r), math.sin(r)
+    cp, sp = math.cos(p), math.sin(p)
+    cy, sy = math.cos(y), math.sin(y)
+    return [
+        [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+        [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+        [-sp,      cp * sr,                 cp * cr],
+    ]
+
+
 def generate(export: dict, cfg: dict, out_path: Path):
     occs = export["occurrences"]
     robot = cfg["robot_name"]
@@ -414,6 +427,10 @@ def generate(export: dict, cfg: dict, out_path: Path):
     servo_cfg = cfg.get("servo", {})
     effort = servo_cfg.get("effort_nm", 1.47)
     vel = servo_cfg.get("velocity_rad_s", 5.0)
+    # Uniform mesh-local rotation applied to every servo visual (see yaml
+    # comment on `servo.visual_flip_rpy_deg`). Defaults to identity.
+    servo_flip_deg = servo_cfg.get("visual_flip_rpy_deg", [0.0, 0.0, 0.0])
+    servo_flip_rot = _euler_to_rot([math.radians(d) for d in servo_flip_deg])
 
     urdf = URDF(robot)
 
@@ -512,11 +529,14 @@ def generate(export: dict, cfg: dict, out_path: Path):
                         _mat_mul_3x3(lm_rot, _mat_transpose_3x3(source_lm_rot)),
                         source_shoulder_rot,
                     )
+                    # Post-multiply by the config's uniform flip so the flip
+                    # is applied in the mesh's local frame.
+                    r_servo = _mat_mul_3x3(r_servo, servo_flip_rot)
                     rpy = _rot_to_urdf_rpy(r_servo)
                 else:
-                    rpy = (0.0, 0.0, 0.0)
+                    rpy = _rot_to_urdf_rpy(servo_flip_rot)
             else:
-                rpy = (0.0, 0.0, 0.0)
+                rpy = _rot_to_urdf_rpy(servo_flip_rot)
             base_extra_visuals.append((servo_mesh_name, list(mount_mm), rpy))
 
     urdf.link(
@@ -626,8 +646,10 @@ def generate(export: dict, cfg: dict, out_path: Path):
         def _servo_rpy_in_link(role):
             r_servo = _servo_rot_by_role(export, role)
             if r_servo is None:
-                return (0.0, 0.0, 0.0)
+                return _rot_to_urdf_rpy(servo_flip_rot)
             r_in_link = _mat_mul_3x3(_mat_transpose_3x3(r_link_world), r_servo)
+            # Post-multiply by the config flip (mesh-local rotation).
+            r_in_link = _mat_mul_3x3(r_in_link, servo_flip_rot)
             return _rot_to_urdf_rpy(r_in_link)
 
         hip_rpy  = _servo_rpy_in_link("hip")  if has_hip_servo  else (0.0, 0.0, 0.0)
