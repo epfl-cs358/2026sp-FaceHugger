@@ -821,6 +821,37 @@ def _draw_overlay(robot_id, cycles, current_targets):
 # Simulation entry points
 # --------------------------------------------------------------------------- #
 
+def _body_height_for_gait(cfg, gait, period_s, samples_per_period=100):
+    """Maximum foot-depth below body origin sampled over one gait period.
+    Covers swing + stance feet across all 4 legs. Used in place of the
+    neutral-stance depth so the spawn Z accommodates gait trajectories
+    where foot-contact Z differs from neutral_foot."""
+    offsets = (gait["offsets_v2"] if cfg.version == "v2" else gait["offsets_v1"])
+    worst = 0.0
+    for k in range(samples_per_period):
+        global_phase = k / samples_per_period
+        for leg_id, off in offsets.items():
+            phase = (global_phase - off) % 1.0
+            foot = foot_target(
+                cfg.neutral_foot, leg_id, phase,
+                gait["step_length"], gait["step_height"], gait["duty"],
+            )
+            if -foot[2] > worst:
+                worst = -foot[2]
+    return max(1e-3, worst)
+
+
+def _settle(robot_id, joint_map, cfg, duration_s):
+    """Step the sim for `duration_s` while holding stance targets. Lets
+    gravity resolve any initial overlap before gait/stand loops begin.
+    No visible debug draws here — just physics."""
+    n_steps = int(duration_s / TIMESTEP)
+    for _ in range(n_steps):
+        apply_leg_pose(robot_id, joint_map, cfg.stance_rad,
+                       cfg.servo_force, cfg.servo_velocity)
+        p.stepSimulation()
+
+
 def _connect_and_setup(cfg, gui):
     p.connect(p.GUI if gui else p.DIRECT)
     if gui:
@@ -887,9 +918,12 @@ def _print_banner(cfg):
               f"dk={math.degrees(dk):+.2f} [{tag}]")
 
 
-def run_stand(cfg, gui=True):
+def run_stand(cfg, gui=True, settle_s=0.5):
     robot_id, joint_map = _connect_and_setup(cfg, gui)
     _print_banner(cfg)
+    if settle_s > 0:
+        print(f"\n[settle] holding stance for {settle_s:.2f}s before idle loop")
+        _settle(robot_id, joint_map, cfg, settle_s)
     print("\nStanding - Ctrl+C to exit.")
     try:
         while p.isConnected():
@@ -903,12 +937,25 @@ def run_stand(cfg, gui=True):
             p.disconnect()
 
 
-def run_gait(cfg, gait_name, gui=True):
+def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
     if gait_name not in GAITS:
         raise ValueError(f"Unknown gait: {gait_name}")
     gait = GAITS[gait_name]
+
+    # Gait-aware spawn height: worst foot Z across a full period, not just
+    # neutral_foot. Prevents the body from sinking into the floor when a
+    # gait's stance-phase Z differs from the neutral Z used at build time.
+    gait_depth_m = _body_height_for_gait(cfg, gait, gait["period"])
+    if gait_depth_m > cfg.body_height:
+        print(f"[body_height] lifting spawn from {cfg.body_height*1000:.1f} mm "
+              f"to {gait_depth_m*1000:.1f} mm for {gait_name} trajectory")
+        cfg.body_height = gait_depth_m
+
     robot_id, joint_map = _connect_and_setup(cfg, gui)
     _print_banner(cfg)
+    if settle_s > 0:
+        print(f"\n[settle] holding stance for {settle_s:.2f}s before gait")
+        _settle(robot_id, joint_map, cfg, settle_s)
     print(f"\n{gait['label']}: period={gait['period']:.2f}s  "
           f"len={gait['step_length']*1000:.0f}mm  h={gait['step_height']*1000:.0f}mm  "
           f"duty={gait['duty']:.2f}")
@@ -957,6 +1004,10 @@ def main():
     parser.add_argument("--walk", action="store_true")
     parser.add_argument("--trot", action="store_true")
     parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--settle", type=float, default=0.5,
+                        help="Seconds to hold stance before the main loop "
+                             "begins (lets gravity resolve initial overlap). "
+                             "Default 0.5.")
     args = parser.parse_args()
 
     if args.urdf == "v1":
@@ -966,11 +1017,11 @@ def main():
 
     gui = not args.headless
     if args.walk:
-        run_gait(cfg, "walk", gui=gui)
+        run_gait(cfg, "walk", gui=gui, settle_s=args.settle)
     elif args.trot:
-        run_gait(cfg, "trot", gui=gui)
+        run_gait(cfg, "trot", gui=gui, settle_s=args.settle)
     else:
-        run_stand(cfg, gui=gui)
+        run_stand(cfg, gui=gui, settle_s=args.settle)
 
 
 if __name__ == "__main__":
