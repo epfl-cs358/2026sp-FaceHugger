@@ -376,30 +376,20 @@ def generate(export: dict, cfg: dict, out_path: Path):
             joint_defs[i - 1]["origin_local_mm"],
         )
 
-    # --- servo offsets (computed from the template leg, reused across 4 legs) ---
-    # Each leg shares the same rpy_z_deg, so the servo's position in its host
-    # URDF frame is identical across legs; we compute it once from the source
-    # leg's world-frame numbers.
-    shoulder_pt_world = joint_defs[0]["origin_world_mm"]
-    hip_pt_world      = joint_defs[1]["origin_world_mm"]
-    knee_pt_world     = joint_defs[2]["origin_world_mm"]
-
-    shoulder_servo_world = _servo_world_by_role(export, "shoulder")
-    hip_servo_world      = _servo_world_by_role(export, "hip")
-    knee_servo_world     = _servo_world_by_role(export, "knee")
-
-    # Offset of the shoulder servo relative to the template leg's shoulder
-    # point — added to each leg's LegMountXX to place that leg's shoulder
-    # servo on base_link. (None if no assignment — skip servo visuals.)
-    if shoulder_servo_world is not None:
-        shoulder_servo_offset = sub(shoulder_servo_world, shoulder_pt_world)
-    else:
-        shoulder_servo_offset = None
-
-    # Hip and knee servos sit on link2 / link3 at fixed offsets from the
-    # respective joint points (= the child link's URDF frame origin).
-    hip_servo_in_link2 = sub(hip_servo_world, hip_pt_world) if hip_servo_world else None
-    knee_servo_in_link3 = sub(knee_servo_world, knee_pt_world) if knee_servo_world else None
+    # --- servo placement ---
+    # servo.stl is re-origined in the Fusion exporter to `ServoMountPoint` on
+    # the shaft-exit/mounting-face plane, which coincides with each servo's
+    # joint rotation axis by CAD construction. So every servo instance's
+    # mesh local (0,0,0) lands on the joint axis when placed at its joint
+    # world position. No per-instance offset calculation needed.
+    #
+    # Placements that result:
+    #   shoulder servo (x4 on base_link): visual xyz = LegMountXX world
+    #   hip servo (x1 per leg on link2):  visual xyz = (0,0,0) in link2 frame
+    #   knee servo (x1 per leg on link3): visual xyz = (0,0,0) in link3 frame
+    has_shoulder_servo = _servo_world_by_role(export, "shoulder") is not None
+    has_hip_servo      = _servo_world_by_role(export, "hip")      is not None
+    has_knee_servo     = _servo_world_by_role(export, "knee")     is not None
 
     servo_mesh_name = None
     for mesh_name, entry in (export.get("mesh_files") or {}).items():
@@ -413,16 +403,18 @@ def generate(export: dict, cfg: dict, out_path: Path):
     base_occ = find_occurrence(occs, "FlexibleSkeleton:1")
     mass, com, inertia = get_physics(base_occ, fallback_mass=0.5)
 
-    # Shoulder-servo visuals: 4 copies on base_link, one per leg, at each
-    # LegMountXX + the servo's fixed offset from the shoulder joint point.
+    # Shoulder-servo visuals: 4 copies on base_link, one per leg, placed at
+    # that leg's LegMountXX world position. Thanks to servo.stl being
+    # re-origined to ServoMountPoint (on the shaft axis at the mounting
+    # face), the mesh's local (0,0,0) lands directly on the shoulder joint
+    # — no additional offset.
     base_extra_visuals = []
-    if shoulder_servo_offset is not None and servo_mesh_name:
+    if has_shoulder_servo and servo_mesh_name:
         for leg in cfg["legs"]:
             mount_mm = find_point_in_tree(occs, leg["mount_point"])
             if not mount_mm:
                 continue
-            servo_pos = [mount_mm[i] + shoulder_servo_offset[i] for i in range(3)]
-            base_extra_visuals.append((servo_mesh_name, servo_pos))
+            base_extra_visuals.append((servo_mesh_name, list(mount_mm)))
 
     urdf.link(
         base_cfg["name"], base_cfg["mesh"], mesh_dir, mass, com, inertia,
@@ -469,10 +461,26 @@ def generate(export: dict, cfg: dict, out_path: Path):
         if not mount_mm:
             raise ValueError(f"Mount point not found in export: {mount_key}")
 
-        urdf.comment(f"LEG: {leg_id.upper()}  (rpy_z_deg={rpy_z:+.1f})")
+        # Per-leg shoulder limits: quadrant centered on shoulder_neutral_deg
+        # with ±90° swing. Falls back to the template's shared limits if the
+        # leg entry didn't specify a neutral.
+        sj = joint_defs[0]
+        neutral_deg = leg.get("shoulder_neutral_deg")
+        if neutral_deg is not None:
+            sj_lower = neutral_deg - 90
+            sj_upper = neutral_deg + 90
+        else:
+            sj_lower, sj_upper = sj["limits_deg"]
+
+        urdf.comment(
+            f"LEG: {leg_id.upper()}  (rpy_z_deg={rpy_z:+.1f}, "
+            f"shoulder neutral={neutral_deg:+.1f}°, "
+            f"limits=[{sj_lower:+.1f}°, {sj_upper:+.1f}°])"
+            if neutral_deg is not None
+            else f"LEG: {leg_id.upper()}  (rpy_z_deg={rpy_z:+.1f})"
+        )
 
         # Shoulder joint: origin = mount point in base_link frame (world).
-        sj = joint_defs[0]
         urdf.joint(
             name=f"{leg_id}_{sj['name']}_joint",
             jtype="revolute",
@@ -480,8 +488,8 @@ def generate(export: dict, cfg: dict, out_path: Path):
             child=f"{leg_id}_link1",
             origin_mm=mount_mm,
             axis=sj["axis_dir"],
-            lower_deg=sj["limits_deg"][0],
-            upper_deg=sj["limits_deg"][1],
+            lower_deg=sj_lower,
+            upper_deg=sj_upper,
             effort=effort,
             velocity=vel,
             rpy_z_deg=rpy_z,
@@ -505,17 +513,20 @@ def generate(export: dict, cfg: dict, out_path: Path):
         # Links for this leg. Each link's mesh is re-origined at export time
         # so URDF visual/collision <origin>=(0,0,0). Inertial CoM gets shifted
         # by the same origin_shift so it lands in the URDF link frame.
-        # link2 and link3 gain an extra_visual for their attached servo.
+        # link2 and link3 gain an extra_visual for their attached servo. The
+        # hip servo's ServoMountPoint coincides with link2's URDF frame
+        # origin (= hip joint), so visual xyz = (0,0,0); same for knee on
+        # link3.
         per_link_extra = {
             "link1": [],
             "link2": (
-                [(servo_mesh_name, hip_servo_in_link2)]
-                if hip_servo_in_link2 is not None and servo_mesh_name
+                [(servo_mesh_name, [0.0, 0.0, 0.0])]
+                if has_hip_servo and servo_mesh_name
                 else []
             ),
             "link3": (
-                [(servo_mesh_name, knee_servo_in_link3)]
-                if knee_servo_in_link3 is not None and servo_mesh_name
+                [(servo_mesh_name, [0.0, 0.0, 0.0])]
+                if has_knee_servo and servo_mesh_name
                 else []
             ),
         }

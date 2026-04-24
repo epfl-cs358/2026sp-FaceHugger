@@ -62,34 +62,25 @@ TIMESTEP = 1.0 / 240.0
 # The numbers themselves match the proposal torque widget; only signs differ.
 STANCE_DEG_V1 = {"shoulder": 0.0, "hip":  40.0, "knee": -60.0}
 
-# V2: all four legs share hip/knee (the yaml now uses rpy_z_deg = 90 for every
-# leg so R_L1 = 0 everywhere — no per-leg frame rotation, identical joint
-# frames across legs). Left vs right is differentiated by the SHOULDER stance.
-# With yaml rpy_z_deg = 90, Link1 rests at world +90° about Z; adding a shoulder
-# stance of 180° gives total world rotation -90° (chain extends body +X), while
-# stance 0° keeps the chain extending body -X. Right-side mounts (+X) therefore
-# want the 180° stance to reach OUTWARD (body +X), and left-side mounts (-X)
-# want the 0° stance to reach outward (body -X).
-# (Requires the shoulder joint limit in the yaml to span at least ±135°.)
+# V2: hip/knee stance is shared across legs (R_L1 = I because yaml rpy_z_deg = 90
+# for all legs). Shoulder stance is per-leg and lives in the yaml as each leg's
+# `shoulder_neutral_deg` — the middle of its quadrant's ±90° range. Standing
+# pose = each leg at its neutral shoulder, so the legs splay into their four
+# corners naturally.
 STANCE_DEG_V2 = {
-    "shoulder_right": 180.0,   # fr, br — extend outward to body +X
-    "shoulder_left":    0.0,   # fl, bl — extend outward to body -X
-    "hip":            -40.0,
-    "knee":           -60.0,
+    "hip":  -40.0,
+    "knee": -60.0,
 }
 
 
-def _leg_side(leg_id):
-    """Return 'right' or 'left' from the 2-char leg id (fl/fr/bl/br)."""
-    return "right" if leg_id[1] == "r" else "left"
-
-
-def _stance_v2_for(leg_id):
-    """Resolve the shared STANCE_DEG_V2 into a per-leg {shoulder/hip/knee} dict.
-    Sides differ only in the shoulder angle."""
-    side = _leg_side(leg_id)
+def _stance_v2_for(leg_id, legs_cfg):
+    """Resolve the per-leg standing stance {shoulder/hip/knee} dict.
+    Shoulder comes from the yaml's `shoulder_neutral_deg`; hip/knee are
+    shared across all legs via STANCE_DEG_V2."""
+    entry = next(l for l in legs_cfg if l["id"] == leg_id)
+    shoulder_deg = entry.get("shoulder_neutral_deg", 0.0)
     return {
-        "shoulder": STANCE_DEG_V2[f"shoulder_{side}"],
+        "shoulder": shoulder_deg,
         "hip":      STANCE_DEG_V2["hip"],
         "knee":     STANCE_DEG_V2["knee"],
     }
@@ -143,14 +134,13 @@ def _parse_leg_points_from_urdf(urdf_path):
     text = open(urdf_path).read()
     pts = {}
     # Each metadata line has the shape:
-    #   <Name> [any descriptor] : <x> <y> <z>
-    # or
-    #   <Name> : <x> <y> <z>
-    # Accept anything between the name and the first number; match the first
-    # three whitespace-separated numbers (possibly signed decimals).
+    #   <Name> [optional descriptor that may contain digits, like "link3"]: <x> <y> <z>
+    # Match non-greedily up to the first colon on the line, then the three
+    # whitespace-separated signed-decimal numbers. The earlier [^0-9\-]*
+    # bridge broke on descriptors containing digits (e.g. "link3 frame").
     pattern = re.compile(
         r"(BodyToLink1Point|Link1ToLink2Point|Link2ToLink3Point|FootTip)"
-        r"[^0-9\-]*"
+        r"[^\n]*?:\s*"
         r"(-?\d+\.?\d*)\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*)"
     )
     for m in pattern.finditer(text):
@@ -582,13 +572,13 @@ def build_config_v2():
         dst_angle = math.atan2(l1_in_link1[1], l1_in_link1[0])
         return _wrap_pi(dst_angle - src_angle)
 
-    # Per-leg stance: hip/knee shared; shoulder differs by side. With the yaml
-    # now using rpy_z_deg=90 for every leg, all four legs have R_L1=0 and use
-    # the same hip/knee stance signs. Orientation around the body comes from
-    # the shoulder joint angle (0° for right, 180° for left).
+    # Per-leg stance: hip/knee shared; shoulder is each leg's
+    # `shoulder_neutral_deg` from the yaml (the center of its corner's
+    # ±90° quadrant).
     stance_per_leg = {
         leg["id"]: {
-            k: math.radians(v) for k, v in _stance_v2_for(leg["id"]).items()
+            k: math.radians(v)
+            for k, v in _stance_v2_for(leg["id"], yaml_cfg["legs"]).items()
         }
         for leg in yaml_cfg["legs"]
     }

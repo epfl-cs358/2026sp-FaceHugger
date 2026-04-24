@@ -84,41 +84,48 @@ leg_template:
 
 # ---------------------------------------------------------------------------
 # 4 leg instances.
+#
 # mount_point: name of a construction point on FlexibleSkeleton:1 that
 #   defines where this leg's shoulder joint sits in body frame.
-# rpy_z_deg: rotation around Z applied to the shoulder joint frame.
-#   0   = same orientation as the template leg (FR/BL)
-#   180 = mirrored (FL/BR)
+#
+# rpy_z_deg: rotation around Z applied to the shoulder joint frame. Kept
+#   uniformly at 90° to match the CAD's FaceHuggerLegAssembly world Z
+#   rotation, so R_L1 = R_z(-rpy_z_deg) @ R_lal = 0 for every leg. That
+#   keeps URDF joint offsets and meshes in a single frame, no per-leg
+#   rotation fudges.
+#
+# shoulder_neutral_deg: the leg's resting shoulder angle (standing pose).
+#   Each corner's quadrant:
+#     FR ( +X/+Y corner): neutral  +45°
+#     FL ( -X/+Y corner): neutral +135°
+#     BR ( +X/-Y corner): neutral  -45°   (= 315°)
+#     BL ( -X/-Y corner): neutral -135°   (= 225°)
+#   The generator derives the shoulder joint limits as
+#   [neutral - 90°, neutral + 90°] so each leg can only swing within its
+#   own quadrant — physically sensible (the leg can't cross to the
+#   opposite side of the body) and gives simulate_v2 a sane default
+#   standing pose (stance = neutral).
 # ---------------------------------------------------------------------------
 legs:
-  # All four legs use rpy_z_deg = 90 — the CAD's FaceHuggerLegAssembly has
-  # a +90° LAL rotation baked in via its world transform, and matching that
-  # value here makes R_L1 = 0 for every leg (generator applies R_L1 =
-  # R_z(-rpy_z_deg) @ R_lal, which = 0 when rpy_z_deg == lal_angle). With
-  # R_L1 = 0, no per-leg frame rotation is applied to joint offsets, axes,
-  # or meshes; all four legs share identical joint frames and can use the
-  # SAME hip/knee stance signs.
-  #
-  # To orient the four legs around the body, we differentiate them via the
-  # shoulder JOINT ANGLE at stance time (simulate_v2.STANCE_DEG_V2), not the
-  # static rpy_z here. Right legs (fr, br) use shoulder = 0°, left legs
-  # (fl, bl) use shoulder = 180°. This requires the shoulder joint limit to
-  # span at least [-135, 135] (widened above).
   - id: fr
     mount_point: LegMountFR
-    rpy_z_deg: 90
+    rpy_z_deg: -90
+    shoulder_neutral_deg: 45      # +X/+Y quadrant
 
   - id: br
     mount_point: LegMountBR
-    rpy_z_deg: 90
+    rpy_z_deg: -90
+    shoulder_neutral_deg: -45     # +X/-Y quadrant (315°)
 
   - id: fl
     mount_point: LegMountFL
-    rpy_z_deg: 90
+    rpy_z_deg: -90
+    shoulder_neutral_deg: 135     # -X/+Y quadrant
 
   - id: bl
     mount_point: LegMountBL
-    rpy_z_deg: 90
+    rpy_z_deg: -90
+    shoulder_neutral_deg: -135    # -X/-Y quadrant (225°)
 
 # ---------------------------------------------------------------------------
 # Servo physical properties (used for inertial blocks if physics export
