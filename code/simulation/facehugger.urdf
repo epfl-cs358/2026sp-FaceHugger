@@ -11,29 +11,59 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/QuadrupedBody.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/QuadrupedBody.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="0.055401 0.036101 -0.004800" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="0.055401 -0.056343 -0.004800" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.055401 0.036101 -0.004800" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.055401 -0.056343 -0.004800" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/QuadrupedBody.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/QuadrupedBody.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
-  <!-- LEG: FR -->
+  <!-- LEG ASSEMBLY METADATA (mm, leg-assembly-local frame)
+         BodyToLink1Point : 11.970 -0.000 -4.200
+         Link1ToLink2Point: 34.565 50.920 10.246
+         Link2ToLink3Point: 34.570 145.620 10.246
+         FootTip (leg_lower.stl max +Y centroid, in link3 frame): -17.819 88.140 0.118 -->
+
+  <!-- LEG: FR  (rpy_z_deg=+90.0) -->
   <joint name="fr_shoulder_joint" type="revolute">
     <parent link="base_link"/>
     <child link="fr_link1"/>
-    <origin xyz="0.055401 0.046222 -0.009000" rpy="0 0 0.0"/>
+    <origin xyz="0.055401 0.046222 -0.009000" rpy="0 0 1.570796"/>
     <axis xyz="0.0 0.0 1.0"/>
-    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+    <limit lower="-3.141593" upper="3.141593" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="fr_hip_joint" type="revolute">
     <parent link="fr_link1"/>
     <child link="fr_link2"/>
-    <origin xyz="0.022595 0.050920 0.010446" rpy="0 0 0.0"/>
+    <origin xyz="0.022595 0.050920 0.014446" rpy="0 0 0.0"/>
     <axis xyz="1.0 0.0 -0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
@@ -46,154 +76,86 @@
   </joint>
   <link name="fr_link1">
     <inertial>
-      <origin xyz="0.009973 0.033774 0.023955" rpy="0 0 0"/>
+      <origin xyz="-0.001997 0.033774 0.028155" rpy="0 0 0"/>
       <mass value="0.144017"/>
       <inertia ixx="0.00038463" ixy="-3.8915e-05" ixz="-3.8665e-05" iyy="0.000166889" iyz="-9.603e-05" izz="0.000273574"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
   <link name="fr_link2">
     <inertial>
-      <origin xyz="0.021566 0.098294 0.010073" rpy="0 0 0"/>
+      <origin xyz="-0.012999 0.047374 -0.000173" rpy="0 0 0"/>
       <mass value="0.173381"/>
       <inertia ixx="0.001898729" ixy="-0.000367526" ixz="-3.717e-05" iyy="0.000183013" iyz="-0.000171669" izz="0.002034679"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 -0.042044 0.010120" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
   <link name="fr_link3">
     <inertial>
-      <origin xyz="0.008288 0.166816 0.010246" rpy="0 0 0"/>
+      <origin xyz="-0.026282 0.021196 0.000000" rpy="0 0 0"/>
       <mass value="0.111653"/>
       <inertia ixx="0.003205754" ixy="-0.000166056" ixz="-9.481e-06" iyy="4.2563e-05" iyz="-0.000190829" izz="0.00320303"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.010120 -0.042050 0.000000" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
-  <!-- LEG: FL -->
-  <joint name="fl_shoulder_joint" type="revolute">
-    <parent link="base_link"/>
-    <child link="fl_link1"/>
-    <origin xyz="-0.055401 0.046222 -0.009000" rpy="0 0 3.141593"/>
-    <axis xyz="0.0 0.0 1.0"/>
-    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
-  </joint>
-  <joint name="fl_hip_joint" type="revolute">
-    <parent link="fl_link1"/>
-    <child link="fl_link2"/>
-    <origin xyz="0.022595 0.050920 0.010446" rpy="0 0 0.0"/>
-    <axis xyz="1.0 0.0 -0.0"/>
-    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
-  </joint>
-  <joint name="fl_knee_joint" type="revolute">
-    <parent link="fl_link2"/>
-    <child link="fl_link3"/>
-    <origin xyz="0.000005 0.094700 0.000000" rpy="0 0 0.0"/>
-    <axis xyz="1.0 0.0 -0.0"/>
-    <limit lower="-2.356194" upper="0.523599" effort="2.94" velocity="5.0"/>
-  </joint>
-  <link name="fl_link1">
-    <inertial>
-      <origin xyz="0.009973 0.033774 0.023955" rpy="0 0 0"/>
-      <mass value="0.144017"/>
-      <inertia ixx="0.00038463" ixy="-3.8915e-05" ixz="-3.8665e-05" iyy="0.000166889" iyz="-9.603e-05" izz="0.000273574"/>
-    </inertial>
-    <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </visual>
-    <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-  <link name="fl_link2">
-    <inertial>
-      <origin xyz="0.021566 0.098294 0.010073" rpy="0 0 0"/>
-      <mass value="0.173381"/>
-      <inertia ixx="0.001898729" ixy="-0.000367526" ixz="-3.717e-05" iyy="0.000183013" iyz="-0.000171669" izz="0.002034679"/>
-    </inertial>
-    <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </visual>
-    <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-  <link name="fl_link3">
-    <inertial>
-      <origin xyz="0.008288 0.166816 0.010246" rpy="0 0 0"/>
-      <mass value="0.111653"/>
-      <inertia ixx="0.003205754" ixy="-0.000166056" ixz="-9.481e-06" iyy="4.2563e-05" iyz="-0.000190829" izz="0.00320303"/>
-    </inertial>
-    <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </visual>
-    <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry>
-        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </collision>
-  </link>
-
-  <!-- LEG: BR -->
+  <!-- LEG: BR  (rpy_z_deg=+90.0) -->
   <joint name="br_shoulder_joint" type="revolute">
     <parent link="base_link"/>
     <child link="br_link1"/>
-    <origin xyz="0.055401 -0.046222 -0.009000" rpy="0 0 3.141593"/>
+    <origin xyz="0.055401 -0.046222 -0.009000" rpy="0 0 1.570796"/>
     <axis xyz="0.0 0.0 1.0"/>
-    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+    <limit lower="-3.141593" upper="3.141593" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="br_hip_joint" type="revolute">
     <parent link="br_link1"/>
     <child link="br_link2"/>
-    <origin xyz="0.022595 0.050920 0.010446" rpy="0 0 0.0"/>
+    <origin xyz="0.022595 0.050920 0.014446" rpy="0 0 0.0"/>
     <axis xyz="1.0 0.0 -0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
@@ -206,74 +168,178 @@
   </joint>
   <link name="br_link1">
     <inertial>
-      <origin xyz="0.009973 0.033774 0.023955" rpy="0 0 0"/>
+      <origin xyz="-0.001997 0.033774 0.028155" rpy="0 0 0"/>
       <mass value="0.144017"/>
       <inertia ixx="0.00038463" ixy="-3.8915e-05" ixz="-3.8665e-05" iyy="0.000166889" iyz="-9.603e-05" izz="0.000273574"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
   <link name="br_link2">
     <inertial>
-      <origin xyz="0.021566 0.098294 0.010073" rpy="0 0 0"/>
+      <origin xyz="-0.012999 0.047374 -0.000173" rpy="0 0 0"/>
       <mass value="0.173381"/>
       <inertia ixx="0.001898729" ixy="-0.000367526" ixz="-3.717e-05" iyy="0.000183013" iyz="-0.000171669" izz="0.002034679"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 -0.042044 0.010120" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
   <link name="br_link3">
     <inertial>
-      <origin xyz="0.008288 0.166816 0.010246" rpy="0 0 0"/>
+      <origin xyz="-0.026282 0.021196 0.000000" rpy="0 0 0"/>
       <mass value="0.111653"/>
       <inertia ixx="0.003205754" ixy="-0.000166056" ixz="-9.481e-06" iyy="4.2563e-05" iyz="-0.000190829" izz="0.00320303"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.010120 -0.042050 0.000000" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
 
-  <!-- LEG: BL -->
+  <!-- LEG: FL  (rpy_z_deg=+90.0) -->
+  <joint name="fl_shoulder_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="fl_link1"/>
+    <origin xyz="-0.055401 0.046222 -0.009000" rpy="0 0 1.570796"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit lower="-3.141593" upper="3.141593" effort="2.94" velocity="5.0"/>
+  </joint>
+  <joint name="fl_hip_joint" type="revolute">
+    <parent link="fl_link1"/>
+    <child link="fl_link2"/>
+    <origin xyz="0.022595 0.050920 0.014446" rpy="0 0 0.0"/>
+    <axis xyz="1.0 0.0 -0.0"/>
+    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+  </joint>
+  <joint name="fl_knee_joint" type="revolute">
+    <parent link="fl_link2"/>
+    <child link="fl_link3"/>
+    <origin xyz="0.000005 0.094700 0.000000" rpy="0 0 0.0"/>
+    <axis xyz="1.0 0.0 -0.0"/>
+    <limit lower="-2.356194" upper="0.523599" effort="2.94" velocity="5.0"/>
+  </joint>
+  <link name="fl_link1">
+    <inertial>
+      <origin xyz="-0.001997 0.033774 0.028155" rpy="0 0 0"/>
+      <mass value="0.144017"/>
+      <inertia ixx="0.00038463" ixy="-3.8915e-05" ixz="-3.8665e-05" iyy="0.000166889" iyz="-9.603e-05" izz="0.000273574"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="fl_link2">
+    <inertial>
+      <origin xyz="-0.012999 0.047374 -0.000173" rpy="0 0 0"/>
+      <mass value="0.173381"/>
+      <inertia ixx="0.001898729" ixy="-0.000367526" ixz="-3.717e-05" iyy="0.000183013" iyz="-0.000171669" izz="0.002034679"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 -0.042044 0.010120" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="fl_link3">
+    <inertial>
+      <origin xyz="-0.026282 0.021196 0.000000" rpy="0 0 0"/>
+      <mass value="0.111653"/>
+      <inertia ixx="0.003205754" ixy="-0.000166056" ixz="-9.481e-06" iyy="4.2563e-05" iyz="-0.000190829" izz="0.00320303"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.010120 -0.042050 0.000000" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- LEG: BL  (rpy_z_deg=+90.0) -->
   <joint name="bl_shoulder_joint" type="revolute">
     <parent link="base_link"/>
     <child link="bl_link1"/>
-    <origin xyz="-0.055401 -0.046222 -0.009000" rpy="0 0 0.0"/>
+    <origin xyz="-0.055401 -0.046222 -0.009000" rpy="0 0 1.570796"/>
     <axis xyz="0.0 0.0 1.0"/>
-    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+    <limit lower="-3.141593" upper="3.141593" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="bl_hip_joint" type="revolute">
     <parent link="bl_link1"/>
     <child link="bl_link2"/>
-    <origin xyz="0.022595 0.050920 0.010446" rpy="0 0 0.0"/>
+    <origin xyz="0.022595 0.050920 0.014446" rpy="0 0 0.0"/>
     <axis xyz="1.0 0.0 -0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
@@ -286,58 +352,70 @@
   </joint>
   <link name="bl_link1">
     <inertial>
-      <origin xyz="0.009973 0.033774 0.023955" rpy="0 0 0"/>
+      <origin xyz="-0.001997 0.033774 0.028155" rpy="0 0 0"/>
       <mass value="0.144017"/>
       <inertia ixx="0.00038463" ixy="-3.8915e-05" ixz="-3.8665e-05" iyy="0.000166889" iyz="-9.603e-05" izz="0.000273574"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_shoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
   <link name="bl_link2">
     <inertial>
-      <origin xyz="0.021566 0.098294 0.010073" rpy="0 0 0"/>
+      <origin xyz="-0.012999 0.047374 -0.000173" rpy="0 0 0"/>
       <mass value="0.173381"/>
       <inertia ixx="0.001898729" ixy="-0.000367526" ixz="-3.717e-05" iyy="0.000183013" iyz="-0.000171669" izz="0.002034679"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 -0.042044 0.010120" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
   <link name="bl_link3">
     <inertial>
-      <origin xyz="0.008288 0.166816 0.010246" rpy="0 0 0"/>
+      <origin xyz="-0.026282 0.021196 0.000000" rpy="0 0 0"/>
       <mass value="0.111653"/>
       <inertia ixx="0.003205754" ixy="-0.000166056" ixz="-9.481e-06" iyy="4.2563e-05" iyz="-0.000190829" izz="0.00320303"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.010120 -0.042050 0.000000" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="exported_meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
