@@ -35,7 +35,6 @@ Targets Blender 3.3 LTS specifically — uses `bpy.ops.import_mesh.stl`. On
 
 import argparse
 import json
-import math
 import sys
 from pathlib import Path
 
@@ -408,33 +407,62 @@ def visit_root(export, ctx):
 # ---------------------------------------------------------------------------
 
 
+def _legmount_rot_3x3(export, occ_name):
+    """Return the top-left 3x3 of world_transform_rm_cm for LegMountXX:1,
+    or None if not found. Walked via the existing iter_occ helper."""
+    for occ, _ in iter_occ(export.get("occurrences", [])):
+        if occ.get("name") == occ_name:
+            rm = occ.get("world_transform_rm_cm")
+            if rm:
+                return [[rm[i][0], rm[i][1], rm[i][2]] for i in range(3)]
+            return None
+    return None
+
+
+def _mat3_mul(a, b):
+    return [[sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
+
+
+def _mat3_transpose(a):
+    return [[a[j][i] for j in range(3)] for i in range(3)]
+
+
+def _mat3_to_blender_4x4(r):
+    return Matrix((
+        (r[0][0], r[0][1], r[0][2], 0.0),
+        (r[1][0], r[1][1], r[1][2], 0.0),
+        (r[2][0], r[2][1], r[2][2], 0.0),
+        (0.0,     0.0,     0.0,     1.0),
+    ))
+
+
 def instance_four_legs(export, collections, ctx):
     """After the single source leg is loaded, duplicate it at the 4 chassis
     corners as independent objects (with deep-copied mesh data) so each
     leg can be rigged and animated independently.
 
-    FL + BL (same body-side as source FL): translation-only duplication —
-        the leg keeps its source orientation, just moved to the target
-        LegMountXX. Same local frame as the source, rigging-friendly.
+    Per-corner rotation comes from the CAD: each LegMountXX:1 occurrence
+    carries its own `world_transform_rm_cm`, and the relative rotation
+    from FL (the source corner) to corner N is
 
-    FR + BR (opposite body-side): same translation PLUS a 180° rotation
-        around Z centered on each corner's LegMountXX point. The pivot
-        sits on the shoulder rotation axis (LegMountXX = BodyToLink1Point
-        are colocated on the axis), so the whole leg — including the
-        shoulder servo — swings to face the opposite body-side. Every
-        duplicated object gets the rotation: link1/link2/link3 + all
-        three servos.
+        R_rel_N = R_LegMountN @ R_LegMountFL⁻¹
 
-    Matrix composition for each duplicate at corner N:
-        M_new = T(mount_N) @ Rz(Δ) @ T(-mount_FL) @ M_src
-      where Δ = 180° for FR/BR, 0° for BL (translation-only).
+    With the CAD's current bracket orientations this evaluates to:
+        FR → Ry(180°)     BR → Rz(180°)     BL → Rx(180°)
+    so hardcoding any of these is fragile — pull them from the JSON.
+
+    Each corner's leg is parented to a root Empty placed at LegMountXX
+    with R_rel baked into its matrix_world. Leg objects keep their world
+    positions (via matrix_parent_inverse), so nothing moves visually, but
+    selecting the Empty and rotating it pivots the whole leg around the
+    shoulder axis — the natural interaction for posing / rigging.
 
     Collection tree:
       FusionExport/Legs/
-        FL/      source leg (Link1/2/3 + 3 servos), kept in place
-        BL/      translation-only duplicate
-        FR/      translation + 180° Z rotation (pivot = LegMountFR)
-        BR/      translation + 180° Z rotation (pivot = LegMountBR)
+        FL/  {FL_root, Link1/2/3 + 3 servos}   (source leg, R_rel = I)
+        FR/  {FR_root, duplicated leg objects} (R_rel = Ry(180°))
+        BR/  {BR_root, duplicated leg objects} (R_rel = Rz(180°))
+        BL/  {BL_root, duplicated leg objects} (R_rel = Rx(180°))
     """
     # 1. Pull the 4 LegMountXX points from FlexibleSkeleton:1's construction points.
     mounts = {}
@@ -479,19 +507,51 @@ def instance_four_legs(export, collections, ctx):
         meshes_coll.objects.unlink(obj)
         corner_colls["FL"].objects.link(obj)
 
-    # 4. Duplicate the source leg for FR/BR/BL. FR/BR are rotated 180°
-    # around Z centered on their own LegMountXX point; BL is translation-
-    # only. Deep-copy mesh data so rig weights on each leg are independent.
+    # 4. Derive per-corner rotations from the LegMountXX:1 occurrences'
+    # world_transform_rm_cm. rot_by_corner[N] = R_N @ R_FL⁻¹ (orthonormal
+    # → transpose for the inverse).
+    r_fl = _legmount_rot_3x3(export, "LegMountFL:1")
+    if r_fl is None:
+        print("[instance_legs] LegMountFL:1 rotation missing from export; skipping")
+        return
+    r_fl_inv = _mat3_transpose(r_fl)
+
+    rot_by_corner = {"FL": Matrix.Identity(4)}
+    for corner in ("FR", "BR", "BL"):
+        r_n = _legmount_rot_3x3(export, f"LegMount{corner}:1")
+        if r_n is None:
+            print(f"[instance_legs] LegMount{corner}:1 rotation missing; using identity")
+            rot_by_corner[corner] = Matrix.Identity(4)
+            continue
+        rot_by_corner[corner] = _mat3_to_blender_4x4(_mat3_mul(r_n, r_fl_inv))
+
+    # 5. Create a root Empty per corner at LegMountXX, carrying the per-corner
+    # rotation. FL's root is placed but the source leg already lives in FL's
+    # sub-collection at its source poses, so we parent the children without
+    # moving them (matrix_parent_inverse).
     fl_mount_v = Vector(mounts["FL"])
-    rot_by_corner = {
-        "FR": Matrix.Rotation(math.pi, 4, "Z"),
-        "BR": Matrix.Rotation(math.pi, 4, "Z"),
-        "BL": Matrix.Identity(4),
-    }
+    roots = {}
+    for corner in ("FL", "FR", "BR", "BL"):
+        m_v = Vector(mounts[corner])
+        root = bpy.data.objects.new(f"{corner}_root", None)  # Empty
+        root.empty_display_type = "ARROWS"
+        root.empty_display_size = 20.0  # mm scene; 20 mm is readable without dominating
+        root.matrix_world = Matrix.Translation(m_v) @ rot_by_corner[corner]
+        corner_colls[corner].objects.link(root)
+        roots[corner] = root
+
+    # FL children: already at their source poses — parent without moving them.
+    for obj in source_objs:
+        obj.parent = roots["FL"]
+        obj.matrix_parent_inverse = roots["FL"].matrix_world.inverted()
+
+    # 6. Duplicate source leg for FR/BR/BL. Each duplicate's world matrix
+    # is `T(mount_N) @ rot_by_corner[N] @ T(-mount_FL) @ M_src`, then we
+    # parent to the corner's root Empty without altering world placement.
+    # Deep-copy mesh data so rig weights on each leg stay independent.
     n_dup_per_leg = 0
     for corner in ("FR", "BR", "BL"):
         m_v = Vector(mounts[corner])
-        # M_new = T(mount_N) @ R @ T(-mount_FL) @ M_src
         leg_xform = (
             Matrix.Translation(m_v)
             @ rot_by_corner[corner]
@@ -501,21 +561,39 @@ def instance_four_legs(export, collections, ctx):
         for src in source_objs:
             dup = src.copy()
             if dup.data is not None:
-                dup.data = src.data.copy()    # independent mesh for per-leg rigging
-            # Rename: strip the "FL_" prefix, prepend the target corner prefix.
+                dup.data = src.data.copy()
             if src.name.startswith(source_prefix):
                 dup.name = corner + "_" + src.name[len(source_prefix):]
             else:
                 dup.name = f"{corner}_{src.name}"
+            dup.parent = None
             dup.matrix_world = leg_xform @ src.matrix_world
+            dup.parent = roots[corner]
+            dup.matrix_parent_inverse = roots[corner].matrix_world.inverted()
             corner_colls[corner].objects.link(dup)
             count += 1
         n_dup_per_leg = count
 
+    # Summarize the derived relative rotations for debugging.
+    def _classify(mat4):
+        """Short human tag for a 4x4 whose top-left 3x3 is near identity
+        or ±180° around a principal axis. Falls back to showing the matrix."""
+        r = [[round(mat4[i][j], 3) for j in range(3)] for i in range(3)]
+        tags = {
+            ((1,0,0),(0,1,0),(0,0,1)): "I",
+            ((1,0,0),(0,-1,0),(0,0,-1)): "Rx(180°)",
+            ((-1,0,0),(0,1,0),(0,0,-1)): "Ry(180°)",
+            ((-1,0,0),(0,-1,0),(0,0,1)): "Rz(180°)",
+        }
+        key = tuple(tuple(int(v) if abs(v - round(v)) < 1e-3 else v for v in row) for row in r)
+        return tags.get(key, str(r))
+
+    rels = ", ".join(f"{c}={_classify(rot_by_corner[c])}" for c in ("FR", "BR", "BL"))
     n_src = len(source_objs)
     print(f"[instance_legs] Legs/FL has {n_src} source objects; "
-          f"duplicated to {n_dup_per_leg} objects each in FR/BR/BL "
-          f"(FR/BR rotated 180° around Z about their LegMount)")
+          f"duplicated to {n_dup_per_leg} objects each in FR/BR/BL")
+    print(f"[instance_legs] relative rotations — {rels}; "
+          f"each leg parented to a {{FL,FR,BR,BL}}_root Empty at LegMountXX")
 
 
 # ---------------------------------------------------------------------------
