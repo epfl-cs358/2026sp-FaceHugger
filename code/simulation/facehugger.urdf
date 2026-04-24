@@ -15,25 +15,25 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.055401 0.046222 -0.009000" rpy="0 0 0"/>
+      <origin xyz="0.055401 0.046222 -0.009000" rpy="-3.141593 0.000000 1.570796"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.055401 -0.046222 -0.009000" rpy="0 0 0"/>
+      <origin xyz="0.055401 -0.046222 -0.009000" rpy="0.000000 -0.000000 -1.570796"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.055401 0.046222 -0.009000" rpy="0 0 0"/>
+      <origin xyz="-0.055401 0.046222 -0.009000" rpy="0.000000 -0.000000 1.570796"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.055401 -0.046222 -0.009000" rpy="0 0 0"/>
+      <origin xyz="-0.055401 -0.046222 -0.009000" rpy="-3.141593 0.000000 -1.570796"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -106,7 +106,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 1.570796 3.141593"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -131,7 +131,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="-1.570796 -0.000000 1.570796"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -198,7 +198,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 1.570796 3.141593"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -223,7 +223,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="-1.570796 -0.000000 1.570796"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -290,7 +290,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 1.570796 3.141593"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -315,7 +315,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="-1.570796 -0.000000 1.570796"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -382,7 +382,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 1.570796 3.141593"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -407,7 +407,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="-1.570796 -0.000000 1.570796"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>

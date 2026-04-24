@@ -173,10 +173,11 @@ class URDF:
         CoM was reported by Fusion in the pre-shift frame, so it gets
         corrected by subtracting `origin_shift_mm`.
 
-        `extra_visuals` is a list of (mesh_name, origin_xyz_mm) tuples for
-        additional <visual> blocks on this link (e.g. servo meshes glued to
-        each leg's base_link / link2 / link3). No collision and no inertial
-        contribution for these — they're visual-only.
+        `extra_visuals` is a list of tuples for additional <visual> blocks on
+        this link (e.g. servo meshes glued to each leg's base_link / link2
+        / link3). Each tuple is either `(mesh_name, origin_xyz_mm)` (rpy
+        defaults to (0,0,0)) or `(mesh_name, origin_xyz_mm, origin_rpy_rad)`.
+        No collision and no inertial contribution — visual-only.
         """
         if origin_shift_mm is None:
             origin_shift_mm = [0.0, 0.0, 0.0]
@@ -205,10 +206,16 @@ class URDF:
             "      </geometry>",
             "    </visual>",
         ]
-        for extra_mesh, extra_xyz_mm in extra_visuals:
+        for extra in extra_visuals:
+            if len(extra) == 2:
+                extra_mesh, extra_xyz_mm = extra
+                extra_rpy = (0.0, 0.0, 0.0)
+            else:
+                extra_mesh, extra_xyz_mm, extra_rpy = extra
+            rpy_str = " ".join(f"{v:.6f}" for v in extra_rpy)
             self.lines += [
                 "    <visual>",
-                f'      <origin xyz="{fmt_xyz(extra_xyz_mm)}" rpy="0 0 0"/>',
+                f'      <origin xyz="{fmt_xyz(extra_xyz_mm)}" rpy="{rpy_str}"/>',
                 "      <geometry>",
                 f'        <mesh filename="{mesh_dir}{extra_mesh}" scale="0.001 0.001 0.001"/>',
                 "      </geometry>",
@@ -327,6 +334,79 @@ def _servo_world_by_role(export: dict, role: str) -> list | None:
     return occ.get("world_origin_mm")
 
 
+def _servo_rot_by_role(export: dict, role: str) -> list | None:
+    """3x3 rotation of the servo occurrence assigned to `role`, from its
+    world_transform_rm_cm (dimensionless — rotation part of a 4x4)."""
+    mf = export.get("mesh_files") or {}
+    roles = mf.get("_servo_role_assignment") or {}
+    path = roles.get(role)
+    if not path:
+        return None
+    occ = _find_occ_by_path(export["occurrences"], path)
+    if occ is None:
+        return None
+    wtf = occ.get("world_transform_rm_cm")
+    if wtf is None:
+        return None
+    return [row[:3] for row in wtf[:3]]
+
+
+def _find_occ_rot(occs: list, name: str) -> list | None:
+    """Find an occurrence by leaf name anywhere in the tree and return its
+    3x3 world rotation (from world_transform_rm_cm)."""
+    for n in _iter_occ(occs):
+        if n.get("name") == name:
+            wtf = n.get("world_transform_rm_cm")
+            if wtf:
+                return [row[:3] for row in wtf[:3]]
+    return None
+
+
+# --- small 3x3 matrix helpers ------------------------------------------------
+
+def _mat_transpose_3x3(m):
+    return [[m[j][i] for j in range(3)] for i in range(3)]
+
+
+def _mat_mul_3x3(a, b):
+    out = [[0.0] * 3 for _ in range(3)]
+    for i in range(3):
+        for j in range(3):
+            out[i][j] = sum(a[i][k] * b[k][j] for k in range(3))
+    return out
+
+
+def _rot_to_urdf_rpy(r) -> tuple:
+    """Convert a 3x3 rotation matrix to URDF-convention RPY (roll, pitch, yaw)
+    radians, where R = Rz(yaw) @ Ry(pitch) @ Rx(roll). Handles gimbal-lock
+    at |pitch| = π/2 with the roll=0 convention."""
+    # sin(pitch) = -r[2][0]   (from the ZYX decomposition)
+    sp = -r[2][0]
+    sp = max(-1.0, min(1.0, sp))   # clip tiny FP overshoot
+    if abs(sp) > 1.0 - 1e-9:
+        pitch = math.copysign(math.pi / 2, sp)
+        roll = 0.0
+        yaw = math.atan2(-r[0][1], r[1][1])
+    else:
+        pitch = math.asin(sp)
+        roll = math.atan2(r[2][1], r[2][2])
+        yaw = math.atan2(r[1][0], r[0][0])
+    return (roll, pitch, yaw)
+
+
+def _link_rot_world(rpy_z_deg: float) -> list:
+    """Rotation of link1/link2/link3's URDF frame at joint=0 in world.
+    All three share the same rotation because hip/knee joint origins have
+    rpy=0 (translation only). Just Rz(rpy_z_deg)."""
+    c = math.cos(math.radians(rpy_z_deg))
+    s = math.sin(math.radians(rpy_z_deg))
+    return [
+        [c, -s, 0.0],
+        [s,  c, 0.0],
+        [0.0, 0.0, 1.0],
+    ]
+
+
 def generate(export: dict, cfg: dict, out_path: Path):
     occs = export["occurrences"]
     robot = cfg["robot_name"]
@@ -379,14 +459,13 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # --- servo placement ---
     # servo.stl is re-origined in the Fusion exporter to `ServoMountPoint` on
     # the shaft-exit/mounting-face plane, which coincides with each servo's
-    # joint rotation axis by CAD construction. So every servo instance's
-    # mesh local (0,0,0) lands on the joint axis when placed at its joint
-    # world position. No per-instance offset calculation needed.
-    #
-    # Placements that result:
-    #   shoulder servo (x4 on base_link): visual xyz = LegMountXX world
-    #   hip servo (x1 per leg on link2):  visual xyz = (0,0,0) in link2 frame
-    #   knee servo (x1 per leg on link3): visual xyz = (0,0,0) in link3 frame
+    # joint rotation axis by CAD construction. So each servo mesh's local
+    # (0,0,0) lands on the joint axis when placed at the joint world
+    # position. What DOES vary per instance is orientation — the servo body
+    # is rotated differently on each corner (LegMount brackets have
+    # different world rotations) and on hip/knee sites (vs the link frames
+    # they attach to). We emit a per-instance <origin rpy> derived from the
+    # CAD's occurrence world rotations.
     has_shoulder_servo = _servo_world_by_role(export, "shoulder") is not None
     has_hip_servo      = _servo_world_by_role(export, "hip")      is not None
     has_knee_servo     = _servo_world_by_role(export, "knee")     is not None
@@ -403,18 +482,42 @@ def generate(export: dict, cfg: dict, out_path: Path):
     base_occ = find_occurrence(occs, "FlexibleSkeleton:1")
     mass, com, inertia = get_physics(base_occ, fallback_mass=0.5)
 
-    # Shoulder-servo visuals: 4 copies on base_link, one per leg, placed at
-    # that leg's LegMountXX world position. Thanks to servo.stl being
-    # re-origined to ServoMountPoint (on the shaft axis at the mounting
-    # face), the mesh's local (0,0,0) lands directly on the shoulder joint
-    # — no additional offset.
+    # Shoulder-servo visuals: 4 copies on base_link, one per leg. The CAD
+    # has one physical shoulder servo (on the FL bracket); the other 3
+    # corners' servos are virtual, inheriting the orientation of their
+    # corner's LegMount bracket. For each leg N:
+    #
+    #   R_servoN = R_LegMountN @ R_LegMountFL⁻¹ @ R_source_shoulder_servo
+    #
+    # base_link is at world identity, so rpy for the visual is
+    # _rot_to_urdf_rpy(R_servoN).
     base_extra_visuals = []
+    source_shoulder_rot = _servo_rot_by_role(export, "shoulder")
+    # Identify the FL leg config + its LegMount rotation (the source leg).
+    source_leg_entry = next((lg for lg in cfg["legs"] if lg["id"] == "fl"), None)
+    source_leg_mount = source_leg_entry["mount_point"] if source_leg_entry else None
+    source_lm_rot = _find_occ_rot(occs, f"{source_leg_mount}:1") if source_leg_mount else None
+
     if has_shoulder_servo and servo_mesh_name:
         for leg in cfg["legs"]:
             mount_mm = find_point_in_tree(occs, leg["mount_point"])
             if not mount_mm:
                 continue
-            base_extra_visuals.append((servo_mesh_name, list(mount_mm)))
+            # Per-leg rpy: compose LegMountN @ LegMountFL⁻¹ @ source_shoulder_rot.
+            # Falls back to identity (rpy=0) if any rotation is missing.
+            if source_shoulder_rot and source_lm_rot:
+                lm_rot = _find_occ_rot(occs, f"{leg['mount_point']}:1")
+                if lm_rot:
+                    r_servo = _mat_mul_3x3(
+                        _mat_mul_3x3(lm_rot, _mat_transpose_3x3(source_lm_rot)),
+                        source_shoulder_rot,
+                    )
+                    rpy = _rot_to_urdf_rpy(r_servo)
+                else:
+                    rpy = (0.0, 0.0, 0.0)
+            else:
+                rpy = (0.0, 0.0, 0.0)
+            base_extra_visuals.append((servo_mesh_name, list(mount_mm), rpy))
 
     urdf.link(
         base_cfg["name"], base_cfg["mesh"], mesh_dir, mass, com, inertia,
@@ -516,16 +619,29 @@ def generate(export: dict, cfg: dict, out_path: Path):
         # link2 and link3 gain an extra_visual for their attached servo. The
         # hip servo's ServoMountPoint coincides with link2's URDF frame
         # origin (= hip joint), so visual xyz = (0,0,0); same for knee on
-        # link3.
+        # link3. The visual rpy is R_link_world⁻¹ @ R_servo_world, expressed
+        # in the host link's frame.
+        r_link_world = _link_rot_world(rpy_z)   # = Rz(rpy_z_deg), identical for link2/link3
+
+        def _servo_rpy_in_link(role):
+            r_servo = _servo_rot_by_role(export, role)
+            if r_servo is None:
+                return (0.0, 0.0, 0.0)
+            r_in_link = _mat_mul_3x3(_mat_transpose_3x3(r_link_world), r_servo)
+            return _rot_to_urdf_rpy(r_in_link)
+
+        hip_rpy  = _servo_rpy_in_link("hip")  if has_hip_servo  else (0.0, 0.0, 0.0)
+        knee_rpy = _servo_rpy_in_link("knee") if has_knee_servo else (0.0, 0.0, 0.0)
+
         per_link_extra = {
             "link1": [],
             "link2": (
-                [(servo_mesh_name, [0.0, 0.0, 0.0])]
+                [(servo_mesh_name, [0.0, 0.0, 0.0], hip_rpy)]
                 if has_hip_servo and servo_mesh_name
                 else []
             ),
             "link3": (
-                [(servo_mesh_name, [0.0, 0.0, 0.0])]
+                [(servo_mesh_name, [0.0, 0.0, 0.0], knee_rpy)]
                 if has_knee_servo and servo_mesh_name
                 else []
             ),
