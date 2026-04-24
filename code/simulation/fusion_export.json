@@ -84,11 +84,11 @@
         "FaceHuggerLegAssembly:1/Servo_Mouser_Model:2",
         "FaceHuggerLegAssembly:1/Servo_Mouser_Model:3"
       ],
-      "origin_landmark": null,
+      "origin_landmark": "ServoMountPoint",
       "origin_shift_mm": [
+        10.12,
         0.0,
-        0.0,
-        0.0
+        41.844
       ]
     },
     "_servo_role_assignment": {
@@ -18985,7 +18985,22 @@
             }
           ],
           "axes": [],
-          "points": [],
+          "points": [
+            {
+              "name": "ServoMountPoint",
+              "visible": true,
+              "pos_mm": [
+                10.12,
+                0.0,
+                41.844
+              ],
+              "pos_world_mm": [
+                -55.401,
+                46.222,
+                37.044
+              ]
+            }
+          ],
           "children": [
             {
               "name": "HornFit:1",
@@ -19174,7 +19189,22 @@
             }
           ],
           "axes": [],
-          "points": [],
+          "points": [
+            {
+              "name": "ServoMountPoint",
+              "visible": true,
+              "pos_mm": [
+                10.12,
+                0.0,
+                41.844
+              ],
+              "pos_world_mm": [
+                -106.321,
+                68.616,
+                5.446
+              ]
+            }
+          ],
           "children": [
             {
               "name": "HornFit:1",
@@ -19591,7 +19621,22 @@
             }
           ],
           "axes": [],
-          "points": [],
+          "points": [
+            {
+              "name": "ServoMountPoint",
+              "visible": true,
+              "pos_mm": [
+                10.12,
+                0.0,
+                41.844
+              ],
+              "pos_world_mm": [
+                -201.021,
+                68.616,
+                5.446
+              ]
+            }
+          ],
           "children": [
             {
               "name": "HornFit:1",

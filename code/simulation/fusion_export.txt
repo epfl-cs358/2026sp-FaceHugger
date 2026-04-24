@@ -1666,6 +1666,7 @@ FaceHuggerLegAssembly:1 [xref]
     body: ServoMountEnclosure [hidden] | bbox_center_mm: (-0.0, 0.0, 11.675)
     body: ServoBottomLink [hidden] | bbox_center_mm: (10.12, 0.0, -4.4)
     body: ServoTopLink [hidden] | bbox_center_mm: (11.228, -0.0, 45.575)
+    cpoint: ServoMountPoint | local pos_mm: (10.12, 0.0, 41.844) | world pos_mm: (-55.401, 46.222, 37.044)
     mass: 0.422839 kg | com local: (3.548, -0.001, 21.398) | com world: (-55.4, 37.799, 16.598)
     HornFit:1 [hidden]
       parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-55.401, 36.101, -4.8)
@@ -1678,6 +1679,7 @@ FaceHuggerLegAssembly:1 [xref]
     body: ServoMountEnclosure [hidden] | bbox_center_mm: (-0.0, 0.0, 11.675)
     body: ServoBottomLink [hidden] | bbox_center_mm: (10.12, 0.0, -4.4)
     body: ServoTopLink [hidden] | bbox_center_mm: (11.228, -0.0, 45.575)
+    cpoint: ServoMountPoint | local pos_mm: (10.12, 0.0, 41.844) | world pos_mm: (-106.321, 68.616, 5.446)
     mass: 0.422839 kg | com local: (13.919, 50.919, 18.668) | com world: (-106.32, 48.17, 13.868)
     HornFit:1 [hidden]
       parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-106.321, 26.772, 15.566)
@@ -1702,6 +1704,7 @@ FaceHuggerLegAssembly:1 [xref]
     body: ServoMountEnclosure [hidden] | bbox_center_mm: (-0.0, 0.0, 11.675)
     body: ServoBottomLink [hidden] | bbox_center_mm: (10.12, 0.0, -4.4)
     body: ServoTopLink [hidden] | bbox_center_mm: (11.228, -0.0, 45.575)
+    cpoint: ServoMountPoint | local pos_mm: (10.12, 0.0, 41.844) | world pos_mm: (-201.021, 68.616, 5.446)
     mass: 0.422839 kg | com local: (13.919, 154.043, 10.247) | com world: (-209.443, 48.17, 5.447)
     HornFit:1 [hidden]
       parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-211.141, 26.772, 5.446)

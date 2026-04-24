@@ -15,25 +15,25 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.055401 0.036101 -0.004800" rpy="0 0 0"/>
+      <origin xyz="0.055401 0.046222 -0.009000" rpy="0 0 0"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.055401 -0.056343 -0.004800" rpy="0 0 0"/>
+      <origin xyz="0.055401 -0.046222 -0.009000" rpy="0 0 0"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.055401 0.036101 -0.004800" rpy="0 0 0"/>
+      <origin xyz="-0.055401 0.046222 -0.009000" rpy="0 0 0"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.055401 -0.056343 -0.004800" rpy="0 0 0"/>
+      <origin xyz="-0.055401 -0.046222 -0.009000" rpy="0 0 0"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -52,13 +52,13 @@
          Link2ToLink3Point: 34.570 145.620 10.246
          FootTip (leg_lower.stl max +Y centroid, in link3 frame): -17.819 88.140 0.118 -->
 
-  <!-- LEG: FR  (rpy_z_deg=+90.0) -->
+  <!-- LEG: FR  (rpy_z_deg=-90.0, shoulder neutral=+45.0°, limits=[-45.0°, +135.0°]) -->
   <joint name="fr_shoulder_joint" type="revolute">
     <parent link="base_link"/>
     <child link="fr_link1"/>
-    <origin xyz="0.055401 0.046222 -0.009000" rpy="0 0 1.570796"/>
+    <origin xyz="0.055401 0.046222 -0.009000" rpy="0 0 -1.570796"/>
     <axis xyz="0.0 0.0 1.0"/>
-    <limit lower="-3.141593" upper="3.141593" effort="2.94" velocity="5.0"/>
+    <limit lower="-0.785398" upper="2.356194" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="fr_hip_joint" type="revolute">
     <parent link="fr_link1"/>
@@ -106,7 +106,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.000000 -0.042044 0.010120" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -131,7 +131,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.010120 -0.042050 0.000000" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -144,13 +144,13 @@
     </collision>
   </link>
 
-  <!-- LEG: BR  (rpy_z_deg=+90.0) -->
+  <!-- LEG: BR  (rpy_z_deg=-90.0, shoulder neutral=-45.0°, limits=[-135.0°, +45.0°]) -->
   <joint name="br_shoulder_joint" type="revolute">
     <parent link="base_link"/>
     <child link="br_link1"/>
-    <origin xyz="0.055401 -0.046222 -0.009000" rpy="0 0 1.570796"/>
+    <origin xyz="0.055401 -0.046222 -0.009000" rpy="0 0 -1.570796"/>
     <axis xyz="0.0 0.0 1.0"/>
-    <limit lower="-3.141593" upper="3.141593" effort="2.94" velocity="5.0"/>
+    <limit lower="-2.356194" upper="0.785398" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="br_hip_joint" type="revolute">
     <parent link="br_link1"/>
@@ -198,7 +198,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.000000 -0.042044 0.010120" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -223,7 +223,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.010120 -0.042050 0.000000" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -236,13 +236,13 @@
     </collision>
   </link>
 
-  <!-- LEG: FL  (rpy_z_deg=+90.0) -->
+  <!-- LEG: FL  (rpy_z_deg=-90.0, shoulder neutral=+135.0°, limits=[+45.0°, +225.0°]) -->
   <joint name="fl_shoulder_joint" type="revolute">
     <parent link="base_link"/>
     <child link="fl_link1"/>
-    <origin xyz="-0.055401 0.046222 -0.009000" rpy="0 0 1.570796"/>
+    <origin xyz="-0.055401 0.046222 -0.009000" rpy="0 0 -1.570796"/>
     <axis xyz="0.0 0.0 1.0"/>
-    <limit lower="-3.141593" upper="3.141593" effort="2.94" velocity="5.0"/>
+    <limit lower="0.785398" upper="3.926991" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="fl_hip_joint" type="revolute">
     <parent link="fl_link1"/>
@@ -290,7 +290,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.000000 -0.042044 0.010120" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -315,7 +315,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.010120 -0.042050 0.000000" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -328,13 +328,13 @@
     </collision>
   </link>
 
-  <!-- LEG: BL  (rpy_z_deg=+90.0) -->
+  <!-- LEG: BL  (rpy_z_deg=-90.0, shoulder neutral=-135.0°, limits=[-225.0°, -45.0°]) -->
   <joint name="bl_shoulder_joint" type="revolute">
     <parent link="base_link"/>
     <child link="bl_link1"/>
-    <origin xyz="-0.055401 -0.046222 -0.009000" rpy="0 0 1.570796"/>
+    <origin xyz="-0.055401 -0.046222 -0.009000" rpy="0 0 -1.570796"/>
     <axis xyz="0.0 0.0 1.0"/>
-    <limit lower="-3.141593" upper="3.141593" effort="2.94" velocity="5.0"/>
+    <limit lower="-3.926991" upper="-0.785398" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="bl_hip_joint" type="revolute">
     <parent link="bl_link1"/>
@@ -382,7 +382,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.000000 -0.042044 0.010120" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -407,7 +407,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.010120 -0.042050 0.000000" rpy="0 0 0"/>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
