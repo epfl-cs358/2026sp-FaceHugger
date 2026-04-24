@@ -436,33 +436,52 @@ def _mat3_to_blender_4x4(r):
     ))
 
 
-def instance_four_legs(export, collections, ctx):
-    """After the single source leg is loaded, duplicate it at the 4 chassis
-    corners as independent objects (with deep-copied mesh data) so each
-    leg can be rigged and animated independently.
+def _shoulder_servo_occ_basename(export):
+    """Return the shoulder servo's occurrence basename (e.g.
+    'Servo_Mouser_Model:1') from mesh_files._servo_role_assignment, or
+    None if the manifest doesn't flag it."""
+    mf = export.get("mesh_files") or {}
+    sra = mf.get("_servo_role_assignment") or {}
+    path = sra.get("shoulder")
+    if not path:
+        return None
+    return path.split("/")[-1]
 
-    Per-corner rotation comes from the CAD: each LegMountXX:1 occurrence
-    carries its own `world_transform_rm_cm`, and the relative rotation
-    from FL (the source corner) to corner N is
+
+def instance_four_legs(export, collections, ctx):
+    """After the single source leg is loaded, replicate it at the four
+    chassis corners as independent objects (with deep-copied mesh data) so
+    each leg can be rigged and animated independently.
+
+    The shoulder servo is treated as *chassis-fixed*, not leg-owned — it's
+    bolted to the chassis bracket and doesn't rotate with the leg. So:
+      • It sits in a `Shoulders` sub-collection next to `Legs/`, not under
+        the per-corner leg collections.
+      • All four shoulder-servo copies inherit the source (FL) orientation
+        with translation-only to the other three mounts — no per-corner
+        bracket rotation. This matches the URDF's chassis-uniform shoulder
+        treatment.
+
+    The leg itself (link1/link2/link3 + hip servo + knee servo — five
+    objects per corner) does get a per-corner rotation derived from each
+    `LegMountXX:1` occurrence's `world_transform_rm_cm`:
 
         R_rel_N = R_LegMountN @ R_LegMountFL⁻¹
 
-    With the CAD's current bracket orientations this evaluates to:
-        FR → Ry(180°)     BR → Rz(180°)     BL → Rx(180°)
-    so hardcoding any of these is fragile — pull them from the JSON.
-
-    Each corner's leg is parented to a root Empty placed at LegMountXX
-    with R_rel baked into its matrix_world. Leg objects keep their world
-    positions (via matrix_parent_inverse), so nothing moves visually, but
-    selecting the Empty and rotating it pivots the whole leg around the
-    shoulder axis — the natural interaction for posing / rigging.
+    which resolves to FR=Ry(180°), BR=Rz(180°), BL=Rx(180°) for the
+    current CAD. Each corner's five leg objects are parented to a
+    `{corner}_root` Empty placed at `LegMountXX` (= `BodyToLink1Point`)
+    with that rotation baked in — rotating the Empty pivots the whole
+    leg around the shoulder axis.
 
     Collection tree:
-      FusionExport/Legs/
-        FL/  {FL_root, Link1/2/3 + 3 servos}   (source leg, R_rel = I)
-        FR/  {FR_root, duplicated leg objects} (R_rel = Ry(180°))
-        BR/  {BR_root, duplicated leg objects} (R_rel = Rz(180°))
-        BL/  {BL_root, duplicated leg objects} (R_rel = Rx(180°))
+      FusionExport/
+        Legs/
+          FL/  {FL_root, 3 links + hip servo + knee servo}   (R_rel = I)
+          FR/  {FR_root, duplicated 5 leg objects}           (R_rel = Ry(180°))
+          BR/  {BR_root, duplicated 5 leg objects}           (R_rel = Rz(180°))
+          BL/  {BL_root, duplicated 5 leg objects}           (R_rel = Rx(180°))
+        Shoulders/  {4 shoulder servos, all with FL orientation}
     """
     # 1. Pull the 4 LegMountXX points from FlexibleSkeleton:1's construction points.
     mounts = {}
@@ -497,13 +516,34 @@ def instance_four_legs(export, collections, ctx):
         legs_coll.children.link(c)
         corner_colls[corner] = c
 
-    # 3. Move source-leg objects (prefixed with LEG_SOURCE_PREFIX="FL_") from
-    # the Meshes collection into Legs/FL.
+    # 3. Pull the source-leg objects out of the Meshes collection. Split
+    # into (a) the shoulder servo (chassis-fixed, goes to Shoulders) and
+    # (b) the remaining 5 leg objects (go to Legs/FL).
     meshes_coll = collections[MESHES_COLLECTION]
     source_prefix = LEG_SOURCE_PREFIX + "_"
-    source_objs = [o for o in list(meshes_coll.objects)
-                   if o.name.startswith(source_prefix)]
-    for obj in source_objs:
+    all_source_objs = [o for o in list(meshes_coll.objects)
+                       if o.name.startswith(source_prefix)]
+
+    shoulder_basename = _shoulder_servo_occ_basename(export)
+    shoulder_src = None
+    leg_source_objs = []
+    for obj in all_source_objs:
+        # Object name pattern: "FL_<occurrence_name>_<stl_filename>"
+        # e.g. "FL_Servo_Mouser_Model:1_servo.stl"
+        if shoulder_basename and f"_{shoulder_basename}_" in obj.name:
+            shoulder_src = obj
+        else:
+            leg_source_objs.append(obj)
+
+    # Create Shoulders sub-collection and move source shoulder there.
+    shoulders_coll = bpy.data.collections.new("Shoulders")
+    root_coll.children.link(shoulders_coll)
+    if shoulder_src is not None:
+        meshes_coll.objects.unlink(shoulder_src)
+        shoulders_coll.objects.link(shoulder_src)
+
+    # Move the 5 remaining leg objects into Legs/FL.
+    for obj in leg_source_objs:
         meshes_coll.objects.unlink(obj)
         corner_colls["FL"].objects.link(obj)
 
@@ -540,15 +580,17 @@ def instance_four_legs(export, collections, ctx):
         corner_colls[corner].objects.link(root)
         roots[corner] = root
 
-    # FL children: already at their source poses — parent without moving them.
-    for obj in source_objs:
+    # FL leg children: already at their source poses — parent without
+    # moving them.
+    for obj in leg_source_objs:
         obj.parent = roots["FL"]
         obj.matrix_parent_inverse = roots["FL"].matrix_world.inverted()
 
-    # 6. Duplicate source leg for FR/BR/BL. Each duplicate's world matrix
-    # is `T(mount_N) @ rot_by_corner[N] @ T(-mount_FL) @ M_src`, then we
-    # parent to the corner's root Empty without altering world placement.
-    # Deep-copy mesh data so rig weights on each leg stay independent.
+    # 6. Duplicate the 5 leg objects for FR/BR/BL. Each duplicate's world
+    # matrix is `T(mount_N) @ rot_by_corner[N] @ T(-mount_FL) @ M_src`,
+    # then we parent to the corner's root Empty without altering world
+    # placement. Deep-copy mesh data so rig weights on each leg stay
+    # independent.
     n_dup_per_leg = 0
     for corner in ("FR", "BR", "BL"):
         m_v = Vector(mounts[corner])
@@ -558,7 +600,7 @@ def instance_four_legs(export, collections, ctx):
             @ Matrix.Translation(-fl_mount_v)
         )
         count = 0
-        for src in source_objs:
+        for src in leg_source_objs:
             dup = src.copy()
             if dup.data is not None:
                 dup.data = src.data.copy()
@@ -573,6 +615,26 @@ def instance_four_legs(export, collections, ctx):
             corner_colls[corner].objects.link(dup)
             count += 1
         n_dup_per_leg = count
+
+    # 7. Duplicate the shoulder servo for FR/BR/BL with translation only
+    # (chassis-fixed orientation = FL's orientation). All four live in
+    # Shoulders/, unparented — they don't move with any leg.
+    n_shoulders = 0
+    if shoulder_src is not None:
+        n_shoulders = 1  # count the source
+        for corner in ("FR", "BR", "BL"):
+            m_v = Vector(mounts[corner])
+            offset = m_v - fl_mount_v
+            dup = shoulder_src.copy()
+            if dup.data is not None:
+                dup.data = shoulder_src.data.copy()
+            if shoulder_src.name.startswith(source_prefix):
+                dup.name = corner + "_" + shoulder_src.name[len(source_prefix):]
+            else:
+                dup.name = f"{corner}_{shoulder_src.name}"
+            dup.matrix_world = Matrix.Translation(offset) @ shoulder_src.matrix_world
+            shoulders_coll.objects.link(dup)
+            n_shoulders += 1
 
     # Summarize the derived relative rotations for debugging.
     def _classify(mat4):
@@ -589,9 +651,9 @@ def instance_four_legs(export, collections, ctx):
         return tags.get(key, str(r))
 
     rels = ", ".join(f"{c}={_classify(rot_by_corner[c])}" for c in ("FR", "BR", "BL"))
-    n_src = len(source_objs)
-    print(f"[instance_legs] Legs/FL has {n_src} source objects; "
-          f"duplicated to {n_dup_per_leg} objects each in FR/BR/BL")
+    print(f"[instance_legs] Legs/FL has {len(leg_source_objs)} source leg objects; "
+          f"duplicated to {n_dup_per_leg} objects each in FR/BR/BL; "
+          f"Shoulders/ has {n_shoulders} shoulder servos (chassis-fixed)")
     print(f"[instance_legs] relative rotations — {rels}; "
           f"each leg parented to a {{FL,FR,BR,BL}}_root Empty at LegMountXX")
 

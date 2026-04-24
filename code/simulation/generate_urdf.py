@@ -499,45 +499,28 @@ def generate(export: dict, cfg: dict, out_path: Path):
     base_occ = find_occurrence(occs, "FlexibleSkeleton:1")
     mass, com, inertia = get_physics(base_occ, fallback_mass=0.5)
 
-    # Shoulder-servo visuals: 4 copies on base_link, one per leg. The CAD
-    # has one physical shoulder servo (on the FL bracket); the other 3
-    # corners' servos are virtual, inheriting the orientation of their
-    # corner's LegMount bracket. For each leg N:
-    #
-    #   R_servoN = R_LegMountN @ R_LegMountFL⁻¹ @ R_source_shoulder_servo
-    #
-    # base_link is at world identity, so rpy for the visual is
-    # _rot_to_urdf_rpy(R_servoN).
+    # Shoulder-servo visuals: 4 copies on base_link, one per leg. The
+    # shoulder servo is *chassis-fixed* (bolted to the chassis bracket,
+    # not to the rotating leg), so we emit all four visuals with the
+    # source-leg (FL) orientation — translation-only per corner. This
+    # avoids the "2 servos hang below, 2 above" artifact that the CAD's
+    # per-bracket rotations (Rx/Ry/Rz(180°)) would otherwise propagate.
+    # base_link is at world identity, so rpy = source_shoulder_rot (in
+    # world frame) post-multiplied by the config's uniform flip.
     base_extra_visuals = []
     source_shoulder_rot = _servo_rot_by_role(export, "shoulder")
-    # Identify the FL leg config + its LegMount rotation (the source leg).
-    source_leg_entry = next((lg for lg in cfg["legs"] if lg["id"] == "fl"), None)
-    source_leg_mount = source_leg_entry["mount_point"] if source_leg_entry else None
-    source_lm_rot = _find_occ_rot(occs, f"{source_leg_mount}:1") if source_leg_mount else None
 
     if has_shoulder_servo and servo_mesh_name:
+        if source_shoulder_rot is not None:
+            r_shoulder = _mat_mul_3x3(source_shoulder_rot, servo_flip_rot)
+            shoulder_rpy = _rot_to_urdf_rpy(r_shoulder)
+        else:
+            shoulder_rpy = _rot_to_urdf_rpy(servo_flip_rot)
         for leg in cfg["legs"]:
             mount_mm = find_point_in_tree(occs, leg["mount_point"])
             if not mount_mm:
                 continue
-            # Per-leg rpy: compose LegMountN @ LegMountFL⁻¹ @ source_shoulder_rot.
-            # Falls back to identity (rpy=0) if any rotation is missing.
-            if source_shoulder_rot and source_lm_rot:
-                lm_rot = _find_occ_rot(occs, f"{leg['mount_point']}:1")
-                if lm_rot:
-                    r_servo = _mat_mul_3x3(
-                        _mat_mul_3x3(lm_rot, _mat_transpose_3x3(source_lm_rot)),
-                        source_shoulder_rot,
-                    )
-                    # Post-multiply by the config's uniform flip so the flip
-                    # is applied in the mesh's local frame.
-                    r_servo = _mat_mul_3x3(r_servo, servo_flip_rot)
-                    rpy = _rot_to_urdf_rpy(r_servo)
-                else:
-                    rpy = _rot_to_urdf_rpy(servo_flip_rot)
-            else:
-                rpy = _rot_to_urdf_rpy(servo_flip_rot)
-            base_extra_visuals.append((servo_mesh_name, list(mount_mm), rpy))
+            base_extra_visuals.append((servo_mesh_name, list(mount_mm), shoulder_rpy))
 
     urdf.link(
         base_cfg["name"], base_cfg["mesh"], mesh_dir, mass, com, inertia,
