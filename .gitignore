@@ -835,3 +835,8 @@ $RECYCLE.BIN/
 !cad/scripts/**
 # But keep .DS_Store ignored even inside cad/scripts/
 cad/scripts/**/.DS_Store
+
+# Same exception for animation/scripts/ (Blender debug tools live here)
+!animation/scripts/
+!animation/scripts/**
+animation/scripts/**/.DS_Store
