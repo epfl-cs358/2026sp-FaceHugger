@@ -94,7 +94,7 @@ EXPORT_RULES = [
     {"type": "body", "match": "Link3",
      "stl": "leg_lower.stl",    "origin_landmark": "Link2ToLink3Point"},
     {"type": "body", "match": "ServoBase",
-     "stl": "servo.stl"},
+     "stl": "servo.stl", "origin_landmark": "ServoMountPoint"},
 ]
 
 
