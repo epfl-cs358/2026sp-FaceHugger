@@ -403,6 +403,99 @@ def visit_root(export, ctx):
 
 
 # ---------------------------------------------------------------------------
+# 4-leg instancing post-pass
+# ---------------------------------------------------------------------------
+
+
+def instance_four_legs(export, collections, ctx):
+    """After the single source leg is loaded, replicate it at the 4 chassis
+    corners via Blender collection instances (no mesh duplication). Each
+    instance lives in its own `Legs/{FR,FL,BR,BL}` sub-collection so the
+    outliner lets you toggle per-leg visibility.
+
+    Per-leg transform is derived from each LegMountXX's world position on
+    the chassis (read from fusion_export.json). Each corner's angular
+    position atan2(y, x) relative to the source FL corner gives the
+    rotation; translation places the rotated source-leg origin at the
+    target mount.
+    """
+    import math
+
+    # 1. Pull the 4 LegMountXX points from FlexibleSkeleton:1's construction points.
+    mounts = {}
+    fs = next(
+        (o for o in export.get("occurrences", [])
+         if o.get("name") == "FlexibleSkeleton:1"),
+        None,
+    )
+    if fs is None:
+        print("[instance_legs] FlexibleSkeleton:1 not in export; skipping")
+        return
+    for pt in fs.get("points", []):
+        name = pt.get("name", "")
+        if name.startswith("LegMount") and len(name) > len("LegMount"):
+            corner = name[len("LegMount"):].upper()  # FR/FL/BR/BL
+            pos = pt.get("pos_world_mm") or pt.get("pos_mm")
+            if pos:
+                mounts[corner] = pos
+
+    if not all(c in mounts for c in ("FR", "FL", "BR", "BL")):
+        print(f"[instance_legs] need LegMountFR/FL/BR/BL, found {sorted(mounts)}; skipping")
+        return
+
+    # 2. Create Legs root + 4 per-corner sub-collections.
+    root_coll = collections[ROOT_COLLECTION]
+    legs_coll = bpy.data.collections.new("Legs")
+    root_coll.children.link(legs_coll)
+
+    corner_colls = {}
+    for corner in ("FL", "FR", "BR", "BL"):
+        c = bpy.data.collections.new(corner)
+        legs_coll.children.link(c)
+        corner_colls[corner] = c
+
+    # 3. Move source-leg objects (prefixed with LEG_SOURCE_PREFIX="FL_") from
+    # the Meshes collection into Legs/FL.
+    meshes_coll = collections[MESHES_COLLECTION]
+    source_prefix = LEG_SOURCE_PREFIX + "_"
+    source_objs = [o for o in list(meshes_coll.objects)
+                   if o.name.startswith(source_prefix)]
+    for obj in source_objs:
+        meshes_coll.objects.unlink(obj)
+        corner_colls["FL"].objects.link(obj)
+
+    # 4. Create empty collection-instances at FR/BR/BL. Each instance's
+    # matrix_world rotates + translates the source (FL) leg to the target
+    # corner's position + heading.
+    fl_mount = mounts["FL"]
+    theta_fl = math.atan2(fl_mount[1], fl_mount[0])
+    for corner in ("FR", "BR", "BL"):
+        m = mounts[corner]
+        theta = math.atan2(m[1], m[0])
+        dtheta = theta - theta_fl
+        c, s = math.cos(dtheta), math.sin(dtheta)
+        # t = m - Rz(dtheta) @ fl_mount
+        tx = m[0] - (c * fl_mount[0] - s * fl_mount[1])
+        ty = m[1] - (s * fl_mount[0] + c * fl_mount[1])
+        tz = m[2] - fl_mount[2]
+        matrix_world = Matrix((
+            (c,   -s,  0.0, tx),
+            (s,    c,  0.0, ty),
+            (0.0, 0.0, 1.0, tz),
+            (0.0, 0.0, 0.0, 1.0),
+        ))
+        inst = bpy.data.objects.new(f"Leg_{corner}_instance", None)
+        inst.instance_type = 'COLLECTION'
+        inst.instance_collection = corner_colls["FL"]
+        inst.matrix_world = matrix_world
+        corner_colls[corner].objects.link(inst)
+
+    n_src = len(source_objs)
+    print(f"[instance_legs] Legs/FL has {n_src} source objects; "
+          f"instanced 3 collection-refs at FR/BR/BL")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -455,6 +548,10 @@ def main():
 
     ctx = VisitContext(args.meshes, collections, mesh_lookup, mat_point, mat_axis)
     visit_root(export, ctx)
+
+    # Replicate the source (FL) leg at the other 3 corners via collection
+    # instances, each in its own Legs/{FR,FL,BR,BL} sub-collection.
+    instance_four_legs(export, collections, ctx)
 
     print(
         f"[visualize] imported {ctx.meshes_imported} meshes, "
