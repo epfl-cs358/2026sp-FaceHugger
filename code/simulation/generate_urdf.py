@@ -17,6 +17,7 @@ Usage:
 import argparse
 import json
 import math
+import struct
 from pathlib import Path
 
 try:
@@ -104,6 +105,35 @@ def fmt_rpy(r, p, y_deg):
     return f"0 0 {deg2rad(y_deg)}"
 
 
+def _foot_tip_from_stl(stl_path: Path, y_tol_mm: float = 2.0) -> list:
+    """Centroid (in mm) of leg_lower STL vertices within y_tol_mm of max Y.
+
+    The exporter writes STLs in the leg-assembly-local frame. The lower-leg
+    mesh's far +Y end is the foot tip; the centroid of the few vertices at the
+    max-Y plane gives a stable tip estimate until a dedicated FootTipPoint
+    construction point exists in Fusion.
+    """
+    with open(stl_path, "rb") as f:
+        f.read(80)
+        n = struct.unpack("<I", f.read(4))[0]
+        verts = []
+        y_max = float("-inf")
+        for _ in range(n):
+            f.read(12)
+            for _ in range(3):
+                v = struct.unpack("<fff", f.read(12))
+                verts.append(v)
+                if v[1] > y_max:
+                    y_max = v[1]
+            f.read(2)
+    tip_pts = [v for v in verts if v[1] >= y_max - y_tol_mm]
+    return [
+        round(sum(v[0] for v in tip_pts) / len(tip_pts), 3),
+        round(sum(v[1] for v in tip_pts) / len(tip_pts), 3),
+        round(sum(v[2] for v in tip_pts) / len(tip_pts), 3),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # URDF XML helpers
 # ---------------------------------------------------------------------------
@@ -130,8 +160,30 @@ class URDF:
         mass: float,
         com_mm: list,
         inertia: dict,
+        origin_shift_mm: list | None = None,
+        extra_visuals: list | None = None,
     ):
-        xyz_com = fmt_xyz(com_mm)
+        """Emit a <link> block.
+
+        `origin_shift_mm` is the same value that ExportBodiesToURDF wrote to
+        `mesh_files[mesh].origin_shift_mm` — the landmark position (in the
+        original mesh frame) that was subtracted from every vertex during
+        re-origin. The URDF link frame origin now coincides with the mesh's
+        local (0,0,0), so the visual/collision mesh <origin> is (0,0,0). The
+        CoM was reported by Fusion in the pre-shift frame, so it gets
+        corrected by subtracting `origin_shift_mm`.
+
+        `extra_visuals` is a list of (mesh_name, origin_xyz_mm) tuples for
+        additional <visual> blocks on this link (e.g. servo meshes glued to
+        each leg's base_link / link2 / link3). No collision and no inertial
+        contribution for these — they're visual-only.
+        """
+        if origin_shift_mm is None:
+            origin_shift_mm = [0.0, 0.0, 0.0]
+        if extra_visuals is None:
+            extra_visuals = []
+        com_local = [com_mm[i] - origin_shift_mm[i] for i in range(3)]
+        xyz_com = fmt_xyz(com_local)
         ixx = inertia.get("ixx", 1e-6)
         iyy = inertia.get("iyy", 1e-6)
         izz = inertia.get("izz", 1e-6)
@@ -152,6 +204,17 @@ class URDF:
             f'        <mesh filename="{mesh_dir}{mesh}" scale="0.001 0.001 0.001"/>',
             "      </geometry>",
             "    </visual>",
+        ]
+        for extra_mesh, extra_xyz_mm in extra_visuals:
+            self.lines += [
+                "    <visual>",
+                f'      <origin xyz="{fmt_xyz(extra_xyz_mm)}" rpy="0 0 0"/>',
+                "      <geometry>",
+                f'        <mesh filename="{mesh_dir}{extra_mesh}" scale="0.001 0.001 0.001"/>',
+                "      </geometry>",
+                "    </visual>",
+            ]
+        self.lines += [
             "    <collision>",
             '      <origin xyz="0 0 0" rpy="0 0 0"/>',
             "      <geometry>",
@@ -223,6 +286,47 @@ def get_physics(occ_node: dict | None, fallback_mass: float = 0.05):
 # ---------------------------------------------------------------------------
 
 
+def _mesh_shift(export: dict, mesh_name: str) -> list:
+    """Return the origin_shift_mm that ExportBodiesToURDF applied to this
+    STL during re-origin (or [0,0,0] if the mesh wasn't re-origined or the
+    manifest is missing). This is the exact value to pass as
+    URDF.link(..., origin_shift_mm=...) so the inertial CoM gets shifted
+    back into the URDF link frame while the visual mesh sits at (0,0,0).
+    """
+    mf = export.get("mesh_files") or {}
+    entry = mf.get(mesh_name) or {}
+    return list(entry.get("origin_shift_mm", [0.0, 0.0, 0.0]))
+
+
+def _find_occ_by_path(occs: list, path: str) -> dict | None:
+    """Path like 'A:1/B:1/C:1'. Returns the occurrence dict or None."""
+    parts = path.split("/")
+    current = occs
+    node = None
+    for part in parts:
+        node = next((c for c in current if c.get("name") == part), None)
+        if node is None:
+            return None
+        current = node.get("children", [])
+    return node
+
+
+def _servo_world_by_role(export: dict, role: str) -> list | None:
+    """Look up the world_origin_mm of the servo instance assigned to `role`
+    (shoulder/hip/knee) via mesh_files._servo_role_assignment. Returns None
+    if no assignment or occurrence missing — caller should skip that visual.
+    """
+    mf = export.get("mesh_files") or {}
+    roles = mf.get("_servo_role_assignment") or {}
+    path = roles.get(role)
+    if not path:
+        return None
+    occ = _find_occ_by_path(export["occurrences"], path)
+    if occ is None:
+        return None
+    return occ.get("world_origin_mm")
+
+
 def generate(export: dict, cfg: dict, out_path: Path):
     occs = export["occurrences"]
     robot = cfg["robot_name"]
@@ -233,14 +337,9 @@ def generate(export: dict, cfg: dict, out_path: Path):
 
     urdf = URDF(robot)
 
-    # --- base_link ---
-    urdf.comment("BASE LINK")
-    base_cfg = cfg["base_link"]
-    base_occ = find_occurrence(occs, "FlexibleSkeleton:1")
-    mass, com, inertia = get_physics(base_occ, fallback_mass=0.5)
-    urdf.link(base_cfg["name"], base_cfg["mesh"], mesh_dir, mass, com, inertia)
-
     # --- leg assembly: look up joint geometry once ---
+    # Pulled up so servo visuals on base_link can reference the template
+    # leg's shoulder-point world position before base_link is emitted.
     leg_tmpl = cfg["leg_template"]
     leg_occ = find_occurrence(occs, leg_tmpl["leg_assembly_occurrence"])
     if not leg_occ:
@@ -248,7 +347,11 @@ def generate(export: dict, cfg: dict, out_path: Path):
             f"Leg assembly occurrence not found: {leg_tmpl['leg_assembly_occurrence']}"
         )
 
-    # Resolve joint positions (all in leg-local mm frame)
+    # Resolve joint positions in LAL (leg-assembly-local) mm frame. We use the
+    # construction POINT (not the axis origin) — see historical note: on
+    # BodyToLink1 the axis origin sits at z=-0.2mm and the Point at z=-4.2mm;
+    # aligning on the Point matches the CAD mating face the designer placed
+    # to coincide with the body's LegMountXX.
     joint_defs = []
     for jcfg in leg_tmpl["joints"]:
         axis_data = find_axis(leg_occ, jcfg["axis_key"])
@@ -259,36 +362,116 @@ def generate(export: dict, cfg: dict, out_path: Path):
             raise ValueError(f"Point not found in export: {jcfg['point_key']}")
         joint_defs.append({
             **jcfg,
-            "origin_local_mm": axis_data[
-                "origin_mm"
-            ],  # use axis origin as joint position
+            "origin_local_mm": point_data["pos_mm"],
+            "origin_world_mm": point_data.get("pos_world_mm") or point_data["pos_mm"],
             "axis_dir": axis_data["dir"],
         })
 
-    # Compute relative offsets between joints (parent-relative, not world-absolute)
-    # joint[0]: shoulder — relative to mount point (set per-leg below)
-    # joint[1]: hip      — relative to shoulder origin
-    # joint[2]: knee     — relative to hip origin
+    # Offsets between successive joints, in LAL frame (== URDF link frame
+    # because rpy_z_deg matches the leg-assembly's LAL Z rotation for every
+    # leg — R_L1 = I — so no rotation applied to these deltas).
     for i in range(1, len(joint_defs)):
         joint_defs[i]["offset_from_parent_mm"] = sub(
             joint_defs[i]["origin_local_mm"],
             joint_defs[i - 1]["origin_local_mm"],
         )
 
+    # --- servo offsets (computed from the template leg, reused across 4 legs) ---
+    # Each leg shares the same rpy_z_deg, so the servo's position in its host
+    # URDF frame is identical across legs; we compute it once from the source
+    # leg's world-frame numbers.
+    shoulder_pt_world = joint_defs[0]["origin_world_mm"]
+    hip_pt_world      = joint_defs[1]["origin_world_mm"]
+    knee_pt_world     = joint_defs[2]["origin_world_mm"]
+
+    shoulder_servo_world = _servo_world_by_role(export, "shoulder")
+    hip_servo_world      = _servo_world_by_role(export, "hip")
+    knee_servo_world     = _servo_world_by_role(export, "knee")
+
+    # Offset of the shoulder servo relative to the template leg's shoulder
+    # point — added to each leg's LegMountXX to place that leg's shoulder
+    # servo on base_link. (None if no assignment — skip servo visuals.)
+    if shoulder_servo_world is not None:
+        shoulder_servo_offset = sub(shoulder_servo_world, shoulder_pt_world)
+    else:
+        shoulder_servo_offset = None
+
+    # Hip and knee servos sit on link2 / link3 at fixed offsets from the
+    # respective joint points (= the child link's URDF frame origin).
+    hip_servo_in_link2 = sub(hip_servo_world, hip_pt_world) if hip_servo_world else None
+    knee_servo_in_link3 = sub(knee_servo_world, knee_pt_world) if knee_servo_world else None
+
+    servo_mesh_name = None
+    for mesh_name, entry in (export.get("mesh_files") or {}).items():
+        if entry.get("source_body") == "ServoBase":
+            servo_mesh_name = mesh_name
+            break
+
+    # --- base_link ---
+    urdf.comment("BASE LINK")
+    base_cfg = cfg["base_link"]
+    base_occ = find_occurrence(occs, "FlexibleSkeleton:1")
+    mass, com, inertia = get_physics(base_occ, fallback_mass=0.5)
+
+    # Shoulder-servo visuals: 4 copies on base_link, one per leg, at each
+    # LegMountXX + the servo's fixed offset from the shoulder joint point.
+    base_extra_visuals = []
+    if shoulder_servo_offset is not None and servo_mesh_name:
+        for leg in cfg["legs"]:
+            mount_mm = find_point_in_tree(occs, leg["mount_point"])
+            if not mount_mm:
+                continue
+            servo_pos = [mount_mm[i] + shoulder_servo_offset[i] for i in range(3)]
+            base_extra_visuals.append((servo_mesh_name, servo_pos))
+
+    urdf.link(
+        base_cfg["name"], base_cfg["mesh"], mesh_dir, mass, com, inertia,
+        origin_shift_mm=_mesh_shift(export, base_cfg["mesh"]),
+        extra_visuals=base_extra_visuals,
+    )
+
+    # Emit a machine-parseable comment block with the raw leg-assembly-local
+    # Points. Downstream tools (simulate_v2) read this to avoid re-opening
+    # fusion_export.json — the URDF remains the single source of truth for
+    # the leg chain geometry. After re-origin, leg_lower.stl's max +Y is
+    # still the foot tip but now relative to Link2ToLink3Point (the new
+    # local origin), not the leg-assembly origin — the centroid calculation
+    # still works since we only need the furthest-+Y vertex cluster.
+    tip_mm = _foot_tip_from_stl(
+        Path(__file__).parent / mesh_dir.rstrip("/\\") / "leg_lower.stl"
+    )
+    pts_comment = [
+        "LEG ASSEMBLY METADATA (mm, leg-assembly-local frame)",
+        f"  BodyToLink1Point : {joint_defs[0]['origin_local_mm'][0]:.3f} "
+        f"{joint_defs[0]['origin_local_mm'][1]:.3f} "
+        f"{joint_defs[0]['origin_local_mm'][2]:.3f}",
+        f"  Link1ToLink2Point: {joint_defs[1]['origin_local_mm'][0]:.3f} "
+        f"{joint_defs[1]['origin_local_mm'][1]:.3f} "
+        f"{joint_defs[1]['origin_local_mm'][2]:.3f}",
+        f"  Link2ToLink3Point: {joint_defs[2]['origin_local_mm'][0]:.3f} "
+        f"{joint_defs[2]['origin_local_mm'][1]:.3f} "
+        f"{joint_defs[2]['origin_local_mm'][2]:.3f}",
+        f"  FootTip (leg_lower.stl max +Y centroid, in link3 frame): "
+        f"{tip_mm[0]:.3f} {tip_mm[1]:.3f} {tip_mm[2]:.3f}",
+    ]
+    urdf.comment("\n       ".join(pts_comment))
+
     # --- 4 leg instances ---
+    # All legs share rpy_z_deg == leg-assembly's LAL Z rotation, so R_L1 = I:
+    # joint offsets and axes are used directly in URDF link frames without
+    # rotation. Sides are differentiated downstream via shoulder stance.
     for leg in cfg["legs"]:
         leg_id = leg["id"]
         rpy_z = leg.get("rpy_z_deg", 0)
         mount_key = leg["mount_point"]
 
-        # Mount point in body frame (from FlexibleSkeleton construction points)
         mount_mm = find_point_in_tree(occs, mount_key)
         if not mount_mm:
             raise ValueError(f"Mount point not found in export: {mount_key}")
 
-        urdf.comment(f"LEG: {leg_id.upper()}")
+        urdf.comment(f"LEG: {leg_id.upper()}  (rpy_z_deg={rpy_z:+.1f})")
 
-        # Shoulder joint: origin = mount point in body frame
+        # Shoulder joint: origin = mount point in base_link frame (world).
         sj = joint_defs[0]
         urdf.joint(
             name=f"{leg_id}_{sj['name']}_joint",
@@ -304,15 +487,13 @@ def generate(export: dict, cfg: dict, out_path: Path):
             rpy_z_deg=rpy_z,
         )
 
-        # Remaining joints
+        # Hip + knee joints: LAL deltas become URDF joint origins directly.
         for i, jd in enumerate(joint_defs[1:], start=1):
-            child_name = f"{leg_id}_link{i + 1}"
-            parent_name = f"{leg_id}_link{i}"
             urdf.joint(
                 name=f"{leg_id}_{jd['name']}_joint",
                 jtype="revolute",
-                parent=parent_name,
-                child=child_name,
+                parent=f"{leg_id}_link{i}",
+                child=f"{leg_id}_link{i + 1}",
                 origin_mm=jd["offset_from_parent_mm"],
                 axis=jd["axis_dir"],
                 lower_deg=jd["limits_deg"][0],
@@ -321,15 +502,105 @@ def generate(export: dict, cfg: dict, out_path: Path):
                 velocity=vel,
             )
 
-        # Links for this leg
+        # Links for this leg. Each link's mesh is re-origined at export time
+        # so URDF visual/collision <origin>=(0,0,0). Inertial CoM gets shifted
+        # by the same origin_shift so it lands in the URDF link frame.
+        # link2 and link3 gain an extra_visual for their attached servo.
+        per_link_extra = {
+            "link1": [],
+            "link2": (
+                [(servo_mesh_name, hip_servo_in_link2)]
+                if hip_servo_in_link2 is not None and servo_mesh_name
+                else []
+            ),
+            "link3": (
+                [(servo_mesh_name, knee_servo_in_link3)]
+                if knee_servo_in_link3 is not None and servo_mesh_name
+                else []
+            ),
+        }
         for link_key, link_cfg in leg_tmpl["links"].items():
             link_num = link_key.replace("link", "")
             link_name = f"{leg_id}_link{link_num}"
             link_occ = find_occurrence(occs, link_cfg["occurrence"].split("/")[-1])
             mass, com, inertia = get_physics(link_occ, fallback_mass=0.05)
-            urdf.link(link_name, link_cfg["mesh"], mesh_dir, mass, com, inertia)
+            urdf.link(
+                link_name, link_cfg["mesh"], mesh_dir, mass, com, inertia,
+                origin_shift_mm=_mesh_shift(export, link_cfg["mesh"]),
+                extra_visuals=per_link_extra.get(link_key, []),
+            )
 
     urdf.save(out_path)
+
+    _print_invariant_check(occs, cfg, joint_defs)
+
+
+def _world_origin_of(occs: list, name: str) -> list | None:
+    """Find an occurrence by name anywhere in the tree and return its root-
+    frame position. Tries the new `world_origin_mm` field first (accumulated
+    transform, present after re-running the updated exporter); falls back to
+    `parent_origin_mm` or the old same-named field, which for top-level
+    children of the root happens to coincide with world anyway.
+    """
+    for n in _iter_occ(occs):
+        if n.get("name") == name:
+            return n.get("world_origin_mm") or n.get("parent_origin_mm")
+    return None
+
+
+def _iter_occ(nodes: list):
+    for n in nodes:
+        yield n
+        yield from _iter_occ(n.get("children", []))
+
+
+def _print_invariant_check(occs: list, cfg: dict, joint_defs: list):
+    """Post-generation diagnostic: for each leg, show where its shoulder axis
+    lands in world frame (= its LegMountXX construction point) and where
+    the matching LegMountXX body sub-occurrence lives. The delta highlights
+    whether the visible "leg shoulder floats off tab" gap is geometry-sourced
+    in the CAD (large delta) or not.
+    """
+    print("\n=== Placement invariant check (world frame, mm) ===")
+    warned = False
+    for leg in cfg["legs"]:
+        leg_id = leg["id"]
+        mount_key = leg["mount_point"]
+        mount_pos = find_point_in_tree(occs, mount_key)
+        # Construction point "LegMountFR" → body occurrence "LegMountFR:1".
+        tab_name = f"{mount_key}:1"
+        tab_pos = _world_origin_of(occs, tab_name)
+        if mount_pos is None:
+            print(f"  {leg_id:>2}: missing mount point {mount_key!r}")
+            continue
+        if tab_pos is None:
+            print(
+                f"  {leg_id:>2}: shoulder axis (world) = "
+                f"({mount_pos[0]:+7.2f}, {mount_pos[1]:+7.2f}, {mount_pos[2]:+7.2f}) "
+                f"   [no matching {tab_name} to compare]"
+            )
+            continue
+        delta = [mount_pos[i] - tab_pos[i] for i in range(3)]
+        mag = math.sqrt(sum(d * d for d in delta))
+        tag = "  FLAG" if mag > 5.0 else ""
+        print(
+            f"  {leg_id:>2}: shoulder ({mount_pos[0]:+7.2f}, {mount_pos[1]:+7.2f}, "
+            f"{mount_pos[2]:+7.2f})   "
+            f"tab ({tab_pos[0]:+7.2f}, {tab_pos[1]:+7.2f}, {tab_pos[2]:+7.2f})   "
+            f"Δ=({delta[0]:+6.2f}, {delta[1]:+6.2f}, {delta[2]:+6.2f}) "
+            f"|Δ|={mag:5.2f}mm{tag}"
+        )
+        if mag > 5.0:
+            warned = True
+    if warned:
+        print(
+            "  Note: FLAG rows mean the LegMountXX construction point and the\n"
+            "  matching LegMountXX:1 body occurrence origin are >5mm apart.\n"
+            "  Small deltas are normal (a bracket body's origin sits at its\n"
+            "  centroid, not at the attachment point). A large delta is worth\n"
+            "  investigating — it's exactly the gap that appears as 'shoulder\n"
+            "  mesh floats off tab' in the render."
+        )
 
 
 # ---------------------------------------------------------------------------

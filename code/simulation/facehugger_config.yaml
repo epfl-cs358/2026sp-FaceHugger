@@ -4,16 +4,26 @@
 # All positions come from fusion_export.json (no hardcoded coords here).
 
 robot_name: facehugger
-mesh_dir: meshes/
+mesh_dir: exported_meshes/
 
 # ---------------------------------------------------------------------------
 # Base link: which occurrences make up the chassis
+#
+# NOTE on `occurrences`: this list is documentation of *intent*, not something
+# the generator iterates. The chassis mesh `QuadrupedBody.stl` is produced by
+# ExportBodiesToURDF.py exporting the `FlexibleSkeleton:1` occurrence as a
+# single STL — Fusion's `createSTLExportOptions` on an occurrence includes all
+# descendant bodies at their placements, so all five occurrences below get
+# baked into that one file. If you add/remove sub-assemblies inside
+# FlexibleSkeleton in Fusion, re-exporting picks them up automatically; if you
+# want the generator to actually enforce this list, wire it into MESH_EXPORTS
+# there too.
 # ---------------------------------------------------------------------------
 base_link:
   name: base_link
   mesh: QuadrupedBody.stl
   occurrences:
-    - FlexibleSkeleton:1/BottomPlate:1
+    - FlexibleSkeleton:1/QuadrupedBody:1
     - FlexibleSkeleton:1/MotorMountFR:1
     - FlexibleSkeleton:1/MotorMountFL:1
     - FlexibleSkeleton:1/MotorMountBR:1
@@ -38,7 +48,12 @@ leg_template:
       point_key: BodyToLink1Point
       parent: base_link       # special: stays base_link for all legs
       child:  link1
-      limits_deg: [-90, 90]
+      # Widened from [-90, 90] so the side that uses a 180° shoulder stance
+      # (one side of the body — see the legs: section below) can reach its
+      # neutral pose. We exposing ±180° in the URDF; physical servos with a
+      # narrower mechanical range should stay within their useful band
+      # during gait motion.
+      limits_deg: [-180, 180]
 
     - name: hip               # link1 → link2, pitch
       axis_key:  Link1ToLink2Axis
@@ -76,21 +91,34 @@ leg_template:
 #   180 = mirrored (FL/BR)
 # ---------------------------------------------------------------------------
 legs:
+  # All four legs use rpy_z_deg = 90 — the CAD's FaceHuggerLegAssembly has
+  # a +90° LAL rotation baked in via its world transform, and matching that
+  # value here makes R_L1 = 0 for every leg (generator applies R_L1 =
+  # R_z(-rpy_z_deg) @ R_lal, which = 0 when rpy_z_deg == lal_angle). With
+  # R_L1 = 0, no per-leg frame rotation is applied to joint offsets, axes,
+  # or meshes; all four legs share identical joint frames and can use the
+  # SAME hip/knee stance signs.
+  #
+  # To orient the four legs around the body, we differentiate them via the
+  # shoulder JOINT ANGLE at stance time (simulate_v2.STANCE_DEG_V2), not the
+  # static rpy_z here. Right legs (fr, br) use shoulder = 0°, left legs
+  # (fl, bl) use shoulder = 180°. This requires the shoulder joint limit to
+  # span at least [-135, 135] (widened above).
   - id: fr
     mount_point: LegMountFR
-    rpy_z_deg: 0
-
-  - id: fl
-    mount_point: LegMountFL
-    rpy_z_deg: 180
+    rpy_z_deg: 90
 
   - id: br
     mount_point: LegMountBR
-    rpy_z_deg: 180
+    rpy_z_deg: 90
+
+  - id: fl
+    mount_point: LegMountFL
+    rpy_z_deg: 90
 
   - id: bl
     mount_point: LegMountBL
-    rpy_z_deg: 0
+    rpy_z_deg: 90
 
 # ---------------------------------------------------------------------------
 # Servo physical properties (used for inertial blocks if physics export
