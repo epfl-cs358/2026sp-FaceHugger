@@ -408,19 +408,23 @@ def visit_root(export, ctx):
 
 
 def instance_four_legs(export, collections, ctx):
-    """After the single source leg is loaded, replicate it at the 4 chassis
-    corners via Blender collection instances (no mesh duplication). Each
-    instance lives in its own `Legs/{FR,FL,BR,BL}` sub-collection so the
-    outliner lets you toggle per-leg visibility.
+    """After the single source leg is loaded, duplicate it at the 4 chassis
+    corners as independent objects (with deep-copied mesh data) so each
+    leg can be rigged and animated independently. All duplicates keep the
+    source FL orientation — only translation is applied. That way a single
+    armature/rig template can be built against one leg's local frame and
+    applied uniformly to all four.
 
-    Per-leg transform is derived from each LegMountXX's world position on
-    the chassis (read from fusion_export.json). Each corner's angular
-    position atan2(y, x) relative to the source FL corner gives the
-    rotation; translation places the rotated source-leg origin at the
-    target mount.
+    Per-corner world placement for animation (spreading the legs into their
+    quadrants) goes into each Legs/{corner} sub-collection's root transform
+    or a parent empty — NOT into the mesh duplicates themselves.
+
+    Collection tree:
+      FusionExport/Legs/
+        FL/      source leg (Link1/2/3 + 3 servos), kept in place
+        FR, BR, BL/   real duplicates of FL at the target LegMountXX,
+                      all in the source's local orientation (flat).
     """
-    import math
-
     # 1. Pull the 4 LegMountXX points from FlexibleSkeleton:1's construction points.
     mounts = {}
     fs = next(
@@ -464,35 +468,35 @@ def instance_four_legs(export, collections, ctx):
         meshes_coll.objects.unlink(obj)
         corner_colls["FL"].objects.link(obj)
 
-    # 4. Create empty collection-instances at FR/BR/BL. Each instance's
-    # matrix_world rotates + translates the source (FL) leg to the target
-    # corner's position + heading.
+    # 4. Duplicate the source leg for FR/BR/BL with translation only (no
+    # rotation — "flat" for rigging). Deep-copy mesh data so rig weights
+    # on each leg are independent.
     fl_mount = mounts["FL"]
-    theta_fl = math.atan2(fl_mount[1], fl_mount[0])
+    n_dup_per_leg = 0
     for corner in ("FR", "BR", "BL"):
         m = mounts[corner]
-        theta = math.atan2(m[1], m[0])
-        dtheta = theta - theta_fl
-        c, s = math.cos(dtheta), math.sin(dtheta)
-        # t = m - Rz(dtheta) @ fl_mount
-        tx = m[0] - (c * fl_mount[0] - s * fl_mount[1])
-        ty = m[1] - (s * fl_mount[0] + c * fl_mount[1])
-        tz = m[2] - fl_mount[2]
-        matrix_world = Matrix((
-            (c,   -s,  0.0, tx),
-            (s,    c,  0.0, ty),
-            (0.0, 0.0, 1.0, tz),
-            (0.0, 0.0, 0.0, 1.0),
-        ))
-        inst = bpy.data.objects.new(f"Leg_{corner}_instance", None)
-        inst.instance_type = 'COLLECTION'
-        inst.instance_collection = corner_colls["FL"]
-        inst.matrix_world = matrix_world
-        corner_colls[corner].objects.link(inst)
+        offset = Vector((m[0] - fl_mount[0],
+                         m[1] - fl_mount[1],
+                         m[2] - fl_mount[2]))
+        count = 0
+        for src in source_objs:
+            dup = src.copy()
+            if dup.data is not None:
+                dup.data = src.data.copy()    # independent mesh for per-leg rigging
+            # Rename: strip the "FL_" prefix, prepend the target corner prefix.
+            if src.name.startswith(source_prefix):
+                dup.name = corner + "_" + src.name[len(source_prefix):]
+            else:
+                dup.name = f"{corner}_{src.name}"
+            # Translation-only: matrix_world = T(offset) @ source.matrix_world.
+            dup.matrix_world = Matrix.Translation(offset) @ src.matrix_world
+            corner_colls[corner].objects.link(dup)
+            count += 1
+        n_dup_per_leg = count
 
     n_src = len(source_objs)
     print(f"[instance_legs] Legs/FL has {n_src} source objects; "
-          f"instanced 3 collection-refs at FR/BR/BL")
+          f"duplicated (flat) to {n_dup_per_leg} objects each in FR/BR/BL")
 
 
 # ---------------------------------------------------------------------------
