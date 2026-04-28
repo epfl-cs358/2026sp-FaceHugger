@@ -6,7 +6,6 @@ This document defines the JSON-based communication protocol between the **Web Da
 - **Protocol:** WebSocket (Bi-directional)
 - **Port:** 81
 - **Format:** Minified JSON
-
 ---
 
 ## 📥 Dashboard -> Robot (Commands)
@@ -37,6 +36,7 @@ Requests a change in high-level behavior.
 ---
 
 ### 3. Body Pose / Static IK (`T: 3`)
+Adjusts the orientation of the chassis while the feet stay planted. We are in `STATE_ACTION`.
 Orientation of the chassis with feet planted.
 | Key | Type  | Description              | Unit    |
 | :-- | :---- | :----------------------- | :------ |
@@ -50,22 +50,27 @@ Orientation of the chassis with feet planted.
 Direct angle control over a specific PCA9685 channel.
 | Key  | Type | Description              | Range     |
 | :--- | :--- | :----------------------- | :-------- |
-| `id` | int  | PCA9685 Channel ID       | 0 - 15    |
-| `a`  | int  | Target Angle (Calibrated)| 0 - 180   |
+| `id` | int  | leg id                   |   0 - 3   |
+| `servo_id`| int | servo id (0: hip, 1: thigh, 2: knee) | 0 - 2|
+| `a`  | int  |         Angle            | 0-180 |
 
-**Example:** `{"T": 4, "id": 1, "a": 90}` *(Move channel 1 to 90 degrees)*
+**Example:** `{"T": 4, "id": 2, "servo_id": 2,"a": 90}` *(Move knee of leg id 2 (bottom right) to 90 degrees)*
 
 ---
 
 ## 📤 Robot -> Dashboard (Telemetry)
 
 ### 10. System Status (`T: 10`)
-| Key | Type  | Description                                     |
-| :-- | :---- | :---------------------------------------------- |
-| `s` | int   | Current active FSM State (0-3)                  |
-| `b` | float | Battery Voltage                                 |
-| `d` | array | ToF distance readings [FL, FR, RL, RR, Center]  |
-| `a` | bool  | Stabilization/PID Status                        |
+| Key | Type  | Description                                      |
+| :-- | :---- | :----------------------------------------------- |
+| `s` | int   | Current active FSM State (0-3)                   |
+| `b` | float | Battery Voltage (e.g., 7.4)                      |
+| `d` | array | ToF distance readings [FL, FR, RL, RR, Center]   |
+| `a` | bool  | Stabilization/PID Status (true/false)            |
+| `e` | string or null | Error message observed (if any)         | 
+
+**Example:** `{"T": 10, "s": 0, "b": 8.1, "d": [200, 200, 200, 200, 150], "a": true, "e": "an error message has been observed"}`
+**Note:** `System should send status every 1-2 seconds to know that we still have a connection, or use ping pong standard way in websockets`
 
 ---
 

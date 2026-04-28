@@ -12,7 +12,7 @@ class SpinalCord{
         void begin();
         void walk();
         void rest();
-        void jump();
+        void wallFlip();
         void update();
         void applyCalibration(int channel, int angle);
     private:
