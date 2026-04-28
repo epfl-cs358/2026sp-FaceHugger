@@ -35,3 +35,9 @@ void Leg::returnToDefaultAngles(){
     thighServo.returnToDefaultAngle();
     kneeServo.returnToDefaultAngle();
 }
+
+void Leg::identifyAndMove(uint8_t channel, double angle){
+    // TODO: stub — dispatch to the servo whose pcaChannel matches `channel`.
+    (void)channel;
+    (void)angle;
+}

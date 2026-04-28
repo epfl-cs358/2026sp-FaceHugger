@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 #include "shared/data.h"
 #include "../nervous_system/spinal_cord.h"
+#include "../nervous_system/movements.h"
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 extern SpinalCord spinalCord;
@@ -77,9 +78,19 @@ void handleParsedMessage(uint8_t * payload) {
             Serial.printf("Calibrating servo %d to %d", channel, angle);
             break;
         }
-        case CMD_MOVE:
+        case CMD_MOVE: {
+            if (doc["g"].is<int>()) {
+                int g = doc["g"];
+                if (g >= GAIT_NONE && g <= GAIT_CRAB) {
+                    GaitType requested = (GaitType)g;
+                    if (requested != spinalCord.currentGait()) {
+                        spinalCord.setGait(requested);
+                    }
+                }
+            }
             Serial.printf("Moving -> X:%.2f Y:%.2f\n", (float)doc["x"], (float)doc["y"]);
             break;
+        }
         case CMD_TELEMETRY:
             Serial.printf("FSM state: %d, Battery voltage: %lf, In stabilization mode: %s\n", 
                 (int)doc["s"], (float)doc["b"], (int)doc["a"] ? "true": "false");
