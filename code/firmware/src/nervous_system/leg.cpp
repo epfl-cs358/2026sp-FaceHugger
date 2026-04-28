@@ -35,3 +35,11 @@ void Leg::returnToDefaultAngles(){
     thighServo.returnToDefaultAngle();
     kneeServo.returnToDefaultAngle();
 }
+
+void Leg::identifyAndMove(uint8_t channel, double angle){
+    // TODO: dispatch to the servo whose pcaChannel matches `channel`.
+    // Stub kept empty so SpinalCord::applyCalibration links; calibration is
+    // a no-op until Servo exposes its channel or a moveIfChannelMatches helper.
+    (void)channel;
+    (void)angle;
+}
