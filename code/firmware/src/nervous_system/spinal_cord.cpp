@@ -8,8 +8,6 @@
 #include "movements.h"
 #include "../shared/config.h"
 
-// Mirrors code/simulation/gaits.py registry. Indexed by GaitType.
-// offsets order matches LegId: FR, FL, RR, RL.
 static const GaitParams GAITS[] = {
     { 0.0f,  0.000f, 0.000f, 0.0f,  { 0.00f, 0.00f, 0.00f, 0.00f }, 'y',
       "None" },
@@ -123,8 +121,6 @@ void SpinalCord::tickGait(){
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
         const float legPhase = fmodf(globalPhase - cfg.offsets[i] + 1.0f, 1.0f);
 
-        // Stub trajectory: linear sweep along the gait axis with a sin-arch
-        // lift during swing. Real IK / foot-target curve lands later.
         const bool  inStance = legPhase < cfg.duty;
         const float strideU  = inStance
             ? legPhase / cfg.duty

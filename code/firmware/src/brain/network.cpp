@@ -79,9 +79,6 @@ void handleParsedMessage(uint8_t * payload) {
             break;
         }
         case CMD_MOVE: {
-            // Optional gait switch: only react if `g` is present and changes
-            // the current gait, so each joystick tick (~30 Hz) doesn't reset
-            // the phase clock.
             if (doc["g"].is<int>()) {
                 int g = doc["g"];
                 if (g >= GAIT_NONE && g <= GAIT_CRAB) {
