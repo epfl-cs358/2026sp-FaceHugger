@@ -959,11 +959,14 @@ def _extract_joint(joint, owner_component, kind="joint"):
     if motion is not None and type_tag in ("revolute", "prismatic"):
         limits_rad = _joint_limits(motion, type_tag)
 
-    # Parent / child paths.
-    parent_path = _safe_full_path(getattr(joint, "occurrenceOne", None))
-    child_path = _safe_full_path(getattr(joint, "occurrenceTwo", None))
-    parent_body = _first_body_name(getattr(joint, "occurrenceOne", None))
-    child_body = _first_body_name(getattr(joint, "occurrenceTwo", None))
+    # Parent / child paths. Fusion's `occurrenceOne` is the *moving* side
+    # (URDF child); `occurrenceTwo` is the *held* side (URDF parent). This
+    # matches both fusion2urdf and the ACDC4Robot fork — getting it backwards
+    # produces a URDF tree that's inverted relative to the CAD kinematics.
+    parent_path = _safe_full_path(getattr(joint, "occurrenceTwo", None))
+    child_path = _safe_full_path(getattr(joint, "occurrenceOne", None))
+    parent_body = _first_body_name(getattr(joint, "occurrenceTwo", None))
+    child_body = _first_body_name(getattr(joint, "occurrenceOne", None))
 
     owner_name = ""
     try:
