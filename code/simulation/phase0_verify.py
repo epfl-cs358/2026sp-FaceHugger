@@ -213,12 +213,11 @@ def check_world_pos_crosscheck(fs_pos, fhla):
 
 
 def check_legassembly_occurrences(fhla, mesh_files):
-    """Visibility-tolerant: an occurrence counts as "found" if it's in the
-    (visibility-filtered) JSON tree OR mentioned in any mesh_files entry's
-    source_occurrences (which the export rules populate from the unfiltered
-    live tree). Construction points only resolve through the JSON tree, so
-    a hidden occurrence's expected point becomes a warning instead of a
-    hard fail."""
+    """An occurrence counts as "found" if it's in the JSON tree OR mentioned
+    in any mesh_files entry's source_occurrences. With the export script's
+    whitelist-driven mode, the JSON tree carries every occurrence anyway,
+    so the mesh_files fallback is mostly redundant — kept defensively in
+    case a future rule references a path traverse() decides to skip."""
     _section("Check 4 — FaceHuggerLegAssembly:1 occurrences and bodies")
     if fhla is None:
         _fail("FaceHuggerLegAssembly:1 not found")

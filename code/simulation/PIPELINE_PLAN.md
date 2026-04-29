@@ -25,11 +25,11 @@ Branch: `feat/urdf-pipeline`. Recent commits (newest last):
 
 [cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py](../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) rebuilt:
 
-- `VISIBLE_ONLY = True` (electronics auto-skipped).
-- Chassis combined-rule replaced with `type: "occurrence"` on `FlexibleSkeleton:1` (chassis + LipoCage, no brackets).
-- `body` rule gained optional `component` filter and scoped landmark lookup.
-- `combined` rule gained optional `origin_landmark` (re-origin in world frame).
-- `collect_joints()` walks **both** `Component.joints` and `Component.asBuiltJoints` across `design.allComponents`. Output goes to top-level `joints` array in JSON + `=== Joints ===` block in TXT.
+- **Visibility filtering removed entirely.** Toggle CAD light bulbs however you want — what gets captured is driven by four explicit lists: `EXPORT_RULES` (bodies → STLs), `CONSTRUCTION_POINTS` (named cpoints), `CONSTRUCTION_AXES` (named caxes), `JOINTS` (named joints). The JSON records each entity's `visible` flag as informational metadata only.
+- Chassis rule is now `type: "combined"` listing the `QuadrupedBody` and `LipoCage` bodies explicitly (electronics excluded by NOT being in the rule, regardless of CAD visibility).
+- Per-side body rules with optional `component` filter and scoped landmark lookup.
+- `combined` rule with optional `origin_landmark` (re-origin in world frame).
+- `collect_joints()` walks **both** `Component.joints` and `Component.asBuiltJoints` across `design.allComponents`, filtered by the `JOINTS` whitelist. Output goes to top-level `joints` array in JSON + `=== Joints ===` block in TXT.
 - Post-export message box runs the same checklist as `phase0_verify.py`.
 
 **Latest export confirms**: 8 STLs, 3 joints captured (`Link1Revolute -105°/+45°`, `Link2Revolute -135°/+45°`, `Link3Revolute -90°/+90°`), all checklist rows ✓.

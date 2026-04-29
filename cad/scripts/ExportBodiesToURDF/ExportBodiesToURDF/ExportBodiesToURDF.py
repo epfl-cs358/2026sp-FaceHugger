@@ -1,14 +1,25 @@
 """
 ExportBodiesToURDF.py  —  FaceHugger Fusion assembly exporter
 
+Visibility (light-bulb state) in Fusion has NO effect on what gets
+captured. The export is fully driven by four explicit lists:
+
+    EXPORT_RULES         which bodies bake into which STLs
+    CONSTRUCTION_POINTS  named cpoints to capture in the JSON tree
+    CONSTRUCTION_AXES    named caxes  to capture in the JSON tree
+    JOINTS               named joints to capture in the joints[] array
+
+Toggle visibility however you want in the CAD browser; it's purely a
+presentation concern. The JSON records each entity's `visible` flag as
+informational metadata only.
+
 Outputs to code/simulation/ (relative to this script's repo location):
   fusion_export.json     machine-readable, consumed by generate_urdf.py +
                          the Blender visualizer. Includes a `mesh_files`
                          manifest (one entry per STL with source occurrences
-                         + re-origin info) and a `joints` array (axis,
-                         origin, limits, parent/child for every Fusion
-                         joint in the design — primary source of joint
-                         kinematics for the URDF generator).
+                         + re-origin info), the three whitelists, and a
+                         `joints` array (axis, origin, limits, parent/child
+                         for each whitelisted joint).
   fusion_export.txt      human-readable tree for sanity checking, with a
                          trailing `=== Joints ===` block.
   exported_meshes/*.stl  STLs driven by EXPORT_RULES (below). Link meshes
@@ -56,19 +67,48 @@ _MESH_DIR = os.path.join(_SIM_DIR, "exported_meshes")
 # Config
 # ---------------------------------------------------------------------------
 
-VISIBLE_ONLY = True  # skip hidden geometry (electronics in FlexibleSkeleton are hidden)
 COLLECT_PHYSICS = True  # mass/CoM/inertia — slow, set False to skip
 CM_TO_MM = 10.0
 CM2_TO_M2 = 1e-4  # kg·cm² → kg·m²
+
+# ---------------------------------------------------------------------------
+# Authoritative content whitelists. Visibility (light-bulb state) in Fusion
+# has NO effect on what gets captured — the export is fully driven by these
+# explicit lists. Toggle visibility however you want in CAD; it's a
+# presentation concern, not a data filter.
+#
+# Each list matches by NAME (not occurrence path). When multiple components
+# expose a same-named entity (e.g. LegMountFixedPoint in both MotorMount
+# and MotorMountR; ServoMountPoint in 3 servo instances), every match is
+# captured.
+# ---------------------------------------------------------------------------
+
+CONSTRUCTION_POINTS = [
+    # Body-side mating points (FlexibleSkeleton:1).
+    "LegMountPointFL", "LegMountPointFR", "LegMountPointBR", "LegMountPointBL",
+    # Joint origins (FaceHuggerLegAssembly:1).
+    "BodyToLink1Point", "Link1ToLink2Point", "Link2ToLink3Point",
+    # Bracket-side mating point (MotorMount + MotorMountR).
+    "LegMountFixedPoint",
+    # Servo seat (each Servo_Mouser_Model occurrence).
+    "ServoMountPoint",
+]
+
+CONSTRUCTION_AXES = [
+    "BodyToLink1Axis", "Link1ToLink2Axis", "Link2ToLink3Axis",
+]
+
+JOINTS = [
+    "Link1Revolute", "Link2Revolute", "Link3Revolute",
+]
 
 # Rules driving STL export. Three rule types supported:
 #
 #   {"type": "occurrence", "match": "FlexibleSkeleton:1", "stl": "X.stl"}
 #     Export the full subtree of a matching occurrence as one STL. Fusion
-#     bakes all visible descendants at their placements — everything that
-#     happens to be visible at export time ends up baked in. With
-#     VISIBLE_ONLY=True, hidden electronics inside FlexibleSkeleton (PCBs,
-#     OLED, etc.) are skipped automatically.
+#     bakes every descendant at its placement, so this is mostly useful
+#     when you actually want everything in the subtree. Prefer `combined`
+#     when you need a precise body subset.
 #
 #   {"type": "body", "match": "Link1", "stl": "X.stl",
 #    "component": "Link1L",                 # optional, disambiguates same-named bodies
@@ -94,7 +134,8 @@ CM2_TO_M2 = 1e-4  # kg·cm² → kg·m²
 #     landmark in world space — same effective convention as the body
 #     rule's re-origin. Use when one URDF link's visual is several CAD
 #     bodies (e.g. link1 + the hip servo body that's rigid with link1 per
-#     `Link1RigidGroup`).
+#     `Link1RigidGroup`), or when you want a precise body subset for a
+#     chassis STL without dragging in everything visible.
 #
 # Downstream consumers (URDF generator, Blender visualizer) read the
 # `mesh_files` manifest section of fusion_export.json to know what was
@@ -106,11 +147,17 @@ CM2_TO_M2 = 1e-4  # kg·cm² → kg·m²
 # knee servo (Servo_Mouser_Model:3) is rigid with link3 via
 # `Link3RigidGroup`.
 EXPORT_RULES = [
-    # Chassis: full FlexibleSkeleton:1 subtree, electronics auto-excluded
-    # by VISIBLE_ONLY. Brackets (MotorMount{,R}) live in the leg assembly,
-    # not here, so QuadrupedBody.stl is just chassis + LipoCage.
-    {"type": "occurrence", "match": "FlexibleSkeleton:1",
-     "stl": "QuadrupedBody.stl"},
+    # Chassis: explicit body list. QuadrupedBody (main frame) + LipoCage
+    # only — electronics (PCBs, OLED, MPU6050, …) are intentionally
+    # excluded by NOT being in this list, regardless of CAD visibility.
+    # Brackets (MotorMount{,R}) live in the leg assembly and are exported
+    # separately as leg_mount_{L,R}.stl.
+    {"type": "combined", "stl": "QuadrupedBody.stl", "parts": [
+        {"occurrence": "FlexibleSkeleton:1/QuadrupedBody:1",
+         "body": "QuadrupedBody"},
+        {"occurrence": "FlexibleSkeleton:1/LipoCage:1",
+         "body": "LipoCage"},
+    ]},
 
     # Brackets: chassis-fixed, instanced 4× by URDF on base_link at the
     # 4 LegMountPointXX construction points. Re-origin to LegMountFixedPoint
@@ -277,10 +324,10 @@ def identity_matrix():
 
 
 def collect_bodies(comp):
+    """Every body in the component, with `visible` recorded as informational
+    metadata only — visibility no longer filters output."""
     out = []
     for body in comp.bRepBodies:
-        if VISIBLE_ONLY and not body.isLightBulbOn:
-            continue
         out.append({
             "name": body.name,
             "visible": body.isLightBulbOn,
@@ -290,15 +337,14 @@ def collect_bodies(comp):
 
 
 def collect_axes(comp, world_transform):
-    """`world_transform` is the 4x4 matrix mapping this component's local frame
-    into world (root document) frame. Axes are stored in BOTH local frame
-    (legacy `origin_mm`/`dir`) and world frame (`origin_world_mm`/`dir_world`)
-    so downstream tools can pick whichever they need without re-walking the
-    transform tree.
-    """
+    """Filtered to the names in CONSTRUCTION_AXES. `world_transform` is the
+    4x4 matrix mapping this component's local frame into world frame.
+    Axes are stored in BOTH local frame (`origin_mm`/`dir`) and world frame
+    (`origin_world_mm`/`dir_world`) so downstream tools can pick whichever
+    they need without re-walking the transform tree."""
     out = []
     for axis in comp.constructionAxes:
-        if VISIBLE_ONLY and not axis.isLightBulbOn:
+        if axis.name not in CONSTRUCTION_AXES:
             continue
         try:
             geom = axis.geometry  # Line3D
@@ -316,9 +362,10 @@ def collect_axes(comp, world_transform):
 
 
 def collect_points(comp, world_transform):
+    """Filtered to the names in CONSTRUCTION_POINTS."""
     out = []
     for point in comp.constructionPoints:
-        if VISIBLE_ONLY and not point.isLightBulbOn:
+        if point.name not in CONSTRUCTION_POINTS:
             continue
         try:
             geom = point.geometry
@@ -891,6 +938,8 @@ def collect_joints(design):
             joints = None
         if joints:
             for joint in joints:
+                if not _whitelisted_joint_name(joint):
+                    continue
                 entry = _extract_joint(joint, component, kind="joint")
                 if entry is not None:
                     joints_data.append(entry)
@@ -905,11 +954,22 @@ def collect_joints(design):
             as_built = None
         if as_built:
             for joint in as_built:
+                if not _whitelisted_joint_name(joint):
+                    continue
                 entry = _extract_joint(joint, component, kind="asbuilt")
                 if entry is not None:
                     joints_data.append(entry)
 
     return joints_data
+
+
+def _whitelisted_joint_name(joint):
+    """Return True if `joint.name` is in the JOINTS whitelist. Defensive
+    against AttributeError so a malformed joint can't crash the walk."""
+    try:
+        return joint.name in JOINTS
+    except Exception:
+        return False
 
 
 def _extract_joint(joint, owner_component, kind="joint"):
@@ -1177,8 +1237,9 @@ def traverse(occurrences, parent_to_world=None):
         parent_to_world = identity_matrix()
     result = []
     for occ in occurrences:
-        if VISIBLE_ONLY and not occ.isLightBulbOn:
-            continue
+        # No visibility filter — every occurrence shows up in the JSON tree.
+        # `visible` lands in the node as informational metadata for human
+        # inspection, but is not used to gate anything.
         comp = occ.component
         # world = parent_to_world * occ.transform
         this_to_world = mat_multiply(parent_to_world, occ.transform)
@@ -1368,12 +1429,12 @@ def _verify_against_assembly_hierarchy(occurrences_json, joints, mesh_files):
     list of human-readable lines (a few ✓/✗ rows) for the message box. Doesn't
     fail the export — just reports.
 
-    `mesh_files` is consulted as the authoritative existence check: if an
+    `mesh_files` is consulted as a secondary existence check: if an
     occurrence shows up in ANY entry's `source_occurrences`, the export
-    rules found it (regardless of visibility). The JSON occurrence tree
-    is filtered by VISIBLE_ONLY, so hidden CAD components (e.g. the
-    floating Link1R / MotorMountR while the user is working on the L
-    side) wouldn't otherwise be visible to this checklist."""
+    rules also found it. With the visibility filter removed (every
+    occurrence lands in the JSON tree), this fallback is mostly
+    redundant — kept defensively in case a future export rule references
+    a path that traverse() decides to skip for an unrelated reason."""
     fs = next(
         (o for o in occurrences_json if o.get("name") == "FlexibleSkeleton:1"),
         None,
@@ -1537,14 +1598,21 @@ def run(_context: str):
         # readers ignore the array if they don't know about it.
         joints = collect_joints(design)
 
+        # Bind to typed locals so the TXT iteration below doesn't fight the
+        # type checker over `export[...]` heterogeneity.
+        root_axes = collect_axes(root, root_world)
+        root_points = collect_points(root, root_world)
+
         export = {
             "document": root.name,
-            "visible_only": VISIBLE_ONLY,
             "collect_physics": COLLECT_PHYSICS,
             "mesh_files": mesh_files,
+            "construction_points_whitelist": list(CONSTRUCTION_POINTS),
+            "construction_axes_whitelist": list(CONSTRUCTION_AXES),
+            "joints_whitelist": list(JOINTS),
             "joints": joints,
-            "root_axes": collect_axes(root, root_world),
-            "root_points": collect_points(root, root_world),
+            "root_axes": root_axes,
+            "root_points": root_points,
             "occurrences": occurrences_json,
         }
 
@@ -1558,18 +1626,21 @@ def run(_context: str):
         header = [
             "=" * 60,
             "FaceHugger Fusion Export",
-            f"Document   : {export['document']}",
-            f"Visible only: {VISIBLE_ONLY}  |  Physics: {COLLECT_PHYSICS}",
+            f"Document        : {export['document']}",
+            f"Physics         : {COLLECT_PHYSICS}",
+            f"Cpoint whitelist: {', '.join(CONSTRUCTION_POINTS)}",
+            f"Caxis whitelist : {', '.join(CONSTRUCTION_AXES)}",
+            f"Joint whitelist : {', '.join(JOINTS)}",
             "=" * 60,
             "",
         ]
-        if export["root_axes"] or export["root_points"]:
+        if root_axes or root_points:
             header.append("[root]")
-            for a in export["root_axes"]:  # ty:ignore[not-iterable]
+            for a in root_axes:
                 header.append(
                     f"  caxis: {a['name']} | origin_mm: {tuple(a['origin_mm'])} | dir: {tuple(a['dir'])}"
                 )
-            for p in export["root_points"]:  # ty:ignore[not-iterable]
+            for p in root_points:
                 header.append(f"  cpoint: {p['name']} | pos_mm: {tuple(p['pos_mm'])}")
             header.append("")
 
