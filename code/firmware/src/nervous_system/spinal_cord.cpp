@@ -8,6 +8,11 @@
 #include "movements.h"
 #include "../shared/config.h"
 
+// Ratios for the 4-phase swing (must sum to 1.0)
+static const float SWING_RATIO_LIFT  = 0.20f; 
+static const float SWING_RATIO_MOVE  = 0.60f; 
+static const float SWING_RATIO_LOWER = 0.20f; 
+
 static const GaitParams GAITS[] = {
     { 0.0f,  0.000f, 0.000f, 0.0f,  { 0.00f, 0.00f, 0.00f, 0.00f }, 'y',
       "None" },
@@ -44,7 +49,9 @@ SpinalCord::SpinalCord(uint8_t pwm):
         Servo(driver, BOTTOM_LEFT_LEG_KNEE_PCA_CHANNEL, BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE)
         )),
     currentGait_(GAIT_NONE),
-    gaitPhaseStartMs_(0)
+    gaitPhaseStartMs_(0),
+    targetX(0.0f), targetY(0.0f), activeX(0.0f), activeY(0.0f),
+    isMovingRequested(false), lastCommandMs(0)
 {
 }
 
@@ -59,21 +66,31 @@ void SpinalCord::begin() {
     leg4.returnToDefaultAngles();
 }
 
-void SpinalCord::walk(){
-    robotState = STATE_WALK;
+void SpinalCord::processCommand(String dir, int state) {
+    lastCommandMs = millis();
+    isMovingRequested = (state == 1);
+
+    if (!isMovingRequested) {
+        targetX = 0.0f; targetY = 0.0f;
+        return;
+    }
+
+    // Map discrete labels to Vectors
+    if (dir == "FW")         { targetX = 0.0f;  targetY = 1.0f;  }
+    else if (dir == "BW")    { targetX = 0.0f;  targetY = -1.0f; }
+    else if (dir == "L")     { targetX = -1.0f; targetY = 0.0f;  }
+    else if (dir == "R")     { targetX = 1.0f;  targetY = 0.0f;  }
+    else if (dir == "FW_R")  { targetX = 0.7f;  targetY = 0.7f;  }
+    else if (dir == "FW_L")  { targetX = -0.7f; targetY = 0.7f;  }
+    else if (dir == "BW_R")  { targetX = 0.7f;  targetY = -0.7f; }
+    else if (dir == "BW_L")  { targetX = -0.7f; targetY = -0.7f; }
 }
 
-void SpinalCord::rest(){
-    robotState = STATE_IDLE;
-}
-
-void SpinalCord::wallFlip(){
-    robotState = STATE_ACTION;
-}
+void SpinalCord::walk(){ robotState = STATE_WALK; }
+void SpinalCord::rest(){ robotState = STATE_IDLE; }
+void SpinalCord::wallFlip(){ robotState = STATE_ACTION; }
 
 void SpinalCord::applyCalibration(int channel, int angle) {
-    // We call identifyAndMove on every leg. 
-    // Leg class logic ensures only the correct leg reacts.
     leg1.identifyAndMove(channel, (double)angle);
     leg2.identifyAndMove(channel, (double)angle);
     leg3.identifyAndMove(channel, (double)angle);
@@ -81,8 +98,19 @@ void SpinalCord::applyCalibration(int channel, int angle) {
 }
 
 void SpinalCord::update(){
+    // 1. Safety Deadman's Switch (500ms timeout)
+    if (millis() - lastCommandMs > 500) {
+        isMovingRequested = false;
+        targetX = 0.0f; targetY = 0.0f;
+    }
+
+    // 2. Input Smoothing
+    activeX += (targetX - activeX) * 0.1f;
+    activeY += (targetY - activeY) * 0.1f;
+
     switch(robotState){
         case STATE_WALK:
+            if (currentGait_ != GAIT_NONE) tickGait();
             break;
         case STATE_ACTION:
             break;
@@ -95,10 +123,6 @@ void SpinalCord::update(){
             leg4.returnToDefaultAngles();
             return;
     }
-
-    if (currentGait_ != GAIT_NONE) {
-        tickGait();
-    }
 }
 
 void SpinalCord::setGait(GaitType g){
@@ -107,34 +131,67 @@ void SpinalCord::setGait(GaitType g){
     Serial.printf("[gait] %s\n", GAITS[g].label);
 }
 
-GaitType SpinalCord::currentGait() const {
-    return currentGait_;
-}
+GaitType SpinalCord::currentGait() const { return currentGait_; }
 
 void SpinalCord::tickGait(){
     const GaitParams& cfg = GAITS[currentGait_];
-    const float t           = (millis() - gaitPhaseStartMs_) / 1000.0f;
+    const float t = (millis() - gaitPhaseStartMs_) / 1000.0f;
     const float globalPhase = fmodf(t / cfg.period_s, 1.0f);
+
+    // GRACEFUL STOP: Stop only when motion is near zero AND phase resets
+    if (!isMovingRequested && fabs(activeX) < 0.01f && fabs(activeY) < 0.01f && globalPhase < 0.05f) {
+        robotState = STATE_IDLE;
+        return;
+    }
 
     Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
 
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
+        // Partner's original offset math
         const float legPhase = fmodf(globalPhase - cfg.offsets[i] + 1.0f, 1.0f);
 
-        const bool  inStance = legPhase < cfg.duty;
-        const float strideU  = inStance
-            ? legPhase / cfg.duty
-            : (legPhase - cfg.duty) / (1.0f - cfg.duty);
-        const float along    = cfg.step_length_m * (0.5f - strideU);
-        const float lift     = inStance
-            ? 0.0f
-            : cfg.step_height_m * sinf((float)PI * strideU);
+        float x = 0, y = 0, z = 0;
+        const float swingTime = 1.0f - cfg.duty;
 
-        const float x = (cfg.axis == 'x') ? along : 0.0f;
-        const float y = (cfg.axis == 'y') ? along : 0.0f;
-        const float z = lift;
+        if (legPhase < cfg.duty) {
+            // PHASE 4: STANCE (Ground contact)
+            float s = legPhase / cfg.duty; 
+            x = activeX * cfg.step_length_m * (0.5f - s);
+            y = activeY * cfg.step_length_m * (0.5f - s);
+            z = 0.0f;
+        } else {
+            // SWING PHASES (In the air)
+            float normalizedSwing = (legPhase - cfg.duty) / swingTime;
 
+            if (normalizedSwing < SWING_RATIO_LIFT) {
+                // PHASE 1: LIFT
+                float s = normalizedSwing / SWING_RATIO_LIFT;
+                x = activeX * cfg.step_length_m * (-0.5f);
+                y = activeY * cfg.step_length_m * (-0.5f);
+                z = cfg.step_height_m * s;
+            }
+            else if (normalizedSwing < (SWING_RATIO_LIFT + SWING_RATIO_MOVE)) {
+                // PHASE 2: MOVE (Horizontal Travel)
+                float s = (normalizedSwing - SWING_RATIO_LIFT) / SWING_RATIO_MOVE;
+                x = activeX * cfg.step_length_m * (-0.5f + s);
+                y = activeY * cfg.step_length_m * (-0.5f + s);
+                z = cfg.step_height_m;
+            }
+            else {
+                // PHASE 3: LOWER (Landing)
+                float s = (normalizedSwing - (SWING_RATIO_LIFT + SWING_RATIO_MOVE)) / SWING_RATIO_LOWER;
+                x = activeX * cfg.step_length_m * (0.5f);
+                y = activeY * cfg.step_length_m * (0.5f);
+                z = cfg.step_height_m * (1.0f - s);
+            }
+        }
+
+        z = applyIMUCorrection(z, i);
         legs[i]->setPose(x, y, z);
     }
 }
 
+float SpinalCord::applyIMUCorrection(float rawZ, uint8_t legIdx) {
+    // Return rawZ for now. MPU6050 logic will plug in here later.
+    return rawZ;
+}
