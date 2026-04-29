@@ -26,6 +26,7 @@ Branch: `feat/urdf-pipeline`. Recent commits (newest last):
 [cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py](../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) rebuilt:
 
 - **Visibility filtering removed entirely.** Toggle CAD light bulbs however you want — what gets captured is driven by four explicit lists: `EXPORT_RULES` (bodies → STLs), `CONSTRUCTION_POINTS` (named cpoints), `CONSTRUCTION_AXES` (named caxes), `JOINTS` (named joints). The JSON records each entity's `visible` flag as informational metadata only.
+- **The export is the raw material; filtering happens at consumption time.** The `occurrences` tree in `fusion_export.json` is the *complete* design tree (every PCB, OLED, capacitor, etc.) — that's by design, so downstream tools (URDF generator, Blender visualizer) can resolve any occurrence path they need to look up world transforms. The four whitelists above shape **specific slices** of the JSON output: STLs (`EXPORT_RULES`), per-occurrence `points[]` / `axes[]` arrays, and the top-level `joints[]` array. The tree itself is unfiltered; consumers pick out the bits they care about.
 - Chassis rule is now `type: "combined"` listing the `QuadrupedBody` and `LipoCage` bodies explicitly (electronics excluded by NOT being in the rule, regardless of CAD visibility).
 - Per-side body rules with optional `component` filter and scoped landmark lookup.
 - `combined` rule with optional `origin_landmark` (re-origin in world frame).

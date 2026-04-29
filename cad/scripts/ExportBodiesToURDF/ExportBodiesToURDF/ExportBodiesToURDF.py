@@ -1,17 +1,33 @@
 """
 ExportBodiesToURDF.py  —  FaceHugger Fusion assembly exporter
 
+Design philosophy: **the export is the raw material, not the curated
+output**. The JSON `occurrences` tree contains every occurrence in the
+design — PCBs, OLEDs, capacitors, every screw — because downstream
+tools (the URDF generator, the Blender visualizer) navigate that tree
+by occurrence path to look up world transforms, joint origins, mount
+points, etc. Pruning the tree would break path resolution. So we keep
+it complete and filter at consumption time.
+
+Filtering happens via four explicit whitelists, each shaping a
+DIFFERENT slice of the output:
+
+    EXPORT_RULES         bodies → STL files (8 files in exported_meshes/)
+    CONSTRUCTION_POINTS  named cpoints land in each occurrence's points[]
+    CONSTRUCTION_AXES    named caxes  land in each occurrence's axes[]
+    JOINTS               named joints land in the top-level joints[] array
+
+The OCCURRENCE TREE itself is not filtered: every component shows up,
+with its full bodies[] (name + bbox center as metadata), its
+whitelisted points[]/axes[], and its own children[]. This means
+generate_urdf.py can resolve `FaceHuggerLegAssembly:1/MotorMount:1`
+and find its world_transform_rm_cm without us having to anticipate
+which paths it'll need.
+
 Visibility (light-bulb state) in Fusion has NO effect on what gets
-captured. The export is fully driven by four explicit lists:
-
-    EXPORT_RULES         which bodies bake into which STLs
-    CONSTRUCTION_POINTS  named cpoints to capture in the JSON tree
-    CONSTRUCTION_AXES    named caxes  to capture in the JSON tree
-    JOINTS               named joints to capture in the joints[] array
-
-Toggle visibility however you want in the CAD browser; it's purely a
-presentation concern. The JSON records each entity's `visible` flag as
-informational metadata only.
+captured — toggle visibility however you want in the CAD browser, it's
+purely a presentation concern. The JSON records each entity's
+`visible` flag as informational metadata only.
 
 Outputs to code/simulation/ (relative to this script's repo location):
   fusion_export.json     machine-readable, consumed by generate_urdf.py +
