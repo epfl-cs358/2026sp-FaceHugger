@@ -8,19 +8,31 @@ This document defines the JSON-based communication protocol between the **Web Da
 - **Format:** Minified JSON
 ---
 
+## Direction vector type
+The direction vector of the robot
+- **FW (id 0):** Forward vector (0.0, 1.0)
+- **BW (id 1):** Backward vector (0.0, -1.0)
+- **FR (id 2):** Front right vector (1.0, 1.0)
+- **FL (id 3):** Front left vector (-1.0, 1.0)
+- **BR (id 4):** Backward right (1.0, -1.0)
+- **BL (id 5):** Backward left (-1.0, -1.0)
+- **STOP (id 6):** Stop, user finished walking so we send a message to stop and finish the action (0.0, 0.0)
+
+## Gait Mode Type 
+The gait mode the robot is currently in
+- **TROT (id 0):** Trot gait mode
+- **CRAB (id 1):** Crab gait mode
+- **CRAWL:** Crawl gait mode
+
 ## 📥 Dashboard -> Robot (Commands)
 
 ### 1. Manual Movement (`T: 1`)
 Real-time body vector and gait control.
 | Key | Type  | Description              | Range          |
 | :-- | :---- | :----------------------- | :------------- |
-| `x` | float | Lateral (Strafing)       | -1.0 to 1.0    |
-| `y` | float | Forward / Backward       | -1.0 to 1.0    |
-| `z` | float | Vertical Offset (Height) | -1.0 to 1.0    |
-| `r` | float | Yaw (Rotation)           | -1.0 to 1.0    |
-| `g` | int   | Gait Mode ID             | 0, 1, 2...     |
+| 'd' | int | FW, BW, FR, FL, BL, BR, R, L | 0,1,2... |
 
-**Example:** `{"T": 1, "x": 0.0, "y": 0.5, "z": -0.2, "r": 0.1, "g": 1}`
+**Example:** `{"T": 1, "d": 0}`
 
 ---
 
@@ -56,6 +68,13 @@ Direct angle control over a specific PCA9685 channel.
 
 **Example:** `{"T": 4, "id": 2, "servo_id": 2,"a": 90}` *(Move knee of leg id 2 (bottom right) to 90 degrees)*
 
+### 5. Gait integration ('T: 5')
+Gait mode change
+| Key | Type | Description | Range |
+| :-- | :---- | :----------------------- | :------------- |
+| 'g' | int  | Gait mode ID | 0,1,2...|
+**Example:** '{"T": 5, "g": 1}' *(This is needed in order to avoid sending the gait each time with the T: 1 packets as well as have a separation of concern as to what the robot should do when changing gait)*
+
 ---
 
 ## 📤 Robot -> Dashboard (Telemetry)
@@ -64,13 +83,14 @@ Direct angle control over a specific PCA9685 channel.
 | Key | Type  | Description                                      |
 | :-- | :---- | :----------------------------------------------- |
 | `s` | int   | Current active FSM State (0-3)                   |
-| `b` | float | Battery Voltage (e.g., 7.4)                      |
 | `d` | array | ToF distance readings [FL, FR, RL, RR, Center]   |
-| `a` | bool  | Stabilization/PID Status (true/false)            |
+| 'a' | array | AMU array containing speed + gyroscope [Speed, Rotation x, Rotation y, Rotation z] |
+| 'g' | int   | Current gait mode of the robot                   |
+| 'pc'| float | The current percentage of the movement (gait) accomplished |
 | `e` | string or null | Error message observed (if any)         | 
 
-**Example:** `{"T": 10, "s": 0, "b": 8.1, "d": [200, 200, 200, 200, 150], "a": true, "e": "an error message has been observed"}`
-**Note:** `System should send status every 1-2 seconds to know that we still have a connection, or use ping pong standard way in websockets`
+**Example:** `{"T": 10, "s": 0, "d": [200, 200, 200, 200, 150], "a": [0.6, 50, 90, 15], "g": 1, "pc": 0.7, "e": "an error message has been observed"}`
+**Note:** `System should send status every 500 ms to know that we still have a connection, or use ping pong standard way in websockets`
 
 ---
 
