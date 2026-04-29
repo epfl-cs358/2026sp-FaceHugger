@@ -1,7 +1,10 @@
 ============================================================
 FaceHugger Fusion Export
-Document   : FullBodyAssembly
-Visible only: False  |  Physics: True
+Document        : FullBodyAssembly
+Physics         : True
+Cpoint whitelist: LegMountPointFL, LegMountPointFR, LegMountPointBR, LegMountPointBL, BodyToLink1Point, Link1ToLink2Point, Link2ToLink3Point, LegMountFixedPoint, ServoMountPoint
+Caxis whitelist : BodyToLink1Axis, Link1ToLink2Axis, Link2ToLink3Axis
+Joint whitelist : Link1Revolute, Link2Revolute, Link3Revolute
 ============================================================
 
 FlexibleSkeleton:1 [xref]
@@ -1738,3 +1741,20 @@ FaceHuggerLegAssembly:1 [xref]
         parent_origin_mm: (-1.85, -0.0, -0.2)  world_origin_mm: (-57.901, 34.251, -4.8)
         body: Horn | bbox_center_mm: (10.12, 0.0, -45.575)
         mass: 0.026882 kg | com local: (8.27, -0.0, -45.365) | com world: (-57.901, 44.372, 40.365)
+
+=== Joints ===
+Link3Revolute (revolute) [asbuilt]
+  axis: (principal axis)  dir=(+1.000, +0.000, +0.000)  origin: (implicit origin)  local_mm=(+34.57, +145.62, +10.25)
+  limits: rest=+0.0deg  [-90.0deg, +90.0deg]
+  parent: Link2L:1 (Link2)
+  child:  Link3L:1 (Link3)
+Link2Revolute (revolute) [asbuilt]
+  axis: (principal axis)  dir=(+1.000, +0.000, +0.000)  origin: (implicit origin)  local_mm=(+34.56, +50.92, +10.25)
+  limits: rest=+0.0deg  [-135.0deg, +45.0deg]
+  parent: Link1L:1 (Link1)
+  child:  Link2L:1 (Link2)
+Link1Revolute (revolute) [asbuilt]
+  axis: (principal axis)  dir=(+0.000, +0.000, +1.000)  origin: (implicit origin)  local_mm=(+11.97, -0.00, -4.20)
+  limits: rest=+0.0deg  [-105.0deg, +45.0deg]
+  parent: MotorMount:1 (LegMountL)
+  child:  Link1L:1 (Link1)
