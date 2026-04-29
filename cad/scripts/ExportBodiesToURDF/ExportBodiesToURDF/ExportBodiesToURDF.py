@@ -842,7 +842,8 @@ def collect_joints(design):
         {
           "name": "Link1Revolute",
           "owner_component": "FaceHuggerLegAssembly",
-          "type": "revolute" | "rigid" | "slider" | ... ,
+          "kind": "joint" | "asbuilt",         # which Fusion command made it
+          "type": "revolute" | "rigid" | ... ,  # urdf-ish motion class
           "axis_dir_local_unit": [x, y, z] or None,
           "axis_origin_local_mm": [x, y, z] or None,
           "axis_construction_name": "BodyToLink1Axis" or None,
@@ -858,12 +859,22 @@ def collect_joints(design):
           "child_body":  str or None,
         }
 
-    Local frames are the OWNER COMPONENT's local frame. Construction-axis
-    directions and construction-point positions resolve through the joint's
-    geometryOrOriginOne references when available.
+    Per the Fusion forum thread on joint discovery, `Component.joints`
+    contains only joints created via the Joint command, while
+    `Component.asBuiltJoints` carries those created via As-Built Joint —
+    these are two separate collections, and a complete walk has to visit
+    both. `Design.allComponents` enumerates every component definition in
+    the design including xref'd documents (the FaceHuggerLegAssembly is
+    an xref, and Link1Revolute / Link2Revolute / Link3Revolute live on
+    that component's joints collection).
 
-    Defensive: every Fusion API call is wrapped in try/except so a single
-    weird joint doesn't kill the whole export.
+    Local frames are the OWNER COMPONENT's local frame. Defensive: every
+    Fusion API call is wrapped in try/except so a single weird joint
+    doesn't kill the whole export.
+
+    Refs: https://forums.autodesk.com/t5/fusion-api-and-scripts/joints-where-are-you/td-p/8584358
+          https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/JointSample_Sample.htm
+          https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/AsBuiltJointSample_Sample.htm
     """
     joints_data = []
     try:
@@ -872,20 +883,39 @@ def collect_joints(design):
         return joints_data
 
     for component in all_components:
+        # Regular joints — created via the Joint command, with explicit
+        # joint origins on each side.
         try:
             joints = component.joints
         except Exception:
-            continue
-        for joint in joints:
-            entry = _extract_joint(joint, component)
-            if entry is not None:
-                joints_data.append(entry)
+            joints = None
+        if joints:
+            for joint in joints:
+                entry = _extract_joint(joint, component, kind="joint")
+                if entry is not None:
+                    joints_data.append(entry)
+
+        # As-built joints — created by selecting two faces/edges on
+        # already-positioned occurrences. Same JointMotion subclasses,
+        # but the geometry attribute is `.geometry` (a JointGeometry)
+        # rather than `.geometryOrOriginOne`.
+        try:
+            as_built = component.asBuiltJoints
+        except Exception:
+            as_built = None
+        if as_built:
+            for joint in as_built:
+                entry = _extract_joint(joint, component, kind="asbuilt")
+                if entry is not None:
+                    joints_data.append(entry)
+
     return joints_data
 
 
-def _extract_joint(joint, owner_component):
-    """Pull data for one Fusion Joint into the JSON-friendly schema. Returns
-    None if the joint is malformed or a type we don't model in URDF."""
+def _extract_joint(joint, owner_component, kind="joint"):
+    """Pull data for one Fusion Joint or AsBuiltJoint into the JSON-friendly
+    schema. `kind` distinguishes the two collections (Component.joints vs
+    Component.asBuiltJoints). Returns None if the joint is malformed."""
     try:
         name = joint.name
     except Exception:
@@ -920,7 +950,8 @@ def _extract_joint(joint, owner_component):
     if motion is not None and type_tag in ("revolute", "prismatic", "cylindrical"):
         axis_dir, axis_construction_name = _joint_axis(motion)
 
-    # Origin point — comes from geometryOrOriginOne (the held side).
+    # Origin point — comes from geometryOrOriginOne (regular Joint) or
+    # geometry (AsBuiltJoint).
     origin_local_mm, origin_construction_name = _joint_origin(joint)
 
     # Limits — only meaningful for revolute / prismatic.
@@ -943,6 +974,7 @@ def _extract_joint(joint, owner_component):
     return {
         "name": name,
         "owner_component": owner_name,
+        "kind": kind,
         "type": type_tag,
         "axis_dir_local_unit": axis_dir,
         "axis_origin_local_mm": origin_local_mm,
@@ -1016,14 +1048,18 @@ def _joint_axis(motion):
 
 def _joint_origin(joint):
     """Return (origin_local_mm, construction_point_name) using the joint's
-    `geometryOrOriginOne`. Fusion exposes either a JointGeometry (computed
-    from edges/faces) or a JointOrigin (user-created); both have `.origin`
+    held-side geometry reference. Regular Joints expose
+    `geometryOrOriginOne` (either a JointGeometry or a JointOrigin);
+    AsBuiltJoints expose `.geometry` (a JointGeometry). Both have `.origin`
     yielding a construction-point-like reference."""
     geo_one = None
-    try:
-        geo_one = joint.geometryOrOriginOne
-    except Exception:
-        geo_one = None
+    for attr in ("geometryOrOriginOne", "geometry"):
+        try:
+            geo_one = getattr(joint, attr, None)
+        except Exception:
+            geo_one = None
+        if geo_one is not None:
+            break
     if geo_one is None:
         return None, None
 
@@ -1314,10 +1350,17 @@ _REQUIRED_FHLA_OCCS = {
 _REQUIRED_JOINTS = ("Link1Revolute", "Link2Revolute", "Link3Revolute")
 
 
-def _verify_against_assembly_hierarchy(occurrences_json, joints):
+def _verify_against_assembly_hierarchy(occurrences_json, joints, mesh_files):
     """Lightweight diagnostic mirroring phase0_verify.py's checks. Returns a
     list of human-readable lines (a few ✓/✗ rows) for the message box. Doesn't
-    fail the export — just reports."""
+    fail the export — just reports.
+
+    `mesh_files` is consulted as the authoritative existence check: if an
+    occurrence shows up in ANY entry's `source_occurrences`, the export
+    rules found it (regardless of visibility). The JSON occurrence tree
+    is filtered by VISIBLE_ONLY, so hidden CAD components (e.g. the
+    floating Link1R / MotorMountR while the user is working on the L
+    side) wouldn't otherwise be visible to this checklist."""
     fs = next(
         (o for o in occurrences_json if o.get("name") == "FlexibleSkeleton:1"),
         None,
@@ -1379,23 +1422,55 @@ def _verify_against_assembly_hierarchy(occurrences_json, joints):
     rows.append(f"  {_mark(cross_ok)} MotorMount LegMountFixedPoint "
                 "≈ LegMountPointFL (≤ 1mm)")
 
-    # 4. FaceHuggerLegAssembly occurrences + bodies + bracket-points
+    # 4. FaceHuggerLegAssembly occurrences + bodies. Visibility-tolerant:
+    # an occurrence counts as "found" if it's either in the (visibility-
+    # filtered) JSON tree OR mentioned in any mesh_files entry's
+    # source_occurrences (which the export rules populate from the
+    # unfiltered live tree). Construction points only resolve through
+    # the JSON tree, so they're checked separately and surface as a
+    # softer "info" row when the parent occurrence is hidden.
     occ_ok = bool(fhla)
+    point_warnings = []
     if fhla:
         children = {c.get("name"): c for c in (fhla.get("children") or [])}
+        seen_paths = set()
+        for entry in (mesh_files or {}).values():
+            if not isinstance(entry, dict):
+                continue
+            for p in entry.get("source_occurrences") or []:
+                seen_paths.add(p)
+                # Also add the leaf component:N for matching by occurrence
+                # name (covers e.g. "FaceHuggerLegAssembly:1/MotorMountR:1"
+                # → "MotorMountR:1").
+                seen_paths.add(p.rsplit("/", 1)[-1])
         for occ_name, expect in _REQUIRED_FHLA_OCCS.items():
             child = children.get(occ_name)
-            if not child:
+            in_mesh = occ_name in seen_paths
+            if not child and not in_mesh:
                 occ_ok = False
                 break
-            if "body" in expect and not _has_body(child, expect["body"]):
+            # Body presence is implied when the occurrence shows up in
+            # mesh_files (the rule already matched against it). When the
+            # JSON tree has the occurrence, double-check the body name.
+            if child and "body" in expect and not _has_body(child, expect["body"]):
                 occ_ok = False
                 break
-            if "point" in expect and not _has_point(child, expect["point"]):
-                occ_ok = False
-                break
-    rows.append(f"  {_mark(occ_ok)} LegAssembly occurrences + bodies + "
-                "LegMountFixedPoint")
+            # Construction point only resolves via the JSON tree; if the
+            # occurrence is hidden, we can't see its points — flag as a
+            # warning rather than a hard fail.
+            if "point" in expect:
+                if child:
+                    if not _has_point(child, expect["point"]):
+                        occ_ok = False
+                        break
+                else:
+                    point_warnings.append(
+                        f"{occ_name} is hidden — can't verify {expect['point']}"
+                    )
+    rows.append(f"  {_mark(occ_ok)} LegAssembly occurrences + bodies "
+                "(via JSON tree or mesh_files)")
+    for w in point_warnings:
+        rows.append(f"    note: {w}")
 
     # 5. Joints
     joint_names = {j.get("name") for j in joints}
@@ -1494,7 +1569,9 @@ def run(_context: str):
         # Diagnostic against ASSEMBLY_HIERARCHY checklist (matches
         # phase0_verify.py expectations). Lets the user see immediately
         # whether the export lines up with the spec.
-        diag_lines = _verify_against_assembly_hierarchy(occurrences_json, joints)
+        diag_lines = _verify_against_assembly_hierarchy(
+            occurrences_json, joints, mesh_files
+        )
 
         # Summary
         msg = f"Export complete.\n\nJSON + TXT → {_SIM_DIR}\n"

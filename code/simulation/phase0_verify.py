@@ -212,48 +212,88 @@ def check_world_pos_crosscheck(fs_pos, fhla):
     return ok
 
 
-def check_legassembly_occurrences(fhla):
+def check_legassembly_occurrences(fhla, mesh_files):
+    """Visibility-tolerant: an occurrence counts as "found" if it's in the
+    (visibility-filtered) JSON tree OR mentioned in any mesh_files entry's
+    source_occurrences (which the export rules populate from the unfiltered
+    live tree). Construction points only resolve through the JSON tree, so
+    a hidden occurrence's expected point becomes a warning instead of a
+    hard fail."""
     _section("Check 4 — FaceHuggerLegAssembly:1 occurrences and bodies")
     if fhla is None:
         _fail("FaceHuggerLegAssembly:1 not found")
         return False
+
     children = {c.get("name"): c for c in fhla.get("children", []) or []}
+
+    # Pull every occurrence path that any STL was sourced from. Add the
+    # leaf component:N too so an entry like
+    # "FaceHuggerLegAssembly:1/MotorMountR:1" registers as MotorMountR:1.
+    seen_paths = set()
+    for entry in (mesh_files or {}).values():
+        if not isinstance(entry, dict):
+            continue
+        for p in entry.get("source_occurrences") or []:
+            seen_paths.add(p)
+            seen_paths.add(p.rsplit("/", 1)[-1])
+
     all_ok = True
     for occ_name, expectations in REQUIRED_FHLA_OCCURRENCES.items():
         occ = children.get(occ_name)
-        if occ is None:
-            _fail(f"{occ_name}", "occurrence missing")
+        in_mesh = occ_name in seen_paths
+        if occ is None and not in_mesh:
+            _fail(f"{occ_name}", "occurrence missing (not in JSON tree, no mesh_files entry)")
             all_ok = False
             continue
-        sub_ok = True
+
         body = expectations.get("body")
-        if body and not has_body(occ, body):
-            _fail(f"{occ_name}", f"body '{body}' missing")
-            sub_ok = False
-            all_ok = False
         pt = expectations.get("point")
-        if pt and not has_point(occ, pt):
-            _fail(f"{occ_name}", f"construction point '{pt}' missing")
-            sub_ok = False
-            all_ok = False
-        if sub_ok:
-            bits = []
-            if body:
-                bits.append(f"body={body}")
+        bits = []
+        sub_ok = True
+
+        if occ is None:
+            # Hidden occurrence — body presence implied by mesh_files entry.
+            bits.append(f"body={body} (via mesh_files; occurrence hidden)")
             if pt:
+                bits.append(
+                    f"point={pt} unverified (occurrence hidden)"
+                )
+        else:
+            if body and not has_body(occ, body):
+                _fail(f"{occ_name}", f"body '{body}' missing")
+                sub_ok = False
+                all_ok = False
+            elif body:
+                bits.append(f"body={body}")
+            if pt and not has_point(occ, pt):
+                _fail(f"{occ_name}", f"construction point '{pt}' missing")
+                sub_ok = False
+                all_ok = False
+            elif pt:
                 bits.append(f"point={pt}")
+
+        if sub_ok:
             _ok(occ_name, ", ".join(bits) if bits else "present")
+
     return all_ok
 
 
 def check_joints(joints):
     _section("Check 5 — top-level joints array (informational on first run)")
     if not joints:
-        _info("joints array missing", "expected ✗ before Phase A3 lands")
-        print(
-            "         ↳ exporter needs Phase A3 (collect_joints) — re-run\n"
-            "           Phase 0 after that lands."
-        )
+        if joints == []:
+            _info(
+                "joints array empty",
+                "exporter ran but found no joints — check that revolute "
+                "joints exist in Fusion AND that collect_joints walks the "
+                "right component scope (xref'd FaceHuggerLegAssembly).",
+            )
+        else:
+            _info("joints key missing", "expected ✗ before Phase A3 lands")
+            print(
+                "         ↳ exporter needs Phase A3 (collect_joints) — re-run\n"
+                "           Phase 0 after that lands."
+            )
         return False
     by_name = {j.get("name"): j for j in joints}
     all_ok = True
@@ -324,7 +364,8 @@ def main():
     fs_ok, fs_pos = check_flexible_skeleton_points(fs)
     fhla_pts_ok, fhla_pos = check_legassembly_points(fhla)
     crosscheck_ok = check_world_pos_crosscheck(fs_pos, fhla) if fs_ok else False
-    occ_ok = check_legassembly_occurrences(fhla)
+    mesh_files = (export.get("mesh_files") or {})
+    occ_ok = check_legassembly_occurrences(fhla, mesh_files)
     joints_ok = check_joints(joints)
 
     _section("Summary")
