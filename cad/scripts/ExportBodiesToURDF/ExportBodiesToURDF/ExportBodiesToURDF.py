@@ -1260,14 +1260,21 @@ def fmt_tree(nodes, depth=0):
 
 
 def fmt_joints(joints):
-    """Render the joints array as a human-readable block for fusion_export.txt."""
+    """Render the joints array as a human-readable block for fusion_export.txt.
+
+    Strict-ASCII (no degree sign / em-dash) so the file write succeeds on
+    Fusion's default encoding without us having to remember encoding="utf-8"
+    at every call site.
+    """
     if not joints:
         return ["=== Joints ===", "  (none)"]
     lines = ["=== Joints ==="]
     for j in joints:
         name = j.get("name", "?")
         type_tag = j.get("type", "?")
-        lines.append(f"{name} ({type_tag})")
+        kind = j.get("kind", "joint")
+        kind_suffix = "" if kind == "joint" else f" [{kind}]"
+        lines.append(f"{name} ({type_tag}){kind_suffix}")
 
         axis_name = j.get("axis_construction_name") or "(principal axis)"
         origin_name = j.get("origin_construction_name") or "(implicit origin)"
@@ -1288,14 +1295,14 @@ def fmt_joints(joints):
         lim = j.get("limits_rad") or {}
         if lim:
             min_d = (
-                f"{_rad_to_deg(lim['min']):+.1f}°" if lim.get("min") is not None else "—"
+                f"{_rad_to_deg(lim['min']):+.1f}deg" if lim.get("min") is not None else "--"
             )
             max_d = (
-                f"{_rad_to_deg(lim['max']):+.1f}°" if lim.get("max") is not None else "—"
+                f"{_rad_to_deg(lim['max']):+.1f}deg" if lim.get("max") is not None else "--"
             )
             rest = lim.get("rest", 0.0)
             rest_d = _rad_to_deg(rest) if rest is not None else 0.0
-            lines.append(f"  limits: rest={rest_d:+.1f}°  [{min_d}, {max_d}]")
+            lines.append(f"  limits: rest={rest_d:+.1f}deg  [{min_d}, {max_d}]")
 
         parent = j.get("parent_occurrence_path") or "?"
         child = j.get("child_occurrence_path") or "?"
@@ -1307,14 +1314,17 @@ def fmt_joints(joints):
 
 
 def _summarize_joint(j):
-    """One-line summary used in the post-export message box."""
+    """One-line summary used in the post-export message box. Pure ASCII for
+    the same reason as fmt_joints — Fusion's UI is fine with unicode but
+    we don't pay to keep both code paths consistent."""
     name = j.get("name", "?")
     type_tag = j.get("type", "?")
     lim = j.get("limits_rad") or {}
     range_txt = ""
     if lim and lim.get("min") is not None and lim.get("max") is not None:
         range_txt = (
-            f"  [{_rad_to_deg(lim['min']):+.0f}°, {_rad_to_deg(lim['max']):+.0f}°]"
+            f"  [{_rad_to_deg(lim['min']):+.0f}deg, "
+            f"{_rad_to_deg(lim['max']):+.0f}deg]"
         )
     axis_name = j.get("axis_construction_name") or "?"
     return f"  {name} ({type_tag}, axis={axis_name}){range_txt}"
@@ -1502,7 +1512,7 @@ def run(_context: str):
         preserved_roles = None
         if os.path.exists(json_path):
             try:
-                with open(json_path, "r") as f:
+                with open(json_path, "r", encoding="utf-8") as f:
                     prior = json.load(f)
                 prior_manifest = prior.get("mesh_files") or {}
                 preserved_roles = prior_manifest.get("_servo_role_assignment")
@@ -1535,8 +1545,9 @@ def run(_context: str):
             "occurrences": occurrences_json,
         }
 
-        # JSON
-        with open(json_path, "w") as f:
+        # JSON. Explicit UTF-8 so any unicode in CAD names / point names
+        # doesn't get mangled by Fusion's platform-default encoding.
+        with open(json_path, "w", encoding="utf-8") as f:
             json.dump(export, f, indent=2)
 
         # TXT
@@ -1561,7 +1572,10 @@ def run(_context: str):
 
         joints_lines = fmt_joints(joints)
 
-        with open(txt_path, "w") as f:
+        # Explicit UTF-8 so the joints/diagnostic blocks and any unicode in
+        # CAD names / construction-point names don't blow up on a default
+        # cp1252-style write encoding inside Fusion.
+        with open(txt_path, "w", encoding="utf-8") as f:
             f.write("\n".join(
                 header + fmt_tree(export["occurrences"]) + [""] + joints_lines
             ))
