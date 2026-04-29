@@ -4,15 +4,25 @@ ExportBodiesToURDF.py  —  FaceHugger Fusion assembly exporter
 Outputs to code/simulation/ (relative to this script's repo location):
   fusion_export.json     machine-readable, consumed by generate_urdf.py +
                          the Blender visualizer. Includes a `mesh_files`
-                         manifest describing each produced STL and its
-                         source occurrences + re-origin info.
-  fusion_export.txt      human-readable tree for sanity checking
+                         manifest (one entry per STL with source occurrences
+                         + re-origin info) and a `joints` array (axis,
+                         origin, limits, parent/child for every Fusion
+                         joint in the design — primary source of joint
+                         kinematics for the URDF generator).
+  fusion_export.txt      human-readable tree for sanity checking, with a
+                         trailing `=== Joints ===` block.
   exported_meshes/*.stl  STLs driven by EXPORT_RULES (below). Link meshes
                          are re-origined so their local (0,0,0) coincides
                          with the URDF joint landmark (BodyToLink1Point,
                          Link1ToLink2Point, Link2ToLink3Point) — this
                          lets the URDF generator emit <visual><origin
-                         xyz="0 0 0"/> for each link.
+                         xyz="0 0 0"/> for each link. Combined-rule STLs
+                         (link + rigidly-attached servo) re-origin in
+                         world frame around the same landmarks.
+
+The post-export message box prints a checklist (✓/✗) verifying the
+assembly matches code/simulation/ASSEMBLY_HIERARCHY.md, so a CAD edit
+that breaks an expected name surfaces immediately.
 
 Re-exports preserve user edits to mesh_files._servo_role_assignment.
 
@@ -46,7 +56,7 @@ _MESH_DIR = os.path.join(_SIM_DIR, "exported_meshes")
 # Config
 # ---------------------------------------------------------------------------
 
-VISIBLE_ONLY = False  # skip hidden geometry
+VISIBLE_ONLY = True  # skip hidden geometry (electronics in FlexibleSkeleton are hidden)
 COLLECT_PHYSICS = True  # mass/CoM/inertia — slow, set False to skip
 CM_TO_MM = 10.0
 CM2_TO_M2 = 1e-4  # kg·cm² → kg·m²
@@ -56,43 +66,92 @@ CM2_TO_M2 = 1e-4  # kg·cm² → kg·m²
 #   {"type": "occurrence", "match": "FlexibleSkeleton:1", "stl": "X.stl"}
 #     Export the full subtree of a matching occurrence as one STL. Fusion
 #     bakes all visible descendants at their placements — everything that
-#     happens to be visible at export time ends up baked in. Use only when
-#     you actually want everything; otherwise prefer `combined`.
+#     happens to be visible at export time ends up baked in. With
+#     VISIBLE_ONLY=True, hidden electronics inside FlexibleSkeleton (PCBs,
+#     OLED, etc.) are skipped automatically.
 #
 #   {"type": "body", "match": "Link1", "stl": "X.stl",
-#    "origin_landmark": "BodyToLink1Point"}  # optional
-#     Export a single body by name, using the FIRST occurrence containing
-#     a body with that name. If `origin_landmark` is set, STL vertices are
-#     translated so that landmark's local position becomes the mesh origin
-#     — downstream URDF can then use <visual><origin xyz="0 0 0"/>.
+#    "component": "Link1L",                 # optional, disambiguates same-named bodies
+#    "origin_landmark": "BodyToLink1Point"} # optional
+#     Export a single body by name. Without `component`, uses the FIRST
+#     occurrence whose component contains a matching body. With `component`,
+#     restricts to occurrences whose immediate parent component has that
+#     name (e.g. `Link1L` body lives in `Link1L:1` occurrence — needed
+#     because the R-side `Link1R` body shares the assembly with `Link1`).
+#     If `origin_landmark` is set, STL vertices are translated so that
+#     landmark's local-frame position becomes the mesh origin — downstream
+#     URDF can then use <visual><origin xyz="0 0 0"/>.
 #
 #   {"type": "combined", "stl": "X.stl", "parts": [
 #       {"occurrence": "A:1/B:1", "body": "BodyName"},
 #       {"occurrence": "A:1/C:1", "body": "*"},  # "*" = first body in the occ
-#   ]}
+#   ], "origin_landmark": "BodyToLink1Point"}    # optional, world-frame re-origin
 #     For each part: export just that body, then transform its vertices by
 #     the occurrence's world_transform_rm_cm, then concatenate all parts
-#     into one binary STL. Output vertices land in root/world frame. Use
-#     when you need a precise subset of bodies stitched into one mesh, e.g.
-#     chassis plate + 4 LegMount brackets without the electronics.
+#     into one binary STL. Output vertices land in root/world frame. If
+#     `origin_landmark` is set, the landmark's WORLD position is subtracted
+#     from every vertex so the mesh's local origin coincides with the
+#     landmark in world space — same effective convention as the body
+#     rule's re-origin. Use when one URDF link's visual is several CAD
+#     bodies (e.g. link1 + the hip servo body that's rigid with link1 per
+#     `Link1RigidGroup`).
 #
 # Downstream consumers (URDF generator, Blender visualizer) read the
 # `mesh_files` manifest section of fusion_export.json to know what was
 # produced and how to place each mesh — they don't hardcode these rules.
+#
+# Per ASSEMBLY_HIERARCHY.md and PIPELINE_SPEC.md: shoulder servo
+# (Servo_Mouser_Model:1) is chassis-fixed (bolted to the bracket); hip
+# servo (Servo_Mouser_Model:2) is rigid with link1 via `Link1RigidGroup`;
+# knee servo (Servo_Mouser_Model:3) is rigid with link3 via
+# `Link3RigidGroup`.
 EXPORT_RULES = [
-    {"type": "combined", "stl": "QuadrupedBody.stl", "parts": [
-        {"occurrence": "FlexibleSkeleton:1/QuadrupedBody:1", "body": "QuadrupedBody"},
-        {"occurrence": "FlexibleSkeleton:1/LegMountFR:1",    "body": "*"},
-        {"occurrence": "FlexibleSkeleton:1/LegMountFL:1",    "body": "*"},
-        {"occurrence": "FlexibleSkeleton:1/LegMountBR:1",    "body": "*"},
-        {"occurrence": "FlexibleSkeleton:1/LegMountBL:1",    "body": "*"},
-    ]},
-    {"type": "body", "match": "Link1",
-     "stl": "leg_shoulder.stl", "origin_landmark": "BodyToLink1Point"},
+    # Chassis: full FlexibleSkeleton:1 subtree, electronics auto-excluded
+    # by VISIBLE_ONLY. Brackets (MotorMount{,R}) live in the leg assembly,
+    # not here, so QuadrupedBody.stl is just chassis + LipoCage.
+    {"type": "occurrence", "match": "FlexibleSkeleton:1",
+     "stl": "QuadrupedBody.stl"},
+
+    # Brackets: chassis-fixed, instanced 4× by URDF on base_link at the
+    # 4 LegMountPointXX construction points. Re-origin to LegMountFixedPoint
+    # so the STL's local origin lands on the body-side mating point.
+    {"type": "body", "match": "LegMountL",  "component": "MotorMount",
+     "stl": "leg_mount_L.stl", "origin_landmark": "LegMountFixedPoint"},
+    {"type": "body", "match": "LegMountR",  "component": "MotorMountR",
+     "stl": "leg_mount_R.stl", "origin_landmark": "LegMountFixedPoint"},
+
+    # Shoulder link L = Link1L body + hip servo body (rigid with link1).
+    # Shoulder link R = Link1R body only (no R-side servo modeled — known
+    # gap, the R-side leg renders without its hip servo until a R servo is
+    # added in Fusion).
+    {"type": "combined", "stl": "leg_shoulder_L.stl",
+     "origin_landmark": "BodyToLink1Point",
+     "parts": [
+         {"occurrence": "FaceHuggerLegAssembly:1/Link1L:1",
+          "body": "Link1"},
+         {"occurrence": "FaceHuggerLegAssembly:1/Servo_Mouser_Model:2",
+          "body": "ServoBase"},
+     ]},
+    {"type": "body", "match": "Link1R",  "component": "Link1R",
+     "stl": "leg_shoulder_R.stl", "origin_landmark": "BodyToLink1Point"},
+
+    # Upper leg: shared L+R (no mirror in CAD).
     {"type": "body", "match": "Link2",
-     "stl": "leg_upper.stl",    "origin_landmark": "Link1ToLink2Point"},
-    {"type": "body", "match": "Link3",
-     "stl": "leg_lower.stl",    "origin_landmark": "Link2ToLink3Point"},
+     "stl": "leg_upper.stl",     "origin_landmark": "Link1ToLink2Point"},
+
+    # Lower leg = Link3L body + knee servo body (rigid with link3).
+    {"type": "combined", "stl": "leg_lower.stl",
+     "origin_landmark": "Link2ToLink3Point",
+     "parts": [
+         {"occurrence": "FaceHuggerLegAssembly:1/Link3L:1",
+          "body": "Link3"},
+         {"occurrence": "FaceHuggerLegAssembly:1/Servo_Mouser_Model:3",
+          "body": "ServoBase"},
+     ]},
+
+    # Generic servo mesh — used for the 4 chassis-fixed shoulder servos
+    # only (1 visual on base_link per leg). Re-origined to ServoMountPoint
+    # so the URDF can place each instance at its bracket's servo seat.
     {"type": "body", "match": "ServoBase",
      "stl": "servo.stl", "origin_landmark": "ServoMountPoint"},
 ]
@@ -485,6 +544,41 @@ def _find_landmark_pos_mm(root, landmark_name):
     return None
 
 
+def _find_landmark_in_component(component, landmark_name):
+    """Look up a construction point by name in `component.constructionPoints`
+    only (not descendants). Used by the body rule's re-origin step when a
+    `component` filter is set, so a per-component landmark like
+    `LegMountFixedPoint` (which exists once per bracket) resolves to the
+    matching component's copy rather than picking the first occurrence in
+    a tree-wide walk. Returns mm in component-local frame, or None.
+    """
+    for p in component.constructionPoints:
+        if p.name == landmark_name:
+            try:
+                return pt_mm(p.geometry)
+            except Exception:
+                return None
+    return None
+
+
+def _find_landmark_world_pos_mm(occurrences_json, landmark_name):
+    """Walk the JSON occurrence tree (already carries `pos_world_mm` for every
+    construction point) and return the WORLD position of the first matching
+    landmark. Used by the combined rule's re-origin step, where vertices are
+    in world frame so the shift must also be world. Returns None if not found.
+    """
+    def walk(nodes):
+        for n in nodes or []:
+            for p in n.get("points") or []:
+                if p.get("name") == landmark_name:
+                    return p.get("pos_world_mm")
+            r = walk(n.get("children"))
+            if r is not None:
+                return r
+        return None
+    return walk(occurrences_json)
+
+
 def _export_one(mgr, entity, filename):
     """Common STL export call. `entity` is an Occurrence or BRepBody."""
     opts = mgr.createSTLExportOptions(entity, filename)
@@ -538,27 +632,49 @@ def export_stls(design, root, occurrences_json):
                 })
             elif rtype == "body":
                 match = rule["match"]
-                # Every occurrence whose component contains a body with this name.
-                # Used to populate `source_occurrences` so consumers know all the
-                # places this STL is instanced (e.g. 3 Servo_Mouser_Model:N for
-                # one leg).
+                component_filter = rule.get("component")
+                # Every occurrence whose component contains a body with this
+                # name. Used to populate `source_occurrences` so consumers
+                # know all the places this STL is instanced (e.g. 3
+                # Servo_Mouser_Model:N for one leg). With `component`
+                # specified, restrict to occurrences whose immediate parent
+                # component name matches — needed when two bodies share a
+                # name across components (Link1 in Link1L vs Link1R in
+                # Link1R won't collide here since the body names also
+                # differ, but the pattern is general).
                 matching_paths = []
                 target_body = None
+                target_occ = None
                 for occ, path in tree:
+                    if component_filter and occ.component.name != component_filter:
+                        continue
                     body = _find_body_in_occ(occ, match)
                     if body is not None:
                         matching_paths.append(path)
                         if target_body is None:
                             target_body = body  # export the first one
+                            target_occ = occ
                 if target_body is None:
-                    failed.append(f"{stl_name}: no body named {match}")
+                    detail = f"no body named {match}"
+                    if component_filter:
+                        detail += f" in component {component_filter!r}"
+                    failed.append(f"{stl_name}: {detail}")
                     continue
                 _export_one(mgr, target_body, filename)
-                # Re-origin step
+                # Re-origin step. When `component` is specified, prefer the
+                # landmark inside that component (handles cases like
+                # LegMountFixedPoint, which exists once per bracket
+                # component); fall back to global tree-walk lookup.
                 landmark = rule.get("origin_landmark")
                 shift_mm = [0.0, 0.0, 0.0]
                 if landmark:
-                    pos = _find_landmark_pos_mm(root, landmark)
+                    pos = None
+                    if target_occ is not None:
+                        pos = _find_landmark_in_component(
+                            target_occ.component, landmark
+                        )
+                    if pos is None:
+                        pos = _find_landmark_pos_mm(root, landmark)
                     if pos is None:
                         failed.append(
                             f"{stl_name}: origin_landmark {landmark} not found"
@@ -571,6 +687,7 @@ def export_stls(design, root, occurrences_json):
                     "stl": stl_name,
                     "source_type": "body",
                     "source_body": match,
+                    "source_component": component_filter,
                     "source_occurrences": matching_paths,
                     "origin_landmark": landmark,
                     "origin_shift_mm": shift_mm,
@@ -627,17 +744,46 @@ def export_stls(design, root, occurrences_json):
                         out_tris.append(_transform_triangle(t, rot, tx_mm))
                 if fatal:
                     continue
+                # Optional re-origin: subtract the landmark's WORLD position
+                # from every vertex so the resulting STL has its local
+                # origin at the landmark in world space — same effective
+                # convention as the body-rule re-origin (where the shift is
+                # expressed in the body's local frame). Downstream URDF can
+                # still use <visual><origin xyz="0 0 0"/>.
+                landmark = rule.get("origin_landmark")
+                shift_mm = [0.0, 0.0, 0.0]
+                if landmark:
+                    pos = _find_landmark_world_pos_mm(occurrences_json, landmark)
+                    if pos is None:
+                        failed.append(
+                            f"{stl_name}: origin_landmark {landmark} "
+                            f"not found in occurrence tree"
+                        )
+                    else:
+                        sx, sy, sz = pos
+                        shifted_tris = []
+                        for tri in out_tris:
+                            n, v0, v1, v2 = tri
+                            shifted_tris.append((
+                                n,
+                                (v0[0] - sx, v0[1] - sy, v0[2] - sz),
+                                (v1[0] - sx, v1[1] - sy, v1[2] - sz),
+                                (v2[0] - sx, v2[1] - sy, v2[2] - sz),
+                            ))
+                        out_tris = shifted_tris
+                        shift_mm = list(pos)
                 _write_binary_stl(filename, out_tris)
                 exported.append({
                     "stl": stl_name,
                     "source_type": "combined",
-                    # Place at world origin — vertices are already in world frame.
+                    # Place at world origin — vertices are already in world frame
+                    # (and re-origined to landmark world position if specified).
                     # Using FlexibleSkeleton:1 (which is at origin) so the Blender
                     # consumer's world_transform lookup yields identity.
                     "source_occurrences": ["FlexibleSkeleton:1"],
                     "parts": list(parts),
-                    "origin_landmark": None,
-                    "origin_shift_mm": [0.0, 0.0, 0.0],
+                    "origin_landmark": landmark,
+                    "origin_shift_mm": shift_mm,
                 })
             else:
                 failed.append(f"{stl_name}: unknown rule type {rtype!r}")
@@ -682,6 +828,292 @@ def build_mesh_files_manifest(exported, preserved_role_assignment=None):
         manifest["_servo_role_assignment"] = assignment
 
     return manifest
+
+
+# ---------------------------------------------------------------------------
+# Joint capture
+# ---------------------------------------------------------------------------
+
+
+def collect_joints(design):
+    """Walk every joint in the design (component-owned) and return a list of
+    dicts describing each one. Schema per joint:
+
+        {
+          "name": "Link1Revolute",
+          "owner_component": "FaceHuggerLegAssembly",
+          "type": "revolute" | "rigid" | "slider" | ... ,
+          "axis_dir_local_unit": [x, y, z] or None,
+          "axis_origin_local_mm": [x, y, z] or None,
+          "axis_construction_name": "BodyToLink1Axis" or None,
+          "origin_construction_name": "BodyToLink1Point" or None,
+          "limits_rad": {
+              "rest": float,
+              "min_enabled": bool, "min": float or None,
+              "max_enabled": bool, "max": float or None,
+          } or None,
+          "parent_occurrence_path": "...:1/...:1" or None,
+          "parent_body": str or None,
+          "child_occurrence_path":  "...:1/...:1" or None,
+          "child_body":  str or None,
+        }
+
+    Local frames are the OWNER COMPONENT's local frame. Construction-axis
+    directions and construction-point positions resolve through the joint's
+    geometryOrOriginOne references when available.
+
+    Defensive: every Fusion API call is wrapped in try/except so a single
+    weird joint doesn't kill the whole export.
+    """
+    joints_data = []
+    try:
+        all_components = design.allComponents
+    except Exception:
+        return joints_data
+
+    for component in all_components:
+        try:
+            joints = component.joints
+        except Exception:
+            continue
+        for joint in joints:
+            entry = _extract_joint(joint, component)
+            if entry is not None:
+                joints_data.append(entry)
+    return joints_data
+
+
+def _extract_joint(joint, owner_component):
+    """Pull data for one Fusion Joint into the JSON-friendly schema. Returns
+    None if the joint is malformed or a type we don't model in URDF."""
+    try:
+        name = joint.name
+    except Exception:
+        return None
+
+    motion = None
+    motion_type = "unknown"
+    try:
+        motion = joint.jointMotion
+        # objectType returns e.g. "adsk::fusion::RevoluteJointMotion"
+        motion_type = motion.objectType.split("::")[-1] if motion else "unknown"
+    except Exception:
+        pass
+
+    # Map Fusion motion class → URDF-ish type tag.
+    if "Revolute" in motion_type:
+        type_tag = "revolute"
+    elif "Slider" in motion_type:
+        type_tag = "prismatic"
+    elif "Rigid" in motion_type:
+        type_tag = "rigid"
+    elif "Pin" in motion_type or "Cylindrical" in motion_type:
+        type_tag = "cylindrical"
+    elif "Ball" in motion_type:
+        type_tag = "ball"
+    else:
+        type_tag = motion_type.lower()
+
+    # Axis (revolute / prismatic only).
+    axis_dir = None
+    axis_construction_name = None
+    if motion is not None and type_tag in ("revolute", "prismatic", "cylindrical"):
+        axis_dir, axis_construction_name = _joint_axis(motion)
+
+    # Origin point — comes from geometryOrOriginOne (the held side).
+    origin_local_mm, origin_construction_name = _joint_origin(joint)
+
+    # Limits — only meaningful for revolute / prismatic.
+    limits_rad = None
+    if motion is not None and type_tag in ("revolute", "prismatic"):
+        limits_rad = _joint_limits(motion, type_tag)
+
+    # Parent / child paths.
+    parent_path = _safe_full_path(getattr(joint, "occurrenceOne", None))
+    child_path = _safe_full_path(getattr(joint, "occurrenceTwo", None))
+    parent_body = _first_body_name(getattr(joint, "occurrenceOne", None))
+    child_body = _first_body_name(getattr(joint, "occurrenceTwo", None))
+
+    owner_name = ""
+    try:
+        owner_name = owner_component.name or ""
+    except Exception:
+        pass
+
+    return {
+        "name": name,
+        "owner_component": owner_name,
+        "type": type_tag,
+        "axis_dir_local_unit": axis_dir,
+        "axis_origin_local_mm": origin_local_mm,
+        "axis_construction_name": axis_construction_name,
+        "origin_construction_name": origin_construction_name,
+        "limits_rad": limits_rad,
+        "parent_occurrence_path": parent_path,
+        "parent_body": parent_body,
+        "child_occurrence_path": child_path,
+        "child_body": child_body,
+    }
+
+
+def _joint_axis(motion):
+    """Return (axis_dir_unit, construction_axis_name) for a revolute/prismatic
+    motion. Falls back to None if the axis isn't expressible as a unit vector
+    (e.g., custom entity that's not a construction axis)."""
+    # Standard X/Y/Z axes
+    try:
+        axis_kind = motion.rotationAxis  # may not exist on prismatic
+    except AttributeError:
+        try:
+            axis_kind = motion.slideDirection
+        except AttributeError:
+            axis_kind = None
+    except Exception:
+        axis_kind = None
+
+    # adsk.fusion.JointDirections enum values: X=0, Y=1, Z=2, Custom=3 (typical).
+    # Don't import the enum — compare via the matching custom-entity getter.
+    custom_entity = None
+    try:
+        custom_entity = motion.customRotationAxisEntity
+    except AttributeError:
+        try:
+            custom_entity = motion.customSlideDirectionEntity
+        except AttributeError:
+            custom_entity = None
+    except Exception:
+        custom_entity = None
+
+    if custom_entity is not None:
+        # Construction axis: .geometry returns InfiniteLine3D with .direction.
+        name = getattr(custom_entity, "name", None)
+        try:
+            geom = custom_entity.geometry  # InfiniteLine3D
+            d = geom.direction             # Vector3D
+            # Normalize defensively.
+            mag = (d.x * d.x + d.y * d.y + d.z * d.z) ** 0.5
+            if mag > 0:
+                return [d.x / mag, d.y / mag, d.z / mag], name
+        except Exception:
+            return None, name
+        return None, name
+
+    # Fall back to principal axes (kind 0/1/2 → X/Y/Z).
+    if axis_kind is None:
+        return None, None
+    try:
+        kind_int = int(axis_kind)
+    except Exception:
+        return None, None
+    if kind_int == 0:
+        return [1.0, 0.0, 0.0], None
+    if kind_int == 1:
+        return [0.0, 1.0, 0.0], None
+    if kind_int == 2:
+        return [0.0, 0.0, 1.0], None
+    return None, None
+
+
+def _joint_origin(joint):
+    """Return (origin_local_mm, construction_point_name) using the joint's
+    `geometryOrOriginOne`. Fusion exposes either a JointGeometry (computed
+    from edges/faces) or a JointOrigin (user-created); both have `.origin`
+    yielding a construction-point-like reference."""
+    geo_one = None
+    try:
+        geo_one = joint.geometryOrOriginOne
+    except Exception:
+        geo_one = None
+    if geo_one is None:
+        return None, None
+
+    name = None
+    pos_mm = None
+    try:
+        # JointOrigin has .geometry (JointGeometry); JointGeometry has .origin.
+        origin_entity = geo_one
+        # Drill down to a construction-point-like object that exposes .geometry
+        # returning a Point3D.
+        if hasattr(origin_entity, "geometry"):
+            inner = origin_entity.geometry
+            if inner is not None and hasattr(inner, "origin"):
+                origin_entity = inner.origin
+        elif hasattr(origin_entity, "origin"):
+            origin_entity = origin_entity.origin
+
+        if hasattr(origin_entity, "name"):
+            name = origin_entity.name or None
+
+        # Try to pull a Point3D out.
+        pt = None
+        if hasattr(origin_entity, "geometry") and origin_entity.geometry is not None:
+            g = origin_entity.geometry
+            if hasattr(g, "x") and hasattr(g, "y") and hasattr(g, "z"):
+                pt = g
+        if pt is None and hasattr(origin_entity, "x") and hasattr(origin_entity, "y"):
+            pt = origin_entity
+        if pt is not None:
+            pos_mm = [
+                round(pt.x * CM_TO_MM, 3),
+                round(pt.y * CM_TO_MM, 3),
+                round(pt.z * CM_TO_MM, 3),
+            ]
+    except Exception:
+        pass
+
+    return pos_mm, name
+
+
+def _joint_limits(motion, type_tag):
+    """Return a `limits_rad` dict (radians) or None on failure."""
+    try:
+        if type_tag == "revolute":
+            lim = motion.rotationLimits
+            rest = motion.restValue if hasattr(motion, "restValue") else 0.0
+        else:
+            lim = motion.slideLimits
+            rest = motion.restValue if hasattr(motion, "restValue") else 0.0
+    except Exception:
+        return None
+    out = {"rest": float(rest)}
+    try:
+        out["min_enabled"] = bool(lim.isMinimumValueEnabled)
+        out["min"] = float(lim.minimumValue) if lim.isMinimumValueEnabled else None
+    except Exception:
+        out["min_enabled"] = False
+        out["min"] = None
+    try:
+        out["max_enabled"] = bool(lim.isMaximumValueEnabled)
+        out["max"] = float(lim.maximumValue) if lim.isMaximumValueEnabled else None
+    except Exception:
+        out["max_enabled"] = False
+        out["max"] = None
+    return out
+
+
+def _safe_full_path(occ):
+    if occ is None:
+        return None
+    try:
+        return occ.fullPathName
+    except Exception:
+        return None
+
+
+def _first_body_name(occ):
+    """Best-effort 'representative' body name for an occurrence — used to
+    show parent/child geometry in the joints log without committing to any
+    URDF link mapping (the URDF generator decides that from the rule
+    structure + RigidGroups)."""
+    if occ is None:
+        return None
+    try:
+        bodies = occ.component.bRepBodies
+        if bodies.count > 0:
+            return bodies[0].name
+    except Exception:
+        pass
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -791,6 +1223,189 @@ def fmt_tree(nodes, depth=0):
     return lines
 
 
+def fmt_joints(joints):
+    """Render the joints array as a human-readable block for fusion_export.txt."""
+    if not joints:
+        return ["=== Joints ===", "  (none)"]
+    lines = ["=== Joints ==="]
+    for j in joints:
+        name = j.get("name", "?")
+        type_tag = j.get("type", "?")
+        lines.append(f"{name} ({type_tag})")
+
+        axis_name = j.get("axis_construction_name") or "(principal axis)"
+        origin_name = j.get("origin_construction_name") or "(implicit origin)"
+        axis_dir = j.get("axis_dir_local_unit")
+        origin = j.get("axis_origin_local_mm")
+        bits = [f"axis: {axis_name}"]
+        if axis_dir is not None:
+            bits.append(
+                f"dir=({axis_dir[0]:+.3f}, {axis_dir[1]:+.3f}, {axis_dir[2]:+.3f})"
+            )
+        bits.append(f"origin: {origin_name}")
+        if origin is not None:
+            bits.append(
+                f"local_mm=({origin[0]:+.2f}, {origin[1]:+.2f}, {origin[2]:+.2f})"
+            )
+        lines.append("  " + "  ".join(bits))
+
+        lim = j.get("limits_rad") or {}
+        if lim:
+            min_d = (
+                f"{_rad_to_deg(lim['min']):+.1f}°" if lim.get("min") is not None else "—"
+            )
+            max_d = (
+                f"{_rad_to_deg(lim['max']):+.1f}°" if lim.get("max") is not None else "—"
+            )
+            rest = lim.get("rest", 0.0)
+            rest_d = _rad_to_deg(rest) if rest is not None else 0.0
+            lines.append(f"  limits: rest={rest_d:+.1f}°  [{min_d}, {max_d}]")
+
+        parent = j.get("parent_occurrence_path") or "?"
+        child = j.get("child_occurrence_path") or "?"
+        parent_body = j.get("parent_body") or "?"
+        child_body = j.get("child_body") or "?"
+        lines.append(f"  parent: {parent} ({parent_body})")
+        lines.append(f"  child:  {child} ({child_body})")
+    return lines
+
+
+def _summarize_joint(j):
+    """One-line summary used in the post-export message box."""
+    name = j.get("name", "?")
+    type_tag = j.get("type", "?")
+    lim = j.get("limits_rad") or {}
+    range_txt = ""
+    if lim and lim.get("min") is not None and lim.get("max") is not None:
+        range_txt = (
+            f"  [{_rad_to_deg(lim['min']):+.0f}°, {_rad_to_deg(lim['max']):+.0f}°]"
+        )
+    axis_name = j.get("axis_construction_name") or "?"
+    return f"  {name} ({type_tag}, axis={axis_name}){range_txt}"
+
+
+def _rad_to_deg(rad):
+    import math
+    try:
+        return math.degrees(float(rad))
+    except Exception:
+        return 0.0
+
+
+# Mirrors phase0_verify.py's expected structure so a re-export immediately
+# tells the user whether the CAD still matches ASSEMBLY_HIERARCHY.md.
+_REQUIRED_FS_POINTS = (
+    "LegMountPointFL", "LegMountPointFR", "LegMountPointBR", "LegMountPointBL",
+)
+_REQUIRED_FHLA_POINTS = (
+    "BodyToLink1Point", "Link1ToLink2Point", "Link2ToLink3Point",
+)
+_REQUIRED_FHLA_OCCS = {
+    "Link1L:1":              {"body": "Link1"},
+    "Link1R:1":              {"body": "Link1R"},
+    "Link2L:1":              {"body": "Link2"},
+    "Link3L:1":              {"body": "Link3"},
+    "MotorMount:1":          {"body": "LegMountL", "point": "LegMountFixedPoint"},
+    "MotorMountR:1":         {"body": "LegMountR", "point": "LegMountFixedPoint"},
+    "Servo_Mouser_Model:1":  {"body": "ServoBase"},
+    "Servo_Mouser_Model:2":  {"body": "ServoBase"},
+    "Servo_Mouser_Model:3":  {"body": "ServoBase"},
+}
+_REQUIRED_JOINTS = ("Link1Revolute", "Link2Revolute", "Link3Revolute")
+
+
+def _verify_against_assembly_hierarchy(occurrences_json, joints):
+    """Lightweight diagnostic mirroring phase0_verify.py's checks. Returns a
+    list of human-readable lines (a few ✓/✗ rows) for the message box. Doesn't
+    fail the export — just reports."""
+    fs = next(
+        (o for o in occurrences_json if o.get("name") == "FlexibleSkeleton:1"),
+        None,
+    )
+    fhla = next(
+        (o for o in occurrences_json
+         if o.get("name") == "FaceHuggerLegAssembly:1"),
+        None,
+    )
+
+    def _has_point(node, name):
+        return any(p.get("name") == name for p in (node.get("points") or []))
+
+    def _has_body(node, body_name):
+        bodies = node.get("bodies") or []
+        return any(
+            (b.get("name") if isinstance(b, dict) else b) == body_name
+            for b in bodies
+        )
+
+    def _mark(ok):
+        return "✓" if ok else "✗"
+
+    rows = []
+
+    # 1. FlexibleSkeleton points
+    fs_ok = bool(fs) and all(_has_point(fs, n) for n in _REQUIRED_FS_POINTS)
+    rows.append(f"  {_mark(fs_ok)} FlexibleSkeleton points "
+                f"({', '.join(_REQUIRED_FS_POINTS)})")
+
+    # 2. FaceHuggerLegAssembly points
+    fhla_pts_ok = (
+        bool(fhla) and all(_has_point(fhla, n) for n in _REQUIRED_FHLA_POINTS)
+    )
+    rows.append(f"  {_mark(fhla_pts_ok)} FaceHuggerLegAssembly points "
+                f"({', '.join(_REQUIRED_FHLA_POINTS)})")
+
+    # 3. Bracket alignment cross-check
+    cross_ok = False
+    if fs and fhla:
+        fs_pts = {p.get("name"): p for p in (fs.get("points") or [])}
+        fl = fs_pts.get("LegMountPointFL")
+        mm = next(
+            (c for c in (fhla.get("children") or [])
+             if c.get("name") == "MotorMount:1"),
+            None,
+        )
+        if fl and mm:
+            fp = next(
+                (p for p in (mm.get("points") or [])
+                 if p.get("name") == "LegMountFixedPoint"),
+                None,
+            )
+            if fp:
+                a = fl.get("pos_world_mm") or [0, 0, 0]
+                b = fp.get("pos_world_mm") or [0, 0, 0]
+                d = sum((a[i] - b[i]) ** 2 for i in range(3)) ** 0.5
+                cross_ok = d <= 1.0
+    rows.append(f"  {_mark(cross_ok)} MotorMount LegMountFixedPoint "
+                "≈ LegMountPointFL (≤ 1mm)")
+
+    # 4. FaceHuggerLegAssembly occurrences + bodies + bracket-points
+    occ_ok = bool(fhla)
+    if fhla:
+        children = {c.get("name"): c for c in (fhla.get("children") or [])}
+        for occ_name, expect in _REQUIRED_FHLA_OCCS.items():
+            child = children.get(occ_name)
+            if not child:
+                occ_ok = False
+                break
+            if "body" in expect and not _has_body(child, expect["body"]):
+                occ_ok = False
+                break
+            if "point" in expect and not _has_point(child, expect["point"]):
+                occ_ok = False
+                break
+    rows.append(f"  {_mark(occ_ok)} LegAssembly occurrences + bodies + "
+                "LegMountFixedPoint")
+
+    # 5. Joints
+    joint_names = {j.get("name") for j in joints}
+    j_ok = all(n in joint_names for n in _REQUIRED_JOINTS)
+    rows.append(f"  {_mark(j_ok)} Joints array "
+                f"({', '.join(_REQUIRED_JOINTS)})")
+
+    return rows
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -829,11 +1444,17 @@ def run(_context: str):
         exported, failed = export_stls(design, root, occurrences_json)
         mesh_files = build_mesh_files_manifest(exported, preserved_roles)
 
+        # Capture Fusion joints (axis, origin, limits, parent/child). The
+        # URDF generator prefers this over yaml when present; downstream
+        # readers ignore the array if they don't know about it.
+        joints = collect_joints(design)
+
         export = {
             "document": root.name,
             "visible_only": VISIBLE_ONLY,
             "collect_physics": COLLECT_PHYSICS,
             "mesh_files": mesh_files,
+            "joints": joints,
             "root_axes": collect_axes(root, root_world),
             "root_points": collect_points(root, root_world),
             "occurrences": occurrences_json,
@@ -862,8 +1483,18 @@ def run(_context: str):
             for p in export["root_points"]:  # ty:ignore[not-iterable]
                 header.append(f"  cpoint: {p['name']} | pos_mm: {tuple(p['pos_mm'])}")
             header.append("")
+
+        joints_lines = fmt_joints(joints)
+
         with open(txt_path, "w") as f:
-            f.write("\n".join(header + fmt_tree(export["occurrences"])))
+            f.write("\n".join(
+                header + fmt_tree(export["occurrences"]) + [""] + joints_lines
+            ))
+
+        # Diagnostic against ASSEMBLY_HIERARCHY checklist (matches
+        # phase0_verify.py expectations). Lets the user see immediately
+        # whether the export lines up with the spec.
+        diag_lines = _verify_against_assembly_hierarchy(occurrences_json, joints)
 
         # Summary
         msg = f"Export complete.\n\nJSON + TXT → {_SIM_DIR}\n"
@@ -875,6 +1506,12 @@ def run(_context: str):
             msg += f"\n\nFailed ({len(failed)}):\n" + "\n".join(
                 f"  {s}" for s in failed
             )
+        if joints:
+            msg += f"\n\nJoints captured ({len(joints)}):\n" + "\n".join(
+                _summarize_joint(j) for j in joints
+            )
+        if diag_lines:
+            msg += "\n\nAssembly check:\n" + "\n".join(diag_lines)
         ui.messageBox(msg)
 
     except:  # pylint: disable=bare-except  # noqa: E722
