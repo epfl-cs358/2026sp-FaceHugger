@@ -15,9 +15,9 @@ class Leg {
     void identifyAndMove(uint8_t channel, double angle);
   private:
     int id;
-    Servo& hipServo;
-    Servo& thighServo;
-    Servo& kneeServo;
+    Servo hipServo;
+    Servo thighServo;
+    Servo kneeServo;
     Adafruit_PWMServoDriver& pwm;
     void updateServos(double hipAngle, double thighAngle, double kneeAngle); // Sends the angles to the PCA9685
 };
