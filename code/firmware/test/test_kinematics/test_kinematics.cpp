@@ -1,7 +1,7 @@
 #include <unity.h>
 #include <stdio.h>
 
-#include "kinematics.h"
+#include "../../src/nervous_system/kinematics.h"
 #include "reference_data.h"
 
 static const float TOL_RAD = 0.01f;

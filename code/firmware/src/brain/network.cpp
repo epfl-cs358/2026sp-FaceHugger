@@ -78,7 +78,9 @@ void handleParsedMessage(uint8_t * payload) {
             Serial.printf("Calibrating servo %d to %d", channel, angle);
             break;
         }
-        case CMD_MOVE: {
+        case CMD_MOVE: 
+            break;
+        case CMD_GAIT_MODE: {
             if (doc["g"].is<int>()) {
                 int g = doc["g"];
                 if (g >= GAIT_NONE && g <= GAIT_CRAB) {
