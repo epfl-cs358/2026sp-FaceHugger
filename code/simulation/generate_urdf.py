@@ -519,9 +519,18 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # --- joint kinematics: CAD-sourced from export["joints"] ---
     # The Fusion exporter walks every Joint / AsBuiltJoint and emits an
     # entry with axis_dir_local_unit, axis_origin_local_mm, and limits_rad
-    # (rest/min/max). yaml's leg_template.joints[] now only lists the
-    # urdf-side mapping (cad_name → urdf_name + parent/child link); the
-    # actual numbers come from CAD.
+    # (rest/min/max). The cad-name → urdf-name + parent/child mapping is
+    # fixed by convention (Link1Revolute = shoulder, etc.) so it lives
+    # here rather than in the yaml.
+    _JOINT_TOPOLOGY = [
+        {"cad_name": "Link1Revolute", "urdf_name": "shoulder",
+         "parent": "base_link", "child": "link1"},
+        {"cad_name": "Link2Revolute", "urdf_name": "hip",
+         "parent": "link1",     "child": "link2"},
+        {"cad_name": "Link3Revolute", "urdf_name": "knee",
+         "parent": "link2",     "child": "link3"},
+    ]
+
     leg_tmpl = cfg["leg_template"]
     leg_occ = find_occurrence(occs, leg_tmpl["leg_assembly_occurrence"])
     if not leg_occ:
@@ -534,7 +543,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
     }
 
     joint_defs = []
-    for jcfg in leg_tmpl["joints"]:
+    for jcfg in _JOINT_TOPOLOGY:
         cad_name = jcfg["cad_name"]
         cad = cad_joints_by_name.get(cad_name)
         if cad is None:

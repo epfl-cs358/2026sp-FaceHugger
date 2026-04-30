@@ -32,9 +32,10 @@ base_link:
 # Link2 / Link3 don't include {side}; they share a single mesh per
 # PIPELINE_SPEC §5.
 #
-# Joint axis / origin / limits no longer live here — generate_urdf.py reads
-# them from fusion_export.json's `joints` array (Link1Revolute /
-# Link2Revolute / Link3Revolute). yaml is the per-leg placement layer.
+# Joint axis / origin / limits live in fusion_export.json's `joints` array
+# (Link1Revolute / Link2Revolute / Link3Revolute). The cad-name → urdf-name
+# + parent/child topology is fixed by convention and lives in
+# generate_urdf.py's _JOINT_TOPOLOGY.
 # ---------------------------------------------------------------------------
 leg_template:
   leg_assembly_occurrence: "FaceHuggerLegAssembly:1"
@@ -46,15 +47,6 @@ leg_template:
       mesh: "leg_upper.stl"
     link3:
       mesh: "leg_lower.stl"
-
-  # Joint name → (parent_link, child_link) inside the leg. Used to wire
-  # URDF joint nodes from the CAD-sourced kinematics. Order matters: the
-  # generator emits joints top-down so each child link's frame is defined
-  # by the time hip/knee join in.
-  joints:
-    - { cad_name: Link1Revolute, urdf_name: shoulder, parent: base_link, child: link1 }
-    - { cad_name: Link2Revolute, urdf_name: hip,      parent: link1,     child: link2 }
-    - { cad_name: Link3Revolute, urdf_name: knee,     parent: link2,     child: link3 }
 
 # ---------------------------------------------------------------------------
 # 4 leg instances. PIPELINE_SPEC §1, §3, §4 are authoritative for these
