@@ -12,12 +12,14 @@ Examples:
   python facehugger.py urdf
   python facehugger.py sim --walk
   python facehugger.py view
-  python facehugger.py blender
+  python facehugger.py blender                                # default 3.3 LTS
+  python facehugger.py blender --blender-version 5.1          # specific version
   python facehugger.py blender --headless --save /tmp/scene.blend
   python facehugger.py all --headless
 
 Env:
-  BLENDER_BIN  path to the Blender executable (default: macOS Blender 3.3 LTS).
+  BLENDER_BIN  full path to a Blender executable. Wins over --blender-version
+               and the /Applications search.
 """
 
 import argparse
@@ -35,21 +37,63 @@ SIMULATE      = HERE / "simulate.py"
 VIEW_URDF     = HERE / "view_urdf.py"
 VISUALIZE     = REPO_ROOT / "animation" / "scripts" / "visualize_fusion_export.py"
 
-BLENDER_DEFAULT_DARWIN = "/Applications/Blender-3.3-LTS.app/Contents/MacOS/Blender"
+BLENDER_DEFAULT_VERSION = "3.3"
 
 
-def _resolve_blender_bin():
+def _darwin_app_candidates(version):
+    """The /Applications layouts we know about, in priority order.
+    Different Blender releases use different naming conventions:
+      - 3.x LTS:    Blender-3.3-LTS.app
+      - 4.x / 5.x:  "Blender 5.1.app" (with a space) or "Blender-5.1.app"
+      - generic:    Blender.app
+    """
+    return [
+        f"/Applications/Blender-{version}-LTS.app/Contents/MacOS/Blender",
+        f"/Applications/Blender {version}.app/Contents/MacOS/Blender",
+        f"/Applications/Blender-{version}.app/Contents/MacOS/Blender",
+        f"/Applications/Blender{version}.app/Contents/MacOS/Blender",
+    ]
+
+
+def _resolve_blender_bin(version):
+    """Return a path to a Blender executable for `version`.
+
+    Search order (first hit wins):
+      1. $BLENDER_BIN — full override; must exist or we fail loud
+      2. macOS /Applications candidates for the requested version
+      3. `blender{version}` on $PATH (e.g. `blender3.3`)
+      4. plain `blender` on $PATH
+      5. exit with the list of paths we tried
+    """
     env = os.environ.get("BLENDER_BIN")
     if env:
         if Path(env).exists():
             return env
-        sys.exit(f"BLENDER_BIN={env} does not exist")
-    if sys.platform == "darwin" and Path(BLENDER_DEFAULT_DARWIN).exists():
-        return BLENDER_DEFAULT_DARWIN
+        sys.exit(f"BLENDER_BIN={env!r} does not exist")
+
+    tried = []
+    if sys.platform == "darwin":
+        for candidate in _darwin_app_candidates(version):
+            tried.append(candidate)
+            if Path(candidate).exists():
+                return candidate
+
+    versioned = f"blender{version}"
+    found = shutil.which(versioned)
+    if found:
+        return found
+    tried.append(f"$PATH/{versioned}")
+
     found = shutil.which("blender")
     if found:
         return found
-    sys.exit("Could not locate Blender. Set BLENDER_BIN or install Blender.")
+    tried.append("$PATH/blender")
+
+    sys.exit(
+        f"Could not locate Blender {version}. Tried:\n  "
+        + "\n  ".join(tried)
+        + "\nSet BLENDER_BIN to override, or pick a different --blender-version."
+    )
 
 
 def _run(cmd, cwd=HERE):
@@ -81,7 +125,7 @@ def cmd_view(_args):
 
 
 def cmd_blender(args):
-    blender = _resolve_blender_bin()
+    blender = _resolve_blender_bin(args.blender_version)
     cli = [blender]
     if args.headless:
         cli.append("--background")
@@ -125,6 +169,12 @@ def main():
     pv.set_defaults(func=cmd_view)
 
     pb = sub.add_parser("blender", help="open the export in Blender")
+    pb.add_argument("--blender-version", default=BLENDER_DEFAULT_VERSION,
+                    metavar="VERSION",
+                    help="Blender major.minor version to launch (e.g. 3.3, "
+                         "4.2, 5.1). Default %(default)s. Override with "
+                         "BLENDER_BIN env var if your install path doesn't "
+                         "match the /Applications conventions.")
     pb.add_argument("--headless", action="store_true",
                     help="run Blender in --background mode")
     pb.add_argument("--save", help="save the built scene to this .blend path")

@@ -50,12 +50,13 @@ python facehugger.py sim                  # GUI, standing pose
 python facehugger.py sim --walk           # walk gait
 python facehugger.py sim --trot           # trot gait
 python facehugger.py sim --headless       # no GUI — CI smoke-check
-python facehugger.py blender              # Blender debug scene
+python facehugger.py blender                          # Blender debug scene (default 3.3 LTS)
+python facehugger.py blender --blender-version 5.1    # specific Blender version
 python facehugger.py blender --headless --save /tmp/scene.blend
 python facehugger.py all                  # urdf → sim
 ```
 
-Set `BLENDER_BIN` to point at a custom Blender install (default on macOS: `/Applications/Blender-3.3-LTS.app/Contents/MacOS/Blender`).
+The `blender` subcommand resolves the Blender executable in this order: `BLENDER_BIN` env var → macOS `/Applications` candidates for the requested `--blender-version` (`Blender-{V}-LTS.app`, `Blender {V}.app` with a space, `Blender-{V}.app`, `Blender{V}.app`) → `blender{V}` on `$PATH` → plain `blender` on `$PATH`. If nothing matches, the CLI prints what it tried and exits non-zero. Set `BLENDER_BIN=/path/to/blender` to bypass the search entirely.
 
 `view` mouse controls:
 

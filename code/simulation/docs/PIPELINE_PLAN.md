@@ -1,48 +1,76 @@
-# FaceHugger pipeline reflow — state & plan
+# FaceHugger pipeline — state & plan
 
-Living document so the next session picks up without rebuilding context. Read this first, then [PIPELINE_SPEC.md](PIPELINE_SPEC.md) and [ASSEMBLY_HIERARCHY.md](ASSEMBLY_HIERARCHY.md) for the authoritative CAD/URDF spec. End-to-end "how the pipeline works" docs live in [URDF_PIPELINE.md](URDF_PIPELINE.md).
+Living document so the next session picks up without rebuilding context. Read this first, then [PIPELINE_SPEC.md](PIPELINE_SPEC.md) (rpy/limits/mount points), [ASSEMBLY_HIERARCHY.md](ASSEMBLY_HIERARCHY.md) (CAD tree), and [URDF_PIPELINE.md](URDF_PIPELINE.md) (end-to-end how the pipeline works).
 
-The full original plan with rationale lives at `~/.claude/plans/peppy-cooking-charm.md`. This file is the operational summary: where we are, what to do next, what to skip.
+The full original sprint plan with rationale lives at `~/.claude/plans/peppy-cooking-charm.md` (historical; not maintained).
 
 ---
 
 ## Where we are
 
-Branch: `feat/urdf-pipeline`. Recent commits (newest last):
+Branch: `feat/urdf-pipeline`. Latest commits, newest last:
 
 | Commit | What |
 |---|---|
 | `f8671b6` | Phase 0 diagnostic + spec docs + first re-export from restructured CAD |
-| `a670244` | Phase A: new MESH_EXPORTS, joint capture, post-export checklist |
-| `6716c63` | Fix asBuiltJoints walk + visibility-tolerant occurrence checks |
+| `a670244` | Phase A: new `EXPORT_RULES`, joint capture, post-export checklist |
+| `6716c63` | Fix `asBuiltJoints` walk + visibility-tolerant occurrence checks |
 | `19be7e1` | UTF-8 file writes + ASCII-only joints formatting |
-| `1e49d08` | Phase B: generate_urdf consumes CAD joints + per-side meshes + bracket visuals |
-| `44b2036` | Alignment fix: leg-assembly normalization (Phase E) + URDF gen rewrite (Phase G/H/I) + standalone servos + view_urdf.py + URDF_PIPELINE.md |
+| `1e49d08` | Phase B: `generate_urdf` consumes CAD joints + per-side meshes + bracket visuals |
+| `44b2036` | Alignment fix (Phase E + G + H + I): leg-assembly normalization, standalone servos, `view_urdf.py`, URDF_PIPELINE.md |
+| `f988fae` | docs sync — alignment fix done, Phase J next |
+| `d837e91` | Drop superseded helper scripts (phase0_verify, dump_blender_scene, inspect_stl) |
+| `1fd913b` | Drop v1 simulator and URDF |
+| `32bcea4` | Move pipeline docs into `docs/` |
+| `b98b758` | Move generated artifacts into `generated/` |
+| `62a6bd4` | Split `simulate_v2.py` into per-topic modules |
+| `d8956ed` | Phase J: rewrite `kinematics.py` for new URDF |
+| `0b03fcb` | Phase C minimal: adapt `visualize_fusion_export.py` to new CAD names |
+| `748bec3` | Phase D: `facehugger.py` CLI entry point |
+| `354f2ee` | Transition T: drop `leg_template.joints` from yaml |
 
-### Phase 0 — DONE ✓
+---
 
-Verification logic was folded into the Fusion add-in itself (`_verify_against_assembly_hierarchy()` in [ExportBodiesToURDF.py](../../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py)) — the post-export message box prints PASS/FAIL rows against ASSEMBLY_HIERARCHY, so the standalone phase0_verify.py is gone.
+## What's done
 
-### Phase A — DONE ✓ (verified by user re-export)
+**Phase 0 — DONE ✓.** Verification logic was folded into the Fusion add-in's post-export message box (`_verify_against_assembly_hierarchy()` in [ExportBodiesToURDF.py](../../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py)), so the standalone `phase0_verify.py` is gone.
 
-[cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py](../../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) rebuilt:
+**Phase A — DONE ✓.** [ExportBodiesToURDF.py](../../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) rebuilt around four explicit whitelists (`EXPORT_RULES` / `CONSTRUCTION_POINTS` / `CONSTRUCTION_AXES` / `JOINTS`) instead of CAD-visibility filtering. The full design tree lands in `fusion_export.json` so downstream tools can resolve any occurrence path; the whitelists shape specific slices (STLs, points, axes, joints). `collect_joints()` walks `Component.joints` and `Component.asBuiltJoints` across `design.allComponents`, capturing axis direction / origin / limits in radians; output goes to `joints[]` in JSON and a `=== Joints ===` block in TXT. Latest export: 8 STLs, 3 joints (`Link1Revolute -105°/+45°`, `Link2Revolute -135°/+45°`, `Link3Revolute -90°/+90°`), all checklist rows ✓.
 
-- **Visibility filtering removed entirely.** Toggle CAD light bulbs however you want — what gets captured is driven by four explicit lists: `EXPORT_RULES` (bodies → STLs), `CONSTRUCTION_POINTS` (named cpoints), `CONSTRUCTION_AXES` (named caxes), `JOINTS` (named joints). The JSON records each entity's `visible` flag as informational metadata only.
-- **The export is the raw material; filtering happens at consumption time.** The `occurrences` tree in `fusion_export.json` is the *complete* design tree (every PCB, OLED, capacitor, etc.) — that's by design, so downstream tools (URDF generator, Blender visualizer) can resolve any occurrence path they need to look up world transforms. The four whitelists above shape **specific slices** of the JSON output: STLs (`EXPORT_RULES`), per-occurrence `points[]` / `axes[]` arrays, and the top-level `joints[]` array. The tree itself is unfiltered; consumers pick out the bits they care about.
-- Chassis rule is now `type: "combined"` listing the `QuadrupedBody` and `LipoCage` bodies explicitly (electronics excluded by NOT being in the rule, regardless of CAD visibility).
-- Per-side body rules with optional `component` filter and scoped landmark lookup.
-- `combined` rule with optional `origin_landmark` (re-origin in world frame).
-- `collect_joints()` walks **both** `Component.joints` and `Component.asBuiltJoints` across `design.allComponents`, filtered by the `JOINTS` whitelist. Output goes to top-level `joints` array in JSON + `=== Joints ===` block in TXT.
-- Post-export message box runs the ASSEMBLY_HIERARCHY checklist (PASS/FAIL rows).
+**Phase B — DONE ✓** (commit `1e49d08`). [generate_urdf.py](../generate_urdf.py) consumes CAD-sourced joints from `fusion_export.json` (`axis_dir_local_unit`, `axis_origin_local_mm`, `limits_rad`); emits 4 bracket visuals on `base_link`, per-side L/R link1 meshes, per-leg shoulder limits from yaml.
 
-**Latest export confirms**: 8 STLs, 3 joints captured (`Link1Revolute -105°/+45°`, `Link2Revolute -135°/+45°`, `Link3Revolute -90°/+90°`), all checklist rows ✓.
+**Phase E + G + H + I — DONE ✓** (commit `44b2036`). Two compounding bugs were silently misplacing legs in PyBullet: shoulder origin sat at the bracket's mounting tab (38 mm off the rotation axis), and the leg-assembly's 90° world rotation in CAD was never compensated. Fixed via E (exporter computes `R_la` and applies to leg-assembly-internal joint axes/origins), G (URDF gen places shoulders as `mount + Rz(rpy_z) · side_offset`, X-flips hip/knee origins for R pair, applies `mesh_rpy=(0, π, 0)` on R-pair link2/link3), H (R-pair joint axis flip + negate-and-swap limits → uniform user-facing convention across all 4 legs), I (12 standalone servo visuals with per-role rpy `M_role = R_role · R_servo1^T`). URDF kinematically verified via PyBullet FK; visually inspected via `view_urdf.py`. Math + rationale in [ALIGNMENT_FIX_PLAN.md](ALIGNMENT_FIX_PLAN.md), end-to-end pipeline in [URDF_PIPELINE.md](URDF_PIPELINE.md).
+
+**Phase J — DONE ✓** (commit `d8956ed`). The analytic FK/IK in [kinematics.py](../kinematics.py) was calibrated against the old URDF (hip/knee axes `+X`, single sign convention, chain along `+Y`). Rewritten:
+
+- Dropped the `R_L1` per-leg rotation layer; joint xyz/axis come straight from the URDF.
+- Hip/knee rotations use `_ry`. Per-leg `hip_axis_sign` / `knee_axis_sign` (read from URDF `<axis>` Y component) keep user-facing angles uniform while internal FK applies the right rotation.
+- Per-leg `joint_limits` on `LegGeom` (FL/BR have hip range `[-135°, +45°]`, FR/BL have `[-45°, +135°]`; old code clamped everyone with FR's limits — bug fixed).
+- Side-dependent foot tip in link3 frame: L pair = mesh-local `FootTip` from URDF metadata; R pair = `(-x, y, -z)` (link3 visual rpy = `(0, π, 0)` rotates the mesh by `Ry(π)`).
+- `body_height` recomputes from neutral-foot Z (~85.9 mm below body origin at stance).
+
+FK→IK round-trip at stance is `[OK]` for every leg (error < 0.1°). All 4 legs land at symmetric `(±176.0, ±55.8, -85.9)` mm.
+
+**Known workspace edge**: knee URDF limit is `±90°`; trot's `step_height=25mm` clamps at the swing apex (foot lifts ~4 mm short of commanded). Fixable by lowering `step_height` to 20 mm, more crouched stance, or bumping the CAD knee limit.
+
+**Phase C minimal — DONE ✓** (commit `0b03fcb`). [visualize_fusion_export.py](../../../animation/scripts/visualize_fusion_export.py) updated for new CAD: mount points read as `LegMountPointXX` (with the `Point` infix), and `_legmount_rot_3x3` was replaced with the diagonal-pair table (`Rz(0°)` for FL/FR, `Rz(180°)` for BR/BL — same table the URDF generator uses). The dropped `_mat3_*` helpers / `LegMountXX:1` lookups are gone. **Known limitation**: per-side mesh handedness is not implemented — FR/BL render with L-handed meshes in Blender. See "What's left".
+
+**Phase D — DONE ✓** (commit `748bec3`). [facehugger.py](../facehugger.py) is the single argparse-driven entry point with `urdf` / `sim` / `view` / `blender` / `all` subcommands. Each wraps the underlying script via `subprocess.run`. Multi-version Blender resolver: `--blender-version` flag (default 3.3) tries the four common `/Applications` app-name conventions, then `blender{V}` and `blender` on `$PATH`. `BLENDER_BIN` env var still wins as a full override.
+
+**Transition T — DONE ✓** (commit `354f2ee`). yaml's `leg_template.joints` is gone; the `cad_name → urdf_name + parent/child` mapping is fixed convention, so it lives in `_JOINT_TOPOLOGY` in [generate_urdf.py](../generate_urdf.py). yaml is now strictly leg-instance + servo properties. URDF byte-equivalent before/after.
+
+**Repo organization (housekeeping)** — DONE ✓:
+- `d837e91` dropped 3 superseded helper scripts.
+- `1fd913b` dropped v1 simulator and `facehugger_v1.urdf`.
+- `32bcea4` moved 5 pipeline docs into `code/simulation/docs/`.
+- `b98b758` moved generated artifacts (`fusion_export.{json,txt}`, `exported_meshes/`, `facehugger.urdf`) into `code/simulation/generated/`.
+- `62a6bd4` split `simulate_v2.py` (877 lines) into 5 modules: `constants.py` (22), `helpers.py` (210), `kinematics.py` (~315), `gaits.py` (~315), `simulate.py` (49).
 
 ### Known gaps (not blockers)
 
-- **`axis_construction_name` is None** for all three joints — Fusion's AsBuiltJoint API resolves axis-aligned construction axes to principal-axis enum values rather than exposing the originating entity name. `axis_dir_local_unit` is correctly populated (matches BodyToLink1Axis / Link1ToLink2Axis / Link2ToLink3Axis directions exactly), so the URDF generator has everything it needs. Leave for now.
-- **`origin_construction_name` is None** for all three joints — same reason. `axis_origin_local_mm` is exact (e.g. `(11.97, 0, -4.20)` matches `BodyToLink1Point`).
-- **R-side hip/knee servos not modeled** in CAD. `leg_shoulder_R.stl` is just `Link1R` body; the FR/BL legs render without their hip/knee servo bodies in the URDF until the user adds R servos in Fusion. Per PIPELINE_SPEC §5 this is an accepted gap.
-- **`MotorMountR:1/LegMountFixedPoint`** is unverifiable while the user keeps that occurrence hidden. The R bracket lands at `LegMountPointFR` / `LegMountPointBL` purely via the URDF's instancing logic; no CAD-side cross-check.
+- `axis_construction_name` / `origin_construction_name` are `None` for all three joints — Fusion's AsBuiltJoint API resolves axis-aligned construction axes to principal-axis enums rather than the originating entity. `axis_dir_local_unit` and `axis_origin_local_mm` are exact, so the URDF generator has everything it needs; this is cosmetic.
+- R-side hip/knee servos not modeled in CAD. `leg_shoulder_R.stl` is just `Link1R`; FR/BL render without their hip/knee servo bodies until the user adds R servos in Fusion. Per PIPELINE_SPEC §5 this is accepted.
+- `MotorMountR:1/LegMountFixedPoint` is unverifiable while the user keeps that occurrence hidden. The R bracket lands at `LegMountPointFR` / `LegMountPointBL` purely via the URDF generator's instancing logic.
 
 ### What's actually in `mesh_files` after the latest export
 
@@ -50,13 +78,11 @@ Verification logic was folded into the Fusion add-in itself (`_verify_against_as
 QuadrupedBody.stl   = FlexibleSkeleton:1 (chassis + LipoCage)
 leg_mount_L.stl     = MotorMount:1/LegMountL,    re-origined to LegMountFixedPoint (local)
 leg_mount_R.stl     = MotorMountR:1/LegMountR,   re-origined to LegMountFixedPoint (local)
-leg_shoulder_L.stl  = combined: Link1L body + Servo_Mouser_Model:2/ServoBase,
-                        re-origined to BodyToLink1Point (world)
-leg_shoulder_R.stl  = Link1R body, re-origined to BodyToLink1Point (local)
-leg_upper.stl       = Link2L/Link2 body, re-origined to Link1ToLink2Point
-leg_lower.stl       = combined: Link3L body + Servo_Mouser_Model:3/ServoBase,
-                        re-origined to Link2ToLink3Point (world)
-servo.stl           = ServoBase, re-origined to ServoMountPoint
+leg_shoulder_L.stl  = Link1L body,               re-origined to BodyToLink1Point
+leg_shoulder_R.stl  = Link1R body,               re-origined to BodyToLink1Point
+leg_upper.stl       = Link2L/Link2 body,         re-origined to Link1ToLink2Point
+leg_lower.stl       = Link3L/Link3 body,         re-origined to Link2ToLink3Point
+servo.stl           = ServoBase,                 re-origined to ServoMountPoint
 ```
 
 `_servo_role_assignment` is preserved across re-runs:
@@ -69,189 +95,101 @@ knee:     FaceHuggerLegAssembly:1/Servo_Mouser_Model:3
 
 ---
 
-### Phase B — DONE ✓ (commit `1e49d08`)
+## What's left
 
-[generate_urdf.py](../generate_urdf.py) consumes the CAD-sourced joints from `fusion_export.json` (`axis_dir_local_unit`, `axis_origin_local_mm`, `limits_rad`); emits 4 bracket visuals on `base_link`, per-side L/R link1 meshes, per-leg shoulder limits from yaml. yaml's `leg_template.joints` reduced to `cad_name → urdf_name + parent/child` mapping only.
-
-### Phase E + G + H + I — Alignment fix DONE ✓ (commit `44b2036`)
-
-Two compounding bugs were silently misplacing the legs in PyBullet: (1) the shoulder joint origin sat at the bracket's mounting tab instead of the rotation axis (38mm off), and (2) the leg-assembly's 90°-about-Z world rotation in CAD was never compensated for, so meshes and joint axes were 90° off. Fixed by:
-
-- **Phase E** (exporter): compute `R_la` and apply to `axis_dir` / `axis_origin` for leg-assembly-internal joints. Convert all leg-internal body-rules to combined-rule (which auto-bakes world-frame vertices). Drop servo bake-ins from link STLs; standalone `servo.stl`. Add `landmark_occurrence` field to scope landmark lookups. JSON gets a top-level `leg_assembly_normalization` block.
-- **Phase G** (URDF gen): per-corner shoulder placement = `mount + Rz(rpy_z) · side_offset`. Hip/knee origins X-flipped for R pair. Per-side L/R link1 meshes. Link2/link3 mesh visual rpy `(0, π, 0)` for R pair (shared meshes).
-- **Phase H** (uniform joint sign convention): R-pair hip/knee axis flip + negate-and-swap limits. Same stance value drops every leg uniformly.
-- **Phase I** (standalone servos): 12 servo visuals (4 shoulder + 4 hip + 4 knee). Per-role rpy = `R_role · R_servo1^T` lifts the shoulder-baked mesh's `+Z` shaft to world `+Y` for hip/knee. R pair gets X-flipped position only — no rotation (servo is the same physical part on every leg).
-
-URDF kinematically verified via PyBullet FK. **Visually inspected via `view_urdf.py`** (new minimal viewer) — geometry looks correct from all angles.
-
-Full rationale + math in [ALIGNMENT_FIX_PLAN.md](ALIGNMENT_FIX_PLAN.md). User-facing pipeline docs in [URDF_PIPELINE.md](URDF_PIPELINE.md).
+| Priority | Item | Effort | Notes |
+|---|---|---|---|
+| **High** | **Animation pipeline** — `urdf_to_blender.py` + `animation_export.py` | 1–2 sessions | Project-critical. `urdf_to_blender.py` loads `facehugger.urdf` into Blender as a rigged armature (12 controllable bones, one per joint) for keyframing. `animation_export.py` exports the timeline as `(t, 12 servo angles)` rows that the firmware on `main` can stream to its 12 PWM channels. This is what turns the simulator into actual robot motion. |
+| Low | Per-side mesh handedness in `visualize_fusion_export.py` (C3 + C4) | ~2 hours | Currently FR/BL show L-handed meshes. Either implement properly (route Link1L vs Link1R + flip Link2/Link3 visuals + add bracket visuals) or drop the script in favor of `urdf_to_blender.py` once the latter exists. |
+| Low | Gait registry expansion: `bound`, `crab` from teammate's `main` | ~30 min | Phase J's uniform IK means teammate's `splayed_foot_ik` / `leg_ik_fixed_yaw` aren't strictly needed — vanilla `ik_v2` per leg with the right `foot_target()` shape suffices. |
+| Low | Gait parameter tuning | ~30 min visual | Trot's 25 mm step_height clamps at the URDF's ±90° knee limit (~4 mm short at swing apex). Drop to 20 mm, or bump the CAD knee limit. Walk hasn't been visually validated end-to-end. |
+| Cosmetic | `axis_construction_name` lookup for AsBuiltJoints in the Fusion add-in | ~15 min | Direction vectors are already correct; this just gives the human-readable name in `fusion_export.txt`. |
 
 ---
 
-## Phase J — `simulate.py` FK rewrite — DONE ✓
+## How to test
 
-The analytic FK/IK in [kinematics.py](../kinematics.py) was calibrated against the old URDF (hip/knee axes `+X`, single sign convention, chain along `+Y`). Rewritten for the new URDF:
+All commands assume `cd code/simulation` first.
 
-1. ✓ Dropped the `R_L1` per-leg rotation layer (no more `_r_l1_angle` / `foot_from_knee_lal_m`). Joint xyz/axis come straight from the URDF.
-2. ✓ Hip/knee rotations now use `_ry`. Per-leg `hip_axis_sign`/`knee_axis_sign` (read from URDF `<axis>` Y component) lets user-facing angles stay uniform while internal FK applies the right rotation.
-3. ✓ Per-leg joint limits live on `LegGeom` (FL/BR have hip range `[-135°, +45°]`, FR/BL have `[-45°, +135°]`; the old code clamped everyone with FR's limits — bug fixed).
-4. ✓ Side-dependent foot tip in link3 frame: L pair = mesh-local `FootTip` from URDF metadata; R pair = `(-x, y, -z)` (link3 visual rpy = `(0, π, 0)` rotates the mesh by `Ry(π)`).
-5. ✓ `body_height` recomputes from neutral-foot Z (~85.9 mm below body origin at stance), spawn position adjusts automatically.
-
-**Verified**: FK→IK round-trip at stance is `[OK]` for every leg (error < 0.1°). All 4 legs land at symmetric foot positions `(±176.0, ±55.8, -85.9)` mm.
-
-**Known workspace constraint**: knee URDF limit is `±90°`; trot's `step_height=25mm` requires the knee to flex to ~-100° at the swing apex, which clamps. The foot ends ~4mm short of the requested swing peak — gait still works, just lifts slightly less than commanded. Lower `step_height`, more crouched stance, or a CAD-side knee limit bump would all resolve it. Out of scope here.
-
-## Then: Phase C — Blender visualizer
-
-**Goal**: regenerate `facehugger.urdf` from the new CAD outputs; the URDF must match what `simulate.py` and the Blender visualizer expect.
-
-Files to edit:
-- [generate_urdf.py](../generate_urdf.py)
-- [facehugger_config.yaml](../facehugger_config.yaml)
-
-### B1 — `leg_mount_{L,R}.stl` visual on `base_link`
-
-Mirror the existing chassis-fixed shoulder-servo logic:
-- 4 bracket `<visual>` elements on `base_link`, one per `LegMountPointXX`.
-- Mesh = `leg_mount_L.stl` for FL/BR, `leg_mount_R.stl` for FR/BL (per the diagonal-pair rule).
-- xyz from each leg's `mount_point`. rpy = identity.
-
-### B2 — yaml schema
-
-Per [PIPELINE_SPEC.md](PIPELINE_SPEC.md) §1, §3, §4. Update `legs[]`:
-
-```yaml
-legs:
-  - { id: fl, mount_point: LegMountPointFL, side: L, rpy_z_deg:   0,
-      shoulder_limits_deg: [-105,  +45], shoulder_neutral_deg: 0 }
-  - { id: br, mount_point: LegMountPointBR, side: L, rpy_z_deg: 180,
-      shoulder_limits_deg: [ -45, +105], shoulder_neutral_deg: 0 }
-  - { id: fr, mount_point: LegMountPointFR, side: R, rpy_z_deg:   0,
-      shoulder_limits_deg: [ -45, +105], shoulder_neutral_deg: 0 }
-  - { id: bl, mount_point: LegMountPointBL, side: R, rpy_z_deg: 180,
-      shoulder_limits_deg: [-105,  +45], shoulder_neutral_deg: 0 }
-```
-
-`leg_template.links.link1.mesh` becomes a `"leg_shoulder_{side}.stl"` template; generator substitutes `{side}` per leg. Link2 / Link3 stay shared (`leg_upper.stl`, `leg_lower.stl`).
-
-### B3 — Diagonal-pair shoulder-joint rpy
-
-Per PIPELINE_SPEC §9, the 180° Z rotation for BR/BL **rotates around the leg's own mount point**. Already encoded by per-leg `rpy_z_deg = 180`. Stop assuming uniformity in the generator.
-
-### B4 — Per-leg shoulder limits
-
-Drop the old "neutral ± 90°" derivation. Use each leg's `shoulder_limits_deg` directly when emitting shoulder joints.
-
-### B5 — Consume CAD-sourced joint info (graceful)
-
-Read `joints` array from `fusion_export.json`. Per-property precedence: `JSON > yaml`. Three joints to consume: `Link1Revolute` (shoulder — but per-leg rpy_z still applies post hoc), `Link2Revolute` (hip), `Link3Revolute` (knee). Limits in radians from JSON convert to URDF directly.
-
-If `joints` empty/missing, fall back to yaml — keeps a transition window. Log a warning if both define a property and disagree.
-
-### B6 — Sanity-keep chassis-fixed shoulder-servo visuals
-
-The committed chassis-fixed shoulder-servo logic (uniform rpy = source FL rpy, 4 translations, 1 visual per `LegMountPointXX`) stays as-is. Confirm `_servo_rot_by_role` and `_servo_role_assignment` still resolve in the new manifest (they do — the assignment block was preserved across re-export).
-
-### Phase B verification
+### The CLI itself (Phase D)
 
 ```bash
-python code/simulation/generate_urdf.py
-grep -c '<visual>' code/simulation/generated/facehugger.urdf       # >= 21
-grep -c 'leg_shoulder_L.stl' code/simulation/generated/facehugger.urdf   # = 2 (FL, BR)
-grep -c 'leg_shoulder_R.stl' code/simulation/generated/facehugger.urdf   # = 2 (FR, BL)
-grep -c 'leg_mount_L.stl'    code/simulation/generated/facehugger.urdf   # = 2
-grep -c 'leg_mount_R.stl'    code/simulation/generated/facehugger.urdf   # = 2
+python facehugger.py --help                       # 5 subcommands listed
+python facehugger.py sim --help                   # --walk / --trot / --headless / --settle
+python facehugger.py blender --help               # --blender-version flag present
 ```
 
-Per-leg shoulder limits in the URDF match PIPELINE_SPEC §4 table.
+### URDF generation + Transition T byte-equivalence
 
----
-
-## Then: Phase C — Blender visualizer
-
-File: [../../animation/scripts/visualize_fusion_export.py](../../../animation/scripts/visualize_fusion_export.py).
-
-### C1 — Mount-point name lookup
-
-Update the `mounts` dict construction to read `LegMountPoint{XX}` instead of `LegMount{XX}`.
-
-### C2 — Drop bracket-rotation lookup
-
-`_legmount_rot_3x3()` reads bracket world rotations. Bracket occurrences moved into the leg assembly — function returns None for all 4 corners. Replace with the diagonal-pair `rpy_z_deg` table from yaml: `Rz(0°)` for FL/FR, `Rz(180°)` for BR/BL.
-
-### C3 — Per-side mesh in duplication
-
-`instance_four_legs()` imports both L and R leg-link meshes, picks per corner:
-
-```
-Legs/FL — L mesh, source position.
-Legs/BR — L mesh, transform = T(LegMountPointBR) @ Rz(180°) @ T(-LegMountPointFL) @ M_src_L.
-Legs/FR — R mesh, transform = T(LegMountPointFR) @ Rz(  0°) @ T(-anchor_R)         @ M_src_R.
-Legs/BL — R mesh, transform = T(LegMountPointBL) @ Rz(180°) @ T(-anchor_R)         @ M_src_R.
+```bash
+cp generated/facehugger.urdf /tmp/urdf_pre.urdf
+python facehugger.py urdf
+diff /tmp/urdf_pre.urdf generated/facehugger.urdf            # empty (or float-noise only)
+grep -c '<visual>' generated/facehugger.urdf                 # >= 21
+grep -c 'leg_shoulder_L.stl' generated/facehugger.urdf       # 2 (FL, BR)
+grep -c 'leg_shoulder_R.stl' generated/facehugger.urdf       # 2 (FR, BL)
+grep -c 'leg_mount_L.stl'    generated/facehugger.urdf       # 2
+grep -c 'leg_mount_R.stl'    generated/facehugger.urdf       # 2
+grep -E "axis_key|point_key|limits_deg" facehugger_config.yaml   # nothing
 ```
 
-`anchor_R` = world position of the R leg's `BodyToLink1Point` reference. Pull from JSON at runtime (it's the mirrored counterpart of the L-side anchor).
+### Phase J FK→IK round-trip
 
-### C4 — Bracket visuals
-
-Add 4 bracket meshes to chassis (`Meshes` collection): `leg_mount_L.stl` at FL/BR, `leg_mount_R.stl` at FR/BL. Chassis-fixed.
-
-### C5 — Shoulder servos
-
-Already handled by the committed `Shoulders` sub-collection logic; nothing to change.
-
----
-
-## Then: Phase D — CLI orchestrator
-
-New file: `code/simulation/facehugger.py` (~150 lines). One argparse-based entry point:
-
-| Command | Wraps | Notes |
-|---|---|---|
-| `urdf` | `generate_urdf.py` | Pass-through `--export` `--config` `--out`. |
-| `blender [--headless] [--save PATH]` | Blender + visualizer | Auto-detect path; honor `BLENDER_BIN`. |
-| `sim [--walk\|--trot] [--headless] [--settle SEC]` | `simulate.py` | Mirror simulator argparse. |
-| `all` | urdf → sim | Smoke shortcut. |
-
-Implementation: `subprocess.run(["python", str(SCRIPT_PATH), *args], cwd="code/simulation/")`. Blender bin: `BLENDER_BIN` env → fallback `/Applications/Blender-3.3-LTS.app/Contents/MacOS/Blender` on darwin → clear error otherwise.
-
-Update [README.md](../README.md) so the four-step sequence becomes `facehugger.py` invocations.
-
----
-
-## Transition T — yaml → CAD as joint source-of-truth
-
-Once Phase B's CAD-joint consumption (B5) is verified byte-equivalent against the prior URDF (`diff` empty or float-only), drop yaml `leg_template.joints[]`. Generator requires `joints` block from then on. yaml shrinks to leg-instance + servo config only.
-
-Final yaml shape:
-
-```yaml
-robot_name: facehugger
-mesh_dir: exported_meshes/
-base_link: { name: base_link, mesh: QuadrupedBody.stl }
-leg_template:
-  leg_assembly_occurrence: "FaceHuggerLegAssembly:1"
-  links:
-    link1: { mesh: "leg_shoulder_{side}.stl" }
-    link2: { mesh: "leg_upper.stl" }
-    link3: { mesh: "leg_lower.stl" }
-legs: [ ... per-leg from B2 ... ]
-servo: { mass_kg: 0.060, effort_nm: 2.94, velocity_rad_s: 5.0,
-         visual_flip_rpy_deg: [180, 0, 0] }
+```bash
+python facehugger.py sim --headless 2>&1 | head -25
 ```
 
-Update [README.md](../README.md) troubleshooting: **"wrong joint limits in URDF" → edit the joint in Fusion, re-export** (not yaml).
+Expected in the banner:
 
----
+- `body_height: 85.9 mm`
+- per-leg `foot = (±176.0, ±55.8, -85.9) mm` (sign pattern per corner)
+- `IK[fl] / [br] / [fr] / [bl]: ds=+0.00 dh=+0.02 dk=+0.09 [OK]` — all `[OK]`, errors well below 0.5°.
 
-## Order of execution from here
+### Phase J visual stand pose + gaits
 
-1. **Phase J** — `simulate.py` FK rewrite. Unblocks stance + walk + IK on the new URDF.
-2. **Phase C** — Blender visualizer (independent; can land any time).
-3. **Phase D** — CLI orchestrator (independent; can land any time).
-4. **Transition T** — Drop yaml joint config (now safe — Phase B already wires CAD-joint consumption).
-5. **Optional fix** — `axis_construction_name` lookup for AsBuiltJoints (cosmetic; direction vectors are already correct).
+```bash
+python facehugger.py view                                    # PyBullet viewer (no physics)
+python facehugger.py sim                                     # gravity on, holds stance pose
+python facehugger.py sim --walk                              # walk gait
+python facehugger.py sim --trot                              # trot gait (knee clamps slightly at swing apex; expected)
+```
+
+`view` mouse: left-drag orbit, ctrl+left-drag pan, scroll zoom, close window or Ctrl+C to quit.
+
+### Phase C minimal Blender visualizer + multi-version resolver
+
+```bash
+# Default: looks for Blender 3.3 LTS in /Applications
+python facehugger.py blender
+
+# Specific version — tries Blender-{V}-LTS.app, "Blender {V}.app" (with space),
+# Blender-{V}.app, Blender{V}.app, then blender{V}/blender on $PATH
+python facehugger.py blender --blender-version 4.2
+python facehugger.py blender --blender-version 5.1 --headless --save /tmp/scene.blend
+
+# Full override — wins over --blender-version
+BLENDER_BIN=/Applications/Blender.app/Contents/MacOS/Blender python facehugger.py blender
+```
+
+Console should print `[instance_legs] per-corner rotation — FR=Rz(+0°), BR=Rz(+180°), BL=Rz(+180°)`.
+
+Known visual quirk: FR / BL legs render with L-handed meshes (no per-side mesh routing yet — see "What's left"). If Blender isn't found, the CLI prints which paths were tried and exits non-zero.
+
+### Modularization sanity check
+
+```bash
+python -c "import constants, helpers, kinematics, gaits, simulate; print('imports OK')"
+```
+
+No circular imports. Module sizes ~22 / 210 / 315 / 315 / 49 lines.
+
+### `all` smoke run
+
+```bash
+python facehugger.py all --headless
+```
+
+Runs `urdf` → `sim` (default stand) sequentially. Useful for CI; both should exit 0.
 
 ---
 
@@ -261,12 +199,22 @@ Update [README.md](../README.md) troubleshooting: **"wrong joint limits in URDF"
 |---|---|
 | [PIPELINE_SPEC.md](PIPELINE_SPEC.md) | Authoritative spec (rpy_z_deg, limits, mount points, mirror plane). |
 | [ASSEMBLY_HIERARCHY.md](ASSEMBLY_HIERARCHY.md) | Authoritative CAD tree (component / body / construction-point names). |
-| `fusion_export.json` | Generated by the Fusion add-in. Source of truth for downstream. |
-| `fusion_export.txt` | Human-readable mirror of JSON, with `=== Joints ===` block. |
-| [facehugger_config.yaml](../facehugger_config.yaml) | Per-leg placement config (id, mount, side, rpy_z, limits, neutral). |
-| [generate_urdf.py](../generate_urdf.py) | Reads JSON + yaml → emits `facehugger.urdf`. |
-| [simulate.py](../simulate.py) | Loads URDF in PyBullet. |
-| [../../animation/scripts/visualize_fusion_export.py](../../../animation/scripts/visualize_fusion_export.py) | Blender debug scene. |
+| [URDF_PIPELINE.md](URDF_PIPELINE.md) | End-to-end "how the pipeline works" doc (math + diagrams). |
+| [ALIGNMENT_FIX_PLAN.md](ALIGNMENT_FIX_PLAN.md) | Historical: rationale + math for Phases E/G/H/I. |
+| `generated/fusion_export.json` | Generated by the Fusion add-in. Source of truth for downstream. |
+| `generated/fusion_export.txt` | Human-readable mirror of JSON, with `=== Joints ===` block. |
+| `generated/exported_meshes/*.stl` | 8 re-origined meshes. |
+| `generated/facehugger.urdf` | Generated robot description. |
+| [facehugger.py](../facehugger.py) | CLI entry point (`urdf` / `sim` / `view` / `blender` / `all`). |
+| [facehugger_config.yaml](../facehugger_config.yaml) | Per-leg placement (id, mount, side, rpy_z, limits, neutral) + servo physical props. |
+| [generate_urdf.py](../generate_urdf.py) | Reads JSON + yaml → emits URDF. `_JOINT_TOPOLOGY` constant lives here. |
+| [constants.py](../constants.py) | Paths + `TIMESTEP` + `STANCE_DEG`. |
+| [helpers.py](../helpers.py) | Math utils, URDF/STL parsing, joint plumbing. |
+| [kinematics.py](../kinematics.py) | `LegGeom`, `RobotConfig`, `fk_v2` / `ik_v2`, `build_config`. |
+| [gaits.py](../gaits.py) | `GAITS` registry + `run_stand` / `run_gait`. |
+| [simulate.py](../simulate.py) | argparse main only. |
+| [view_urdf.py](../view_urdf.py) | Lightweight PyBullet URDF viewer (no physics). |
+| [../../animation/scripts/visualize_fusion_export.py](../../../animation/scripts/visualize_fusion_export.py) | Blender debug scene (corners detected; per-side mesh routing TODO). |
 | [../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py](../../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) | The Fusion add-in. |
 
 User reruns the Fusion add-in via *Shift+S → Scripts and Add-Ins → ExportBodiesToURDF → Run* whenever the CAD changes meaningfully.
