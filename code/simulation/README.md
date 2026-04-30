@@ -40,19 +40,9 @@ Re-runs preserve user edits to `mesh_files._servo_role_assignment` in the JSON.
 ## Step 2 — (optional) Inspect exports
 
 ```bash
-# Connected-component analysis of any STL
-python3 animation/scripts/inspect_stl.py \
-    code/simulation/exported_meshes/QuadrupedBody.stl
-
 # Open the export in Blender: chassis + 4 legs (instanced) + construction-point spheres
 /Applications/Blender-3.3-LTS.app/Contents/MacOS/Blender \
     --python animation/scripts/visualize_fusion_export.py
-
-# Chain a plain-text scene dump after the visualizer
-/Applications/Blender-3.3-LTS.app/Contents/MacOS/Blender --background \
-    --python animation/scripts/visualize_fusion_export.py \
-    --python animation/scripts/dump_blender_scene.py \
-  > /tmp/scene.txt
 ```
 
 ## Step 3 — Generate the URDF
@@ -117,7 +107,7 @@ Angles are in degrees in the yaml; `generate_urdf.py` converts to the URDF's rad
 | Symptom | Likely cause |
 |---|---|
 | Chassis STL has electronics/PCBs baked in | `EXPORT_RULES` `combined.parts` list in [../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py](../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) is out of date — add or remove the right occurrences. |
-| Servos misaligned in Blender / PyBullet | Either the CAD's `ServoMountPoint` is not on the shaft axis, or (for shoulder) the URDF's per-instance rpy logic is off — inspect with `inspect_stl.py` and Blender. |
+| Servos misaligned in Blender / PyBullet | Either the CAD's `ServoMountPoint` is not on the shaft axis, or the URDF's per-role rpy is off — inspect in Blender. |
 | `simulate_v2.py --walk` spawns through floor | Settling / body-height issue — see `--settle SECONDS` flag and the gait-aware `body_height` computation. |
 | `URDF is missing LEG ASSEMBLY METADATA` | Regenerate the URDF; the metadata comment block is emitted by `generate_urdf.py`. |
 
@@ -137,8 +127,6 @@ code/simulation/
 
 ../../animation/scripts/
   visualize_fusion_export.py    Blender 3.3 scene builder
-  dump_blender_scene.py         plain-text scene listing
-  inspect_stl.py                STL connected-component analyzer
 ```
 
 ## Design notes

@@ -1539,8 +1539,8 @@ def _rad_to_deg(rad):
         return 0.0
 
 
-# Mirrors phase0_verify.py's expected structure so a re-export immediately
-# tells the user whether the CAD still matches ASSEMBLY_HIERARCHY.md.
+# A re-export immediately tells the user whether the CAD still matches
+# ASSEMBLY_HIERARCHY.md.
 _REQUIRED_FS_POINTS = (
     "LegMountPointFL", "LegMountPointFR", "LegMountPointBR", "LegMountPointBL",
 )
@@ -1562,9 +1562,9 @@ _REQUIRED_JOINTS = ("Link1Revolute", "Link2Revolute", "Link3Revolute")
 
 
 def _verify_against_assembly_hierarchy(occurrences_json, joints, mesh_files):
-    """Lightweight diagnostic mirroring phase0_verify.py's checks. Returns a
-    list of human-readable lines (a few ✓/✗ rows) for the message box. Doesn't
-    fail the export — just reports.
+    """Lightweight diagnostic against ASSEMBLY_HIERARCHY.md. Returns a list of
+    human-readable lines (a few ✓/✗ rows) for the message box. Doesn't fail
+    the export — just reports.
 
     `mesh_files` is consulted as a secondary existence check: if an
     occurrence shows up in ANY entry's `source_occurrences`, the export
@@ -1820,9 +1820,8 @@ def run(_context: str):
                 header + fmt_tree(export["occurrences"]) + [""] + joints_lines
             ))
 
-        # Diagnostic against ASSEMBLY_HIERARCHY checklist (matches
-        # phase0_verify.py expectations). Lets the user see immediately
-        # whether the export lines up with the spec.
+        # Diagnostic against ASSEMBLY_HIERARCHY checklist. Lets the user see
+        # immediately whether the export lines up with the spec.
         diag_lines = _verify_against_assembly_hierarchy(
             occurrences_json, joints, mesh_files
         )

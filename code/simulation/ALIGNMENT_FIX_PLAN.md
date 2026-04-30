@@ -318,7 +318,7 @@ already side-specific meshes from the export.
 
 After Phase E + G:
 
-1. **STL spot-checks** (use `inspect_stl.py`):
+1. **STL spot-checks**:
    - `leg_shoulder_L.stl` — bounding-box max should extend in **world
      -X** direction from origin.
    - `leg_shoulder_R.stl` — bounding-box max in **world +X** direction.
