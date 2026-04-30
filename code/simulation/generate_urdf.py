@@ -79,6 +79,44 @@ def find_point_in_tree(nodes: list, key: str) -> list | None:
     return None
 
 
+def find_point_world_in_tree(nodes: list, key: str) -> list | None:
+    """Find a named construction point anywhere in the tree, return its
+    `pos_world_mm` (world position) instead of the component-local
+    `pos_mm`. The first match wins — caller should use
+    `find_point_world_at_occurrence` when the name is ambiguous (e.g.
+    LegMountFixedPoint exists in both MotorMount:1 and MotorMountR:1)."""
+    for n in nodes:
+        for p in n.get("points", []):
+            if p["name"] == key:
+                return p.get("pos_world_mm")
+        result = find_point_world_in_tree(n.get("children", []), key)
+        if result is not None:
+            return result
+    return None
+
+
+def find_point_world_at_occurrence(nodes: list, occ_path: str, key: str) -> list | None:
+    """Look up a construction point's `pos_world_mm` scoped to a specific
+    occurrence path (e.g. 'FaceHuggerLegAssembly:1/MotorMount:1'). Use
+    this when a point name appears multiple times in the tree — both
+    bracket components carry a `LegMountFixedPoint` and the unscoped
+    walk would pick whichever comes first."""
+    parts = occ_path.split("/")
+    cur = nodes
+    node = None
+    for part in parts:
+        node = next((c for c in (cur or []) if c.get("name") == part), None)
+        if node is None:
+            return None
+        cur = node.get("children", [])
+    if node is None:
+        return None
+    for p in node.get("points", []):
+        if p.get("name") == key:
+            return p.get("pos_world_mm")
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Math
 # ---------------------------------------------------------------------------
@@ -162,6 +200,7 @@ class URDF:
         inertia: dict,
         origin_shift_mm: list | None = None,
         extra_visuals: list | None = None,
+        mesh_rpy: tuple | None = None,
     ):
         """Emit a <link> block.
 
@@ -178,13 +217,31 @@ class URDF:
         / link3). Each tuple is either `(mesh_name, origin_xyz_mm)` (rpy
         defaults to (0,0,0)) or `(mesh_name, origin_xyz_mm, origin_rpy_rad)`.
         No collision and no inertial contribution — visual-only.
+
+        `mesh_rpy` (optional) sets the rpy on the primary visual + collision
+        <origin> blocks AND rotates the inertial CoM by the same rotation.
+        Used by R-pair link2/link3 to rotate the shared L-orientation mesh
+        180° about its own Y axis so the leg geometry extends in the right
+        direction. Inertia tensor is left as-is — off-diagonal sign flips
+        are 2nd-order and don't affect a stand/walk smoke test.
         """
         if origin_shift_mm is None:
             origin_shift_mm = [0.0, 0.0, 0.0]
         if extra_visuals is None:
             extra_visuals = []
         com_local = [com_mm[i] - origin_shift_mm[i] for i in range(3)]
+        if mesh_rpy is not None:
+            # Rotate CoM by the same matrix applied to the mesh, so the
+            # inertial origin tracks the visible geometry.
+            R = _euler_to_rot(mesh_rpy)
+            com_local = [
+                R[0][0]*com_local[0] + R[0][1]*com_local[1] + R[0][2]*com_local[2],
+                R[1][0]*com_local[0] + R[1][1]*com_local[1] + R[1][2]*com_local[2],
+                R[2][0]*com_local[0] + R[2][1]*com_local[1] + R[2][2]*com_local[2],
+            ]
         xyz_com = fmt_xyz(com_local)
+        primary_rpy = mesh_rpy if mesh_rpy is not None else (0.0, 0.0, 0.0)
+        primary_rpy_str = " ".join(f"{v:.6f}" for v in primary_rpy)
         ixx = inertia.get("ixx", 1e-6)
         iyy = inertia.get("iyy", 1e-6)
         izz = inertia.get("izz", 1e-6)
@@ -200,7 +257,7 @@ class URDF:
             f' iyy="{iyy}" iyz="{iyz}" izz="{izz}"/>',
             "    </inertial>",
             "    <visual>",
-            '      <origin xyz="0 0 0" rpy="0 0 0"/>',
+            f'      <origin xyz="0 0 0" rpy="{primary_rpy_str}"/>',
             "      <geometry>",
             f'        <mesh filename="{mesh_dir}{mesh}" scale="0.001 0.001 0.001"/>',
             "      </geometry>",
@@ -223,7 +280,7 @@ class URDF:
             ]
         self.lines += [
             "    <collision>",
-            '      <origin xyz="0 0 0" rpy="0 0 0"/>',
+            f'      <origin xyz="0 0 0" rpy="{primary_rpy_str}"/>',
             "      <geometry>",
             f'        <mesh filename="{mesh_dir}{mesh}" scale="0.001 0.001 0.001"/>',
             "      </geometry>",
@@ -448,10 +505,13 @@ def generate(export: dict, cfg: dict, out_path: Path):
     servo_cfg = cfg.get("servo", {})
     effort = servo_cfg.get("effort_nm", 1.47)
     vel = servo_cfg.get("velocity_rad_s", 5.0)
-    # Uniform mesh-local rotation applied to every servo visual (see yaml
-    # comment on `servo.visual_flip_rpy_deg`). Defaults to identity.
-    servo_flip_deg = servo_cfg.get("visual_flip_rpy_deg", [0.0, 0.0, 0.0])
-    servo_flip_rot = _euler_to_rot([math.radians(d) for d in servo_flip_deg])
+    # `visual_flip_rpy_deg` was a workaround for when servos were emitted
+    # with CAD-source orientation that pointed the wrong way. With the
+    # standalone-servos design (post-Phase G) the mesh is re-origined to
+    # ServoMountPoint and placed at world ServoMountPoint per leg, so no
+    # blanket orientation hack is needed. Field is read for backward yaml
+    # compat but not applied.
+    _ = servo_cfg.get("visual_flip_rpy_deg", [0.0, 0.0, 0.0])
 
     urdf = URDF(robot)
 
@@ -513,25 +573,124 @@ def generate(export: dict, cfg: dict, out_path: Path):
             joint_defs[i - 1]["origin_local_mm"],
         )
 
-    # --- servo placement ---
-    # servo.stl is re-origined in the Fusion exporter to `ServoMountPoint` on
-    # the shaft-exit/mounting-face plane, which coincides with each servo's
-    # joint rotation axis by CAD construction. So each servo mesh's local
-    # (0,0,0) lands on the joint axis when placed at the joint world
-    # position. The hip + knee servo BODIES travel with their respective
-    # links (per Link1RigidGroup / Link3RigidGroup) and are already baked
-    # into leg_shoulder_{L,R}.stl / leg_lower.stl by the combined-rule
-    # exporter — so we don't emit them as separate visuals here. The
-    # shoulder servo is the only one rendered loose: it's chassis-fixed
-    # and gets 4 visuals on base_link, one per LegMountPointXX, with the
-    # CAD's source-FL rotation post-multiplied by visual_flip_rpy_deg.
-    has_shoulder_servo = _servo_world_by_role(export, "shoulder") is not None
+    # --- per-side offsets in normalized (world-aligned) frame ---
+    # The leg-assembly normalization in the exporter (E1-E3) aligned the
+    # leg-assembly's local axes with world. JSON construction-point
+    # `pos_world_mm` values are still genuine world positions; in the
+    # source CAD, the L bracket is at LegMountPointFL and the R bracket
+    # is sitting at the mirror position. We derive the constant offsets
+    # (mount-tab → axis, mount-tab → shoulder-servo, etc.) from the
+    # source-CAD positions and reuse them per leg.
+    LEG_ASSEMBLY = "FaceHuggerLegAssembly:1"
+    body_to_link1_world = find_point_world_at_occurrence(
+        occs, LEG_ASSEMBLY, "BodyToLink1Point"
+    )
+    link2_to_link3_world = find_point_world_at_occurrence(
+        occs, LEG_ASSEMBLY, "Link2ToLink3Point"
+    )
+    mount_L_world = find_point_world_at_occurrence(
+        occs, f"{LEG_ASSEMBLY}/MotorMount:1", "LegMountFixedPoint"
+    )
+    mount_R_world = find_point_world_at_occurrence(
+        occs, f"{LEG_ASSEMBLY}/MotorMountR:1", "LegMountFixedPoint"
+    )
+    if any(v is None for v in (body_to_link1_world, link2_to_link3_world,
+                               mount_L_world, mount_R_world)):
+        raise ValueError(
+            "Missing required construction points: BodyToLink1Point / "
+            "Link2ToLink3Point / MotorMount(R) LegMountFixedPoint."
+        )
 
+    L_axis_offset = sub(body_to_link1_world, mount_L_world)
+    R_axis_offset = sub(body_to_link1_world, mount_R_world)
+
+    # Standalone-servo design (no bake-in): each leg gets a shoulder,
+    # hip, and knee servo emitted as separate <visual> blocks. The mesh
+    # `servo.stl` is re-origined to ServoMountPoint, so the visual's xyz
+    # is the world position where ServoMountPoint should land.
+    #
+    # Source-CAD shoulder-servo positions: each bracket has a nested
+    # `Servo_Mouser_Model:1` with its own ServoMountPoint. Its world
+    # position is the place where that bracket's shoulder servo sits in
+    # the source-FL placement (L bracket) or the mirror (R bracket).
+    shoulder_servo_L_world = find_point_world_at_occurrence(
+        occs, f"{LEG_ASSEMBLY}/MotorMount:1/Servo_Mouser_Model:1",
+        "ServoMountPoint",
+    )
+    shoulder_servo_R_world = find_point_world_at_occurrence(
+        occs, f"{LEG_ASSEMBLY}/MotorMountR:1/Servo_Mouser_Model(Mirror):1",
+        "ServoMountPoint",
+    )
+    # Top-level hip / knee servos: shared (no L/R variants in CAD).
+    hip_servo_world = find_point_world_at_occurrence(
+        occs, f"{LEG_ASSEMBLY}/Servo_Mouser_Model:2", "ServoMountPoint"
+    )
+    knee_servo_world = find_point_world_at_occurrence(
+        occs, f"{LEG_ASSEMBLY}/Servo_Mouser_Model:3", "ServoMountPoint"
+    )
+
+    shoulder_servo_L_offset = (
+        sub(shoulder_servo_L_world, mount_L_world)
+        if shoulder_servo_L_world else None
+    )
+    shoulder_servo_R_offset = (
+        sub(shoulder_servo_R_world, mount_R_world)
+        if shoulder_servo_R_world else None
+    )
+    hip_servo_offset_in_link1 = (
+        sub(hip_servo_world, body_to_link1_world)
+        if hip_servo_world else None
+    )
+    knee_servo_offset_in_link3 = (
+        sub(knee_servo_world, link2_to_link3_world)
+        if knee_servo_world else None
+    )
+
+    # Per-role servo orientations. The shared `servo.stl` was exported
+    # via combined-rule from `Servo_Mouser_Model:1` (the shoulder
+    # servo), which bakes vertices in WORLD frame using
+    # `Servo_Mouser_Model:1`'s `world_transform_rm_cm`. So mesh-local
+    # axes equal world axes for the SHOULDER placement — shaft along
+    # `+Z`. The hip and knee servos in CAD have different world
+    # rotations (shaft along `+Y`), so reusing the same mesh on link1
+    # / link3 needs a per-role rpy that takes the mesh's
+    # shoulder-orientation back to the role's CAD orientation:
+    #
+    #     M_role = R_role · R_shoulder^T
+    #
+    # Computed from JSON, this gives:
+    #     M_hip  = Rx(-π/2)            →  rpy = (-π/2, 0, 0)
+    #     M_knee = Rz(-π/2)·Ry(-π/2)   →  rpy = (0, -π/2, -π/2)
+    R_servo1 = _find_occ_rot(occs, "Servo_Mouser_Model:1")    # shoulder
+    R_servo2 = _find_occ_rot(occs, "Servo_Mouser_Model:2")    # hip
+    R_servo3 = _find_occ_rot(occs, "Servo_Mouser_Model:3")    # knee
+
+    def _relative_rpy(R_target):
+        if R_target is None or R_servo1 is None:
+            return (0.0, 0.0, 0.0)
+        return _rot_to_urdf_rpy(_mat_mul_3x3(R_target, _mat_transpose_3x3(R_servo1)))
+
+    hip_servo_rpy = _relative_rpy(R_servo2)
+    knee_servo_rpy = _relative_rpy(R_servo3)
+
+    # The servo mesh is the manifest entry whose origin_landmark is
+    # ServoMountPoint. Works for both body-rule and combined-rule
+    # entries (the latter only has `parts`, no `source_body`).
     servo_mesh_name = None
     for mesh_name, entry in (export.get("mesh_files") or {}).items():
-        if entry.get("source_body") == "ServoBase":
+        if entry.get("origin_landmark") == "ServoMountPoint":
             servo_mesh_name = mesh_name
             break
+
+    def _flip_x(v):
+        return [-v[0], v[1], v[2]] if v else None
+
+    def _rotate_z(v, angle_deg):
+        if not v:
+            return v
+        c = math.cos(math.radians(angle_deg))
+        s = math.sin(math.radians(angle_deg))
+        return [c*v[0] - s*v[1], s*v[0] + c*v[1], v[2]]
 
     # --- base_link ---
     urdf.comment("BASE LINK")
@@ -559,7 +718,11 @@ def generate(export: dict, cfg: dict, out_path: Path):
     #      below the chassis.
     base_extra_visuals = []
 
-    # Bracket meshes — one per leg, side- and rpy_z-aware.
+    # Bracket meshes + chassis-fixed shoulder servos — one of each per
+    # leg. Bracket visual at LegMountPointXX (in chassis frame), with
+    # rpy=(0,0,rpy_z_deg) for the back-of-pair flip. Shoulder servo at
+    # mount + Rz(rpy_z) · side_offset (the offset from mounting tab to
+    # the bracket's nested-servo ServoMountPoint, in world frame).
     for leg in cfg["legs"]:
         mount_mm = find_point_in_tree(occs, leg["mount_point"])
         if not mount_mm:
@@ -569,29 +732,36 @@ def generate(export: dict, cfg: dict, out_path: Path):
             )
             continue
         side = leg.get("side", "L")
+        rpy_z_deg = leg.get("rpy_z_deg", 0)
+        bracket_rpy = (0.0, 0.0, math.radians(rpy_z_deg))
+
         bracket_mesh = f"leg_mount_{side}.stl"
-        if bracket_mesh not in (export.get("mesh_files") or {}):
+        if bracket_mesh in (export.get("mesh_files") or {}):
+            base_extra_visuals.append(
+                (bracket_mesh, list(mount_mm), bracket_rpy)
+            )
+        else:
             print(
                 f"warning: {bracket_mesh} not in mesh_files; "
                 f"skipping bracket visual for {leg['id']}"
             )
-            continue
-        bracket_rpy = (0.0, 0.0, math.radians(leg.get("rpy_z_deg", 0)))
-        base_extra_visuals.append((bracket_mesh, list(mount_mm), bracket_rpy))
 
-    # Shoulder-servo visuals — uniform orientation per source FL servo.
-    source_shoulder_rot = _servo_rot_by_role(export, "shoulder")
-    if has_shoulder_servo and servo_mesh_name:
-        if source_shoulder_rot is not None:
-            r_shoulder = _mat_mul_3x3(source_shoulder_rot, servo_flip_rot)
-            shoulder_rpy = _rot_to_urdf_rpy(r_shoulder)
-        else:
-            shoulder_rpy = _rot_to_urdf_rpy(servo_flip_rot)
-        for leg in cfg["legs"]:
-            mount_mm = find_point_in_tree(occs, leg["mount_point"])
-            if not mount_mm:
-                continue
-            base_extra_visuals.append((servo_mesh_name, list(mount_mm), shoulder_rpy))
+        # Shoulder servo. Position = mount tab + rotated side-offset.
+        # The shared servo.stl is one physical part placed at each
+        # corner; we rotate it only by the back-of-pair flip
+        # (rpy = (0, 0, rpy_z_deg)). No extra "mirror" rotation — the
+        # CAD has the L-bracket and R-bracket nested servos at slightly
+        # different world rotations (R_R · R_L^T = Ry(π)), but applying
+        # that would flip the servo's Z-direction (shaft) which is
+        # geometrically wrong for an unflippable physical part.
+        ss_offset = (
+            shoulder_servo_L_offset if side == "L"
+            else shoulder_servo_R_offset
+        )
+        if servo_mesh_name and ss_offset is not None:
+            rotated = _rotate_z(ss_offset, rpy_z_deg)
+            ss_xyz = [mount_mm[i] + rotated[i] for i in range(3)]
+            base_extra_visuals.append((servo_mesh_name, ss_xyz, bracket_rpy))
 
     urdf.link(
         base_cfg["name"], base_cfg["mesh"], mesh_dir, mass, com, inertia,
@@ -626,9 +796,23 @@ def generate(export: dict, cfg: dict, out_path: Path):
     urdf.comment("\n       ".join(pts_comment))
 
     # --- 4 leg instances ---
-    # rpy_z_deg per leg sets the shoulder-joint's rotation around Z so the
-    # leg geometry faces outward at the right corner. FL/FR use 0°; BR/BL
-    # use 180° — the diagonal-pair flip per PIPELINE_SPEC §1.
+    # Per leg:
+    #   * Shoulder joint origin = LegMountPointXX_world + Rz(rpy_z) ·
+    #     side_axis_offset, where side_axis_offset is the world-frame
+    #     vector from the mounting tab to the rotation axis
+    #     (BodyToLink1Point) for that side's bracket.
+    #   * Hip/knee joint origins are leg-assembly-local deltas in the
+    #     normalized frame. For the R pair, they're X-mirrored from the
+    #     L values (the R bracket and Link1R are mirrored about the
+    #     leg-assembly XZ plane, which after R_la maps to a world-X
+    #     mirror in the normalized frame).
+    #   * Link2/Link3 are shared meshes; for the R pair we apply
+    #     mesh_rpy = (0, π, 0) so the leg geometry extends in +X
+    #     (mesh-local) instead of -X.
+    #   * Hip servo (servo₂) is rigid with link1 per Link1RigidGroup;
+    #     emitted as a standalone <visual> on link1 at the source-CAD
+    #     hip-servo offset (X-flipped + (0, π, 0) for R pair).
+    #   * Knee servo (servo₃) same idea on link3.
     for leg in cfg["legs"]:
         leg_id = leg["id"]
         rpy_z = leg.get("rpy_z_deg", 0)
@@ -639,10 +823,15 @@ def generate(export: dict, cfg: dict, out_path: Path):
         if not mount_mm:
             raise ValueError(f"Mount point not found in export: {mount_key}")
 
-        # Shoulder limits come from the per-leg yaml (PIPELINE_SPEC §4
-        # table). Falls back to CAD-sourced limits if not provided —
-        # CAD's Link1Revolute default is set to the FL pattern, so this
-        # is wrong for +X-pointing legs and the yaml override is required.
+        # Per-side axis offset (mounting-tab → rotation-axis), then
+        # rotate by rpy_z for the back-of-pair flip.
+        axis_offset = L_axis_offset if side == "L" else R_axis_offset
+        rotated_axis_offset = _rotate_z(axis_offset, rpy_z)
+        shoulder_origin_xyz = [
+            mount_mm[i] + rotated_axis_offset[i] for i in range(3)
+        ]
+
+        # Shoulder limits per-leg from yaml (PIPELINE_SPEC §4 table).
         sj = joint_defs[0]
         per_leg_limits = leg.get("shoulder_limits_deg")
         if per_leg_limits is not None:
@@ -655,13 +844,14 @@ def generate(export: dict, cfg: dict, out_path: Path):
             f"shoulder limits=[{sj_lower:+.1f}°, {sj_upper:+.1f}°])"
         )
 
-        # Shoulder joint: origin = mount point in base_link frame (world).
+        # Shoulder joint: origin = world position of the rotation axis
+        # for this corner (= mount + rotated side-offset).
         urdf.joint(
             name=f"{leg_id}_{sj['urdf_name']}_joint",
             jtype="revolute",
             parent=base_cfg["name"],
             child=f"{leg_id}_link1",
-            origin_mm=mount_mm,
+            origin_mm=shoulder_origin_xyz,
             axis=sj["axis_dir"],
             lower_deg=sj_lower,
             upper_deg=sj_upper,
@@ -670,35 +860,78 @@ def generate(export: dict, cfg: dict, out_path: Path):
             rpy_z_deg=rpy_z,
         )
 
-        # Hip + knee joints: LAL deltas become URDF joint origins directly.
+        # Hip + knee joints. For the R pair we apply two flips so that
+        # the SAME stance-angle value produces the SAME physical motion
+        # across all four legs (no per-side hacks needed in
+        # simulate_v2 / IK / gait controllers):
+        #
+        #   1. X-flip the joint origin (geometry: link2/link3 are on
+        #      the +X side of link1 for R pair, -X for L pair).
+        #   2. Negate the joint axis (sign convention: in L-pair
+        #      conventions, hip=-40° drops the leg; in R-pair the same
+        #      physical motion needs hip=+40° because the mesh and
+        #      offset flipped together. Negating the axis flips the
+        #      sign convention, so hip=-40° drops the R pair too).
+        #   3. Negate-and-swap the joint limits (same physical range,
+        #      expressed in the flipped sign convention).
         for i, jd in enumerate(joint_defs[1:], start=1):
+            offset = list(jd["offset_from_parent_mm"])
+            axis_dir = list(jd["axis_dir"])
+            lim_lo, lim_hi = jd["limits_deg"]
+            if side == "R":
+                offset[0] = -offset[0]
+                axis_dir = [-a for a in axis_dir]
+                # negate-and-swap: physical limit range stays the same
+                if lim_lo is not None and lim_hi is not None:
+                    lim_lo, lim_hi = -lim_hi, -lim_lo
             urdf.joint(
                 name=f"{leg_id}_{jd['urdf_name']}_joint",
                 jtype="revolute",
                 parent=f"{leg_id}_link{i}",
                 child=f"{leg_id}_link{i + 1}",
-                origin_mm=jd["offset_from_parent_mm"],
-                axis=jd["axis_dir"],
-                lower_deg=jd["limits_deg"][0],
-                upper_deg=jd["limits_deg"][1],
+                origin_mm=offset,
+                axis=axis_dir,
+                lower_deg=lim_lo,
+                upper_deg=lim_hi,
                 effort=effort,
                 velocity=vel,
             )
 
-        # Links for this leg. Each link's mesh is re-origined at export time
-        # so URDF visual/collision <origin>=(0,0,0). Inertial CoM gets
-        # shifted by the same origin_shift so it lands in the URDF link
-        # frame.
-        #
-        # No extra servo visuals on the links: the hip servo body is rigid
-        # with link1 per `Link1RigidGroup` and is baked into
-        # `leg_shoulder_{L,R}.stl` (combined rule); the knee servo body is
-        # rigid with link3 per `Link3RigidGroup` and is baked into
-        # `leg_lower.stl`. Adding free-standing servo visuals here would
-        # render the same geometry twice. The shoulder servo is chassis-
-        # fixed and is emitted as 4 visuals on base_link (above) — its
-        # body never travels with any link.
-        per_link_extra = {"link1": [], "link2": [], "link3": []}
+        # Standalone servo visuals on link1 (hip) and link3 (knee).
+        # The shared servo.stl is the same physical part on every leg —
+        # we don't apply a mirror approximation; only:
+        #   1. X-flip the mounting position for R pair so the servo
+        #      sits at the mirrored attach point.
+        #   2. Apply the per-role rpy (hip_servo_rpy / knee_servo_rpy)
+        #      so the mesh's shoulder-baked orientation rotates to the
+        #      hip/knee CAD orientation (shaft along +Y instead of +Z).
+        # Any per-leg orientation difference (back-of-pair Rz(π))
+        # cascades automatically from the parent link's frame.
+        link_extra_servos = {"link1": [], "link2": [], "link3": []}
+        if servo_mesh_name:
+            if hip_servo_offset_in_link1 is not None:
+                hip_xyz = list(hip_servo_offset_in_link1)
+                if side == "R":
+                    hip_xyz[0] = -hip_xyz[0]
+                link_extra_servos["link1"].append(
+                    (servo_mesh_name, hip_xyz, hip_servo_rpy)
+                )
+            if knee_servo_offset_in_link3 is not None:
+                knee_xyz = list(knee_servo_offset_in_link3)
+                if side == "R":
+                    knee_xyz[0] = -knee_xyz[0]
+                link_extra_servos["link3"].append(
+                    (servo_mesh_name, knee_xyz, knee_servo_rpy)
+                )
+
+        # Per-link visual rpy: link2 / link3 mesh is shared (L-flavor);
+        # rotate 180° about Y for R pair so leg extends in +X.
+        link_mesh_rpy = {
+            "link1": None,
+            "link2": (0.0, math.pi, 0.0) if side == "R" else None,
+            "link3": (0.0, math.pi, 0.0) if side == "R" else None,
+        }
+
         for link_key, link_cfg in leg_tmpl["links"].items():
             link_num = link_key.replace("link", "")
             link_name = f"{leg_id}_link{link_num}"
@@ -718,25 +951,13 @@ def generate(export: dict, cfg: dict, out_path: Path):
             urdf.link(
                 link_name, mesh_name, mesh_dir, mass, com, inertia,
                 origin_shift_mm=_mesh_shift(export, mesh_name),
-                extra_visuals=per_link_extra.get(link_key, []),
+                extra_visuals=link_extra_servos.get(link_key, []),
+                mesh_rpy=link_mesh_rpy.get(link_key),
             )
 
     urdf.save(out_path)
 
     _print_invariant_check(occs, cfg, joint_defs)
-
-
-def _world_origin_of(occs: list, name: str) -> list | None:
-    """Find an occurrence by name anywhere in the tree and return its root-
-    frame position. Tries the new `world_origin_mm` field first (accumulated
-    transform, present after re-running the updated exporter); falls back to
-    `parent_origin_mm` or the old same-named field, which for top-level
-    children of the root happens to coincide with world anyway.
-    """
-    for n in _iter_occ(occs):
-        if n.get("name") == name:
-            return n.get("world_origin_mm") or n.get("parent_origin_mm")
-    return None
 
 
 def _iter_occ(nodes: list):
@@ -746,51 +967,20 @@ def _iter_occ(nodes: list):
 
 
 def _print_invariant_check(occs: list, cfg: dict, joint_defs: list):
-    """Post-generation diagnostic: for each leg, show where its shoulder axis
-    lands in world frame (= its LegMountXX construction point) and where
-    the matching LegMountXX body sub-occurrence lives. The delta highlights
-    whether the visible "leg shoulder floats off tab" gap is geometry-sourced
-    in the CAD (large delta) or not.
+    """Post-generation diagnostic: print where each leg's shoulder axis
+    lands in world frame (= its LegMountPointXX construction point).
     """
-    print("\n=== Placement invariant check (world frame, mm) ===")
-    warned = False
+    print("\n=== Shoulder axis world positions (mm) ===")
     for leg in cfg["legs"]:
         leg_id = leg["id"]
         mount_key = leg["mount_point"]
         mount_pos = find_point_in_tree(occs, mount_key)
-        # Construction point "LegMountFR" → body occurrence "LegMountFR:1".
-        tab_name = f"{mount_key}:1"
-        tab_pos = _world_origin_of(occs, tab_name)
         if mount_pos is None:
             print(f"  {leg_id:>2}: missing mount point {mount_key!r}")
             continue
-        if tab_pos is None:
-            print(
-                f"  {leg_id:>2}: shoulder axis (world) = "
-                f"({mount_pos[0]:+7.2f}, {mount_pos[1]:+7.2f}, {mount_pos[2]:+7.2f}) "
-                f"   [no matching {tab_name} to compare]"
-            )
-            continue
-        delta = [mount_pos[i] - tab_pos[i] for i in range(3)]
-        mag = math.sqrt(sum(d * d for d in delta))
-        tag = "  FLAG" if mag > 5.0 else ""
         print(
-            f"  {leg_id:>2}: shoulder ({mount_pos[0]:+7.2f}, {mount_pos[1]:+7.2f}, "
-            f"{mount_pos[2]:+7.2f})   "
-            f"tab ({tab_pos[0]:+7.2f}, {tab_pos[1]:+7.2f}, {tab_pos[2]:+7.2f})   "
-            f"Δ=({delta[0]:+6.2f}, {delta[1]:+6.2f}, {delta[2]:+6.2f}) "
-            f"|Δ|={mag:5.2f}mm{tag}"
-        )
-        if mag > 5.0:
-            warned = True
-    if warned:
-        print(
-            "  Note: FLAG rows mean the LegMountXX construction point and the\n"
-            "  matching LegMountXX:1 body occurrence origin are >5mm apart.\n"
-            "  Small deltas are normal (a bracket body's origin sits at its\n"
-            "  centroid, not at the attachment point). A large delta is worth\n"
-            "  investigating — it's exactly the gap that appears as 'shoulder\n"
-            "  mesh floats off tab' in the render."
+            f"  {leg_id:>2}: ({mount_pos[0]:+7.2f}, {mount_pos[1]:+7.2f}, "
+            f"{mount_pos[2]:+7.2f})"
         )
 
 

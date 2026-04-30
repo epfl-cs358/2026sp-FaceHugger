@@ -52,7 +52,7 @@ URDF_V1 = os.path.join(HERE, "facehugger_v1.urdf")
 URDF_V2 = os.path.join(HERE, "facehugger.urdf")
 CONFIG_YAML = os.path.join(HERE, "facehugger_config.yaml")
 FUSION_JSON = os.path.join(HERE, "fusion_export.json")
-MESH_DIR = os.path.join(HERE, "meshes")
+MESH_DIR = os.path.join(HERE, "exported_meshes")
 
 TIMESTEP = 1.0 / 240.0
 

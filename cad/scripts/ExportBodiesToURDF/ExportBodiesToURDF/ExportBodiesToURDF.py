@@ -87,6 +87,17 @@ COLLECT_PHYSICS = True  # mass/CoM/inertia — slow, set False to skip
 CM_TO_MM = 10.0
 CM2_TO_M2 = 1e-4  # kg·cm² → kg·m²
 
+# Leg-assembly normalization: the FaceHuggerLegAssembly:1 occurrence is
+# placed in CAD with a non-identity world rotation (currently 90° about
+# Z). Mesh vertices and per-joint axis_dir / axis_origin live in that
+# rotated frame, which trips up the URDF generator. We capture that
+# rotation as `R_la` and apply it to leg-assembly-internal joint data
+# in collect_joints() so the JSON output is in a world-aligned frame.
+# Mesh STLs are produced via combined-rule which already bakes
+# world-frame vertices, so no extra mesh math is needed.
+LEG_ASSEMBLY_OCCURRENCE = "FaceHuggerLegAssembly:1"
+LEG_ASSEMBLY_COMPONENT = "FaceHuggerLegAssembly"
+
 # ---------------------------------------------------------------------------
 # Authoritative content whitelists. Visibility (light-bulb state) in Fusion
 # has NO effect on what gets captured — the export is fully driven by these
@@ -175,48 +186,69 @@ EXPORT_RULES = [
          "body": "LipoCage"},
     ]},
 
-    # Brackets: chassis-fixed, instanced 4× by URDF on base_link at the
-    # 4 LegMountPointXX construction points. Re-origin to LegMountFixedPoint
-    # so the STL's local origin lands on the body-side mating point.
-    {"type": "body", "match": "LegMountL",  "component": "MotorMount",
-     "stl": "leg_mount_L.stl", "origin_landmark": "LegMountFixedPoint"},
-    {"type": "body", "match": "LegMountR",  "component": "MotorMountR",
-     "stl": "leg_mount_R.stl", "origin_landmark": "LegMountFixedPoint"},
+    # Brackets. Combined-rule (single part each) so the output is in
+    # world-frame vertices — the leg-assembly's CAD-local rotation gets
+    # absorbed for free by `_transform_triangle`. `landmark_occurrence`
+    # scopes the LegMountFixedPoint lookup to the right bracket; without
+    # it the tree walk could pick the wrong one (both brackets share
+    # the same landmark name).
+    {"type": "combined", "stl": "leg_mount_L.stl",
+     "origin_landmark": "LegMountFixedPoint",
+     "landmark_occurrence": "FaceHuggerLegAssembly:1/MotorMount:1",
+     "parts": [
+         {"occurrence": "FaceHuggerLegAssembly:1/MotorMount:1",
+          "body": "LegMountL"},
+     ]},
+    {"type": "combined", "stl": "leg_mount_R.stl",
+     "origin_landmark": "LegMountFixedPoint",
+     "landmark_occurrence": "FaceHuggerLegAssembly:1/MotorMountR:1",
+     "parts": [
+         {"occurrence": "FaceHuggerLegAssembly:1/MotorMountR:1",
+          "body": "LegMountR"},
+     ]},
 
-    # Shoulder link L = Link1L body + hip servo body (rigid with link1).
-    # Shoulder link R = Link1R body only (no R-side servo modeled — known
-    # gap, the R-side leg renders without its hip servo until a R servo is
-    # added in Fusion).
+    # Shoulder links — L and R variants. NO servo bake-in: the URDF
+    # generator emits standalone servo visuals on each link from
+    # servo.stl, with per-leg position/rpy. This avoids needing a R-side
+    # servo in CAD and a per-rule mirror flag in the exporter.
     {"type": "combined", "stl": "leg_shoulder_L.stl",
      "origin_landmark": "BodyToLink1Point",
      "parts": [
          {"occurrence": "FaceHuggerLegAssembly:1/Link1L:1",
           "body": "Link1"},
-         {"occurrence": "FaceHuggerLegAssembly:1/Servo_Mouser_Model:2",
-          "body": "ServoBase"},
      ]},
-    {"type": "body", "match": "Link1R",  "component": "Link1R",
-     "stl": "leg_shoulder_R.stl", "origin_landmark": "BodyToLink1Point"},
+    {"type": "combined", "stl": "leg_shoulder_R.stl",
+     "origin_landmark": "BodyToLink1Point",
+     "parts": [
+         {"occurrence": "FaceHuggerLegAssembly:1/Link1R:1",
+          "body": "Link1R"},
+     ]},
 
-    # Upper leg: shared L+R (no mirror in CAD).
-    {"type": "body", "match": "Link2",
-     "stl": "leg_upper.stl",     "origin_landmark": "Link1ToLink2Point"},
-
-    # Lower leg = Link3L body + knee servo body (rigid with link3).
+    # Upper / lower leg: shared (no mirror in CAD). The URDF generator
+    # applies a (0, π, 0) visual rpy on the R-pair link2/link3 so the
+    # mesh's knee/foot end up on the correct side.
+    {"type": "combined", "stl": "leg_upper.stl",
+     "origin_landmark": "Link1ToLink2Point",
+     "parts": [
+         {"occurrence": "FaceHuggerLegAssembly:1/Link2L:1",
+          "body": "Link2"},
+     ]},
     {"type": "combined", "stl": "leg_lower.stl",
      "origin_landmark": "Link2ToLink3Point",
      "parts": [
          {"occurrence": "FaceHuggerLegAssembly:1/Link3L:1",
           "body": "Link3"},
-         {"occurrence": "FaceHuggerLegAssembly:1/Servo_Mouser_Model:3",
-          "body": "ServoBase"},
      ]},
 
-    # Generic servo mesh — used for the 4 chassis-fixed shoulder servos
-    # only (1 visual on base_link per leg). Re-origined to ServoMountPoint
-    # so the URDF can place each instance at its bracket's servo seat.
-    {"type": "body", "match": "ServoBase",
-     "stl": "servo.stl", "origin_landmark": "ServoMountPoint"},
+    # Single shared servo mesh — instanced 12× by the URDF generator
+    # (4 shoulder + 4 hip + 4 knee). Re-origined to ServoMountPoint so
+    # the URDF can place each instance at its servo seat.
+    {"type": "combined", "stl": "servo.stl",
+     "origin_landmark": "ServoMountPoint",
+     "parts": [
+         {"occurrence": "FaceHuggerLegAssembly:1/Servo_Mouser_Model:1",
+          "body": "ServoBase"},
+     ]},
 ]
 
 
@@ -642,6 +674,30 @@ def _find_landmark_world_pos_mm(occurrences_json, landmark_name):
     return walk(occurrences_json)
 
 
+def _find_landmark_world_pos_at_occurrence(occurrences_json, occ_path, landmark_name):
+    """Like `_find_landmark_world_pos_mm`, but scope the lookup to a specific
+    occurrence path (e.g. 'FaceHuggerLegAssembly:1/MotorMount:1'). Use this
+    when a landmark name appears in multiple occurrences (e.g. both
+    MotorMount:1 and MotorMountR:1 carry a `LegMountFixedPoint`) and you
+    need the one belonging to a specific bracket. Returns None if the
+    occurrence or landmark isn't found.
+    """
+    parts = occ_path.split("/")
+    nodes = occurrences_json
+    node = None
+    for part in parts:
+        node = next((n for n in (nodes or []) if n.get("name") == part), None)
+        if node is None:
+            return None
+        nodes = node.get("children", [])
+    if node is None:
+        return None
+    for p in node.get("points") or []:
+        if p.get("name") == landmark_name:
+            return p.get("pos_world_mm")
+    return None
+
+
 def _export_one(mgr, entity, filename):
     """Common STL export call. `entity` is an Occurrence or BRepBody."""
     opts = mgr.createSTLExportOptions(entity, filename)
@@ -813,13 +869,27 @@ def export_stls(design, root, occurrences_json):
                 # convention as the body-rule re-origin (where the shift is
                 # expressed in the body's local frame). Downstream URDF can
                 # still use <visual><origin xyz="0 0 0"/>.
+                #
+                # `landmark_occurrence` (optional) scopes the landmark
+                # lookup to a specific occurrence path. Needed when the
+                # landmark name appears in multiple occurrences and the
+                # tree-wide walk would pick the wrong one — e.g.
+                # LegMountFixedPoint exists in both MotorMount:1 and
+                # MotorMountR:1.
                 landmark = rule.get("origin_landmark")
+                landmark_occ = rule.get("landmark_occurrence")
                 shift_mm = [0.0, 0.0, 0.0]
                 if landmark:
-                    pos = _find_landmark_world_pos_mm(occurrences_json, landmark)
+                    if landmark_occ:
+                        pos = _find_landmark_world_pos_at_occurrence(
+                            occurrences_json, landmark_occ, landmark
+                        )
+                    else:
+                        pos = _find_landmark_world_pos_mm(occurrences_json, landmark)
                     if pos is None:
+                        scope = f" at {landmark_occ}" if landmark_occ else ""
                         failed.append(
-                            f"{stl_name}: origin_landmark {landmark} "
+                            f"{stl_name}: origin_landmark {landmark}{scope} "
                             f"not found in occurrence tree"
                         )
                     else:
@@ -898,7 +968,39 @@ def build_mesh_files_manifest(exported, preserved_role_assignment=None):
 # ---------------------------------------------------------------------------
 
 
-def collect_joints(design):
+def _find_leg_assembly_R_la(occurrences_json):
+    """Find FaceHuggerLegAssembly:1 in the JSON occurrence tree and return
+    its 3x3 world rotation matrix as a row-major list of lists. Returns
+    None if not found or if the transform is missing.
+    """
+    for occ in occurrences_json or []:
+        if occ.get("name") == LEG_ASSEMBLY_OCCURRENCE:
+            wtf = occ.get("world_transform_rm_cm")
+            if not wtf:
+                return None
+            return [
+                [wtf[0][0], wtf[0][1], wtf[0][2]],
+                [wtf[1][0], wtf[1][1], wtf[1][2]],
+                [wtf[2][0], wtf[2][1], wtf[2][2]],
+            ]
+    return None
+
+
+def _apply_R_3x3(R, v):
+    """3x3 rotation applied to a 3-vector. R is row-major list-of-lists,
+    v is a list/tuple of 3 floats. Returns a list of 3 floats. Tolerates
+    None for either argument by returning the input unchanged.
+    """
+    if R is None or v is None:
+        return v
+    return [
+        R[0][0]*v[0] + R[0][1]*v[1] + R[0][2]*v[2],
+        R[1][0]*v[0] + R[1][1]*v[1] + R[1][2]*v[2],
+        R[2][0]*v[0] + R[2][1]*v[1] + R[2][2]*v[2],
+    ]
+
+
+def collect_joints(design, R_la=None):
     """Walk every joint in the design (component-owned) and return a list of
     dicts describing each one. Schema per joint:
 
@@ -956,7 +1058,7 @@ def collect_joints(design):
             for joint in joints:
                 if not _whitelisted_joint_name(joint):
                     continue
-                entry = _extract_joint(joint, component, kind="joint")
+                entry = _extract_joint(joint, component, kind="joint", R_la=R_la)
                 if entry is not None:
                     joints_data.append(entry)
 
@@ -972,7 +1074,7 @@ def collect_joints(design):
             for joint in as_built:
                 if not _whitelisted_joint_name(joint):
                     continue
-                entry = _extract_joint(joint, component, kind="asbuilt")
+                entry = _extract_joint(joint, component, kind="asbuilt", R_la=R_la)
                 if entry is not None:
                     joints_data.append(entry)
 
@@ -988,10 +1090,14 @@ def _whitelisted_joint_name(joint):
         return False
 
 
-def _extract_joint(joint, owner_component, kind="joint"):
+def _extract_joint(joint, owner_component, kind="joint", R_la=None):
     """Pull data for one Fusion Joint or AsBuiltJoint into the JSON-friendly
     schema. `kind` distinguishes the two collections (Component.joints vs
-    Component.asBuiltJoints). Returns None if the joint is malformed."""
+    Component.asBuiltJoints). When `R_la` is provided AND this joint is
+    owned by FaceHuggerLegAssembly, axis_dir_local_unit and
+    axis_origin_local_mm are pre-rotated by R_la so downstream consumers
+    see them in a world-aligned (normalized) frame. Returns None if the
+    joint is malformed."""
     try:
         name = joint.name
     except Exception:
@@ -1050,6 +1156,20 @@ def _extract_joint(joint, owner_component, kind="joint"):
     except Exception:
         pass
 
+    # Normalization: rotate axis_dir and axis_origin by R_la so the JSON
+    # values are in the world-aligned ("normalized") frame, when this
+    # joint is owned by the leg-assembly. The mesh STLs are already
+    # produced in world frame by the combined-rule export, so this
+    # rotation is the only piece needed to make the URDF generator's
+    # job a straight read.
+    normalized = False
+    if R_la is not None and owner_name == LEG_ASSEMBLY_COMPONENT:
+        if axis_dir is not None:
+            axis_dir = _apply_R_3x3(R_la, axis_dir)
+        if origin_local_mm is not None:
+            origin_local_mm = _apply_R_3x3(R_la, origin_local_mm)
+        normalized = True
+
     return {
         "name": name,
         "owner_component": owner_name,
@@ -1064,6 +1184,7 @@ def _extract_joint(joint, owner_component, kind="joint"):
         "parent_body": parent_body,
         "child_occurrence_path": child_path,
         "child_body": child_body,
+        "normalized_by_R_la": normalized,
     }
 
 
@@ -1609,10 +1730,22 @@ def run(_context: str):
         exported, failed = export_stls(design, root, occurrences_json)
         mesh_files = build_mesh_files_manifest(exported, preserved_roles)
 
+        # Leg-assembly normalization rotation. The leg-assembly is placed
+        # in CAD with a non-identity world rotation; we rotate joint
+        # axis_dir / axis_origin by this matrix so the JSON values are in
+        # a world-aligned frame. Fail loudly if missing — downstream URDF
+        # generation depends on it.
+        R_la = _find_leg_assembly_R_la(occurrences_json)
+        if R_la is None:
+            raise RuntimeError(
+                f"Could not find {LEG_ASSEMBLY_OCCURRENCE} world transform; "
+                "leg-assembly normalization cannot proceed."
+            )
+
         # Capture Fusion joints (axis, origin, limits, parent/child). The
         # URDF generator prefers this over yaml when present; downstream
         # readers ignore the array if they don't know about it.
-        joints = collect_joints(design)
+        joints = collect_joints(design, R_la=R_la)
 
         # Bind to typed locals so the TXT iteration below doesn't fight the
         # type checker over `export[...]` heterogeneity.
@@ -1626,6 +1759,12 @@ def run(_context: str):
             "construction_points_whitelist": list(CONSTRUCTION_POINTS),
             "construction_axes_whitelist": list(CONSTRUCTION_AXES),
             "joints_whitelist": list(JOINTS),
+            "leg_assembly_normalization": {
+                "applied": True,
+                "occurrence": LEG_ASSEMBLY_OCCURRENCE,
+                "owner_component": LEG_ASSEMBLY_COMPONENT,
+                "rotation_3x3_row_major": R_la,
+            },
             "joints": joints,
             "root_axes": root_axes,
             "root_points": root_points,
@@ -1648,6 +1787,17 @@ def run(_context: str):
             f"Caxis whitelist : {', '.join(CONSTRUCTION_AXES)}",
             f"Joint whitelist : {', '.join(JOINTS)}",
             "=" * 60,
+            "",
+            "[Leg-assembly normalization]",
+            f"  Owner: {LEG_ASSEMBLY_COMPONENT}",
+            "  R_la (3x3, row-major):",
+            f"    [{R_la[0][0]:+.4f}, {R_la[0][1]:+.4f}, {R_la[0][2]:+.4f}]",
+            f"    [{R_la[1][0]:+.4f}, {R_la[1][1]:+.4f}, {R_la[1][2]:+.4f}]",
+            f"    [{R_la[2][0]:+.4f}, {R_la[2][1]:+.4f}, {R_la[2][2]:+.4f}]",
+            "  Applied to: joint axis_dir_local_unit and "
+            "axis_origin_local_mm (leg-assembly-internal joints only).",
+            "  Mesh STLs are produced by combined-rule, which already bakes "
+            "world-frame vertices.",
             "",
         ]
         if root_axes or root_points:

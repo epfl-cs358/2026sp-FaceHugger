@@ -7,6 +7,15 @@ Caxis whitelist : BodyToLink1Axis, Link1ToLink2Axis, Link2ToLink3Axis
 Joint whitelist : Link1Revolute, Link2Revolute, Link3Revolute
 ============================================================
 
+[Leg-assembly normalization]
+  Owner: FaceHuggerLegAssembly
+  R_la (3x3, row-major):
+    [+0.0000, -1.0000, +0.0000]
+    [+1.0000, +0.0000, -0.0000]
+    [+0.0000, +0.0000, +1.0000]
+  Applied to: joint axis_dir_local_unit and axis_origin_local_mm (leg-assembly-internal joints only).
+  Mesh STLs are produced by combined-rule, which already bakes world-frame vertices.
+
 FlexibleSkeleton:1 [xref]
   parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (0.0, 0.0, 0.0)
   cpoint: LegMountPointFL | local pos_mm: (-41.5, 49.0, 26.0) | world pos_mm: (-41.5, 49.0, 26.0)
@@ -1692,7 +1701,7 @@ FaceHuggerLegAssembly:1 [xref]
   Link1L:1
     parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-57.901, 34.251, -4.8)
     body: Link1 | bbox_center_mm: (4.195, 20.56, 20.433)
-    mass: 0.144017 kg | com local: (9.973, 33.773, 23.955) | com world: (-91.674, 44.224, 19.155)
+    mass: 0.144017 kg | com local: (9.973, 33.774, 23.955) | com world: (-91.674, 44.224, 19.155)
   Link2L:1
     parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-57.901, 34.251, -4.8)
     body: Link2 | bbox_center_mm: (14.12, 98.27, 10.246)
@@ -1744,17 +1753,17 @@ FaceHuggerLegAssembly:1 [xref]
 
 === Joints ===
 Link3Revolute (revolute) [asbuilt]
-  axis: (principal axis)  dir=(+1.000, +0.000, +0.000)  origin: (implicit origin)  local_mm=(+34.57, +145.62, +10.25)
+  axis: (principal axis)  dir=(+0.000, +1.000, +0.000)  origin: (implicit origin)  local_mm=(-145.62, +34.57, +10.25)
   limits: rest=+0.0deg  [-90.0deg, +90.0deg]
   parent: Link2L:1 (Link2)
   child:  Link3L:1 (Link3)
 Link2Revolute (revolute) [asbuilt]
-  axis: (principal axis)  dir=(+1.000, +0.000, +0.000)  origin: (implicit origin)  local_mm=(+34.56, +50.92, +10.25)
+  axis: (principal axis)  dir=(+0.000, +1.000, +0.000)  origin: (implicit origin)  local_mm=(-50.92, +34.57, +10.25)
   limits: rest=+0.0deg  [-135.0deg, +45.0deg]
   parent: Link1L:1 (Link1)
   child:  Link2L:1 (Link2)
 Link1Revolute (revolute) [asbuilt]
-  axis: (principal axis)  dir=(+0.000, +0.000, +1.000)  origin: (implicit origin)  local_mm=(+11.97, -0.00, -4.20)
+  axis: (principal axis)  dir=(+0.000, -0.000, +1.000)  origin: (implicit origin)  local_mm=(+0.00, +11.97, -4.20)
   limits: rest=+0.0deg  [-105.0deg, +45.0deg]
   parent: MotorMount:1 (LegMountL)
   child:  Link1L:1 (Link1)

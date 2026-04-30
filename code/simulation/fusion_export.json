@@ -25,31 +25,39 @@
       ]
     },
     "leg_mount_L.stl": {
-      "source_type": "body",
-      "source_body": "LegMountL",
-      "source_component": "MotorMount",
+      "source_type": "combined",
       "source_occurrences": [
-        "FaceHuggerLegAssembly:1/MotorMount:1"
+        "FlexibleSkeleton:1"
+      ],
+      "parts": [
+        {
+          "occurrence": "FaceHuggerLegAssembly:1/MotorMount:1",
+          "body": "LegMountL"
+        }
       ],
       "origin_landmark": "LegMountFixedPoint",
       "origin_shift_mm": [
-        0.0,
-        -13.0,
-        16.0
+        -41.5,
+        49.0,
+        26.0
       ]
     },
     "leg_mount_R.stl": {
-      "source_type": "body",
-      "source_body": "LegMountR",
-      "source_component": "MotorMountR",
+      "source_type": "combined",
       "source_occurrences": [
-        "FaceHuggerLegAssembly:1/MotorMountR:1"
+        "FlexibleSkeleton:1"
+      ],
+      "parts": [
+        {
+          "occurrence": "FaceHuggerLegAssembly:1/MotorMountR:1",
+          "body": "LegMountR"
+        }
       ],
       "origin_landmark": "LegMountFixedPoint",
       "origin_shift_mm": [
-        0.0,
-        -13.0,
-        -16.0
+        -74.302,
+        49.0,
+        26.0
       ]
     },
     "leg_shoulder_L.stl": {
@@ -61,10 +69,6 @@
         {
           "occurrence": "FaceHuggerLegAssembly:1/Link1L:1",
           "body": "Link1"
-        },
-        {
-          "occurrence": "FaceHuggerLegAssembly:1/Servo_Mouser_Model:2",
-          "body": "ServoBase"
         }
       ],
       "origin_landmark": "BodyToLink1Point",
@@ -75,31 +79,39 @@
       ]
     },
     "leg_shoulder_R.stl": {
-      "source_type": "body",
-      "source_body": "Link1R",
-      "source_component": "Link1R",
+      "source_type": "combined",
       "source_occurrences": [
-        "FaceHuggerLegAssembly:1/Link1R:1"
+        "FlexibleSkeleton:1"
+      ],
+      "parts": [
+        {
+          "occurrence": "FaceHuggerLegAssembly:1/Link1R:1",
+          "body": "Link1R"
+        }
       ],
       "origin_landmark": "BodyToLink1Point",
       "origin_shift_mm": [
-        11.97,
-        -0.0,
-        -4.2
+        -57.901,
+        46.222,
+        -9.0
       ]
     },
     "leg_upper.stl": {
-      "source_type": "body",
-      "source_body": "Link2",
-      "source_component": null,
+      "source_type": "combined",
       "source_occurrences": [
-        "FaceHuggerLegAssembly:1/Link2L:1"
+        "FlexibleSkeleton:1"
+      ],
+      "parts": [
+        {
+          "occurrence": "FaceHuggerLegAssembly:1/Link2L:1",
+          "body": "Link2"
+        }
       ],
       "origin_landmark": "Link1ToLink2Point",
       "origin_shift_mm": [
-        34.565,
-        50.92,
-        10.246
+        -108.821,
+        68.816,
+        5.446
       ]
     },
     "leg_lower.stl": {
@@ -111,10 +123,6 @@
         {
           "occurrence": "FaceHuggerLegAssembly:1/Link3L:1",
           "body": "Link3"
-        },
-        {
-          "occurrence": "FaceHuggerLegAssembly:1/Servo_Mouser_Model:3",
-          "body": "ServoBase"
         }
       ],
       "origin_landmark": "Link2ToLink3Point",
@@ -125,21 +133,21 @@
       ]
     },
     "servo.stl": {
-      "source_type": "body",
-      "source_body": "ServoBase",
-      "source_component": null,
+      "source_type": "combined",
       "source_occurrences": [
-        "FaceHuggerLegAssembly:1/Servo_Mouser_Model:1",
-        "FaceHuggerLegAssembly:1/Servo_Mouser_Model:2",
-        "FaceHuggerLegAssembly:1/Servo_Mouser_Model:3",
-        "FaceHuggerLegAssembly:1/MotorMount:1/Servo_Mouser_Model:1",
-        "FaceHuggerLegAssembly:1/MotorMountR:1/Servo_Mouser_Model(Mirror):1"
+        "FlexibleSkeleton:1"
+      ],
+      "parts": [
+        {
+          "occurrence": "FaceHuggerLegAssembly:1/Servo_Mouser_Model:1",
+          "body": "ServoBase"
+        }
       ],
       "origin_landmark": "ServoMountPoint",
       "origin_shift_mm": [
-        10.12,
-        0.0,
-        41.844
+        -57.901,
+        46.222,
+        37.044
       ]
     },
     "_servo_role_assignment": {
@@ -170,6 +178,28 @@
     "Link2Revolute",
     "Link3Revolute"
   ],
+  "leg_assembly_normalization": {
+    "applied": true,
+    "occurrence": "FaceHuggerLegAssembly:1",
+    "owner_component": "FaceHuggerLegAssembly",
+    "rotation_3x3_row_major": [
+      [
+        1.1796119636642283e-16,
+        -1.0000000000000038,
+        2.774184853852289e-17
+      ],
+      [
+        1.000000000000004,
+        1.2490009027033684e-16,
+        -2.9924197261652035e-17
+      ],
+      [
+        2.428612866511427e-17,
+        1.387778780782082e-17,
+        1.0000000000000002
+      ]
+    ]
+  },
   "joints": [
     {
       "name": "Link3Revolute",
@@ -177,14 +207,14 @@
       "kind": "asbuilt",
       "type": "revolute",
       "axis_dir_local_unit": [
-        1.0,
-        0.0,
-        0.0
+        1.1796119636642283e-16,
+        1.000000000000004,
+        2.428612866511427e-17
       ],
       "axis_origin_local_mm": [
-        34.57,
-        145.62,
-        10.246
+        -145.62000000000054,
+        34.57000000000016,
+        10.246000000000006
       ],
       "axis_construction_name": null,
       "origin_construction_name": null,
@@ -198,7 +228,8 @@
       "parent_occurrence_path": "Link2L:1",
       "parent_body": "Link2",
       "child_occurrence_path": "Link3L:1",
-      "child_body": "Link3"
+      "child_body": "Link3",
+      "normalized_by_R_la": true
     },
     {
       "name": "Link2Revolute",
@@ -206,14 +237,14 @@
       "kind": "asbuilt",
       "type": "revolute",
       "axis_dir_local_unit": [
-        1.0,
-        0.0,
-        0.0
+        1.1796119636642283e-16,
+        1.000000000000004,
+        2.428612866511427e-17
       ],
       "axis_origin_local_mm": [
-        34.565,
-        50.92,
-        10.246
+        -50.920000000000186,
+        34.56500000000014,
+        10.246000000000004
       ],
       "axis_construction_name": null,
       "origin_construction_name": null,
@@ -227,7 +258,8 @@
       "parent_occurrence_path": "Link1L:1",
       "parent_body": "Link1",
       "child_occurrence_path": "Link2L:1",
-      "child_body": "Link2"
+      "child_body": "Link2",
+      "normalized_by_R_la": true
     },
     {
       "name": "Link1Revolute",
@@ -235,14 +267,14 @@
       "kind": "asbuilt",
       "type": "revolute",
       "axis_dir_local_unit": [
-        0.0,
-        0.0,
-        1.0
+        2.774184853852289e-17,
+        -2.9924197261652035e-17,
+        1.0000000000000002
       ],
       "axis_origin_local_mm": [
-        11.97,
-        -0.0,
-        -4.2
+        1.2954797566442852e-15,
+        11.970000000000049,
+        -4.200000000000001
       ],
       "axis_construction_name": null,
       "origin_construction_name": null,
@@ -256,7 +288,8 @@
       "parent_occurrence_path": "MotorMount:1",
       "parent_body": "LegMountL",
       "child_occurrence_path": "Link1L:1",
-      "child_body": "Link1"
+      "child_body": "Link1",
+      "normalized_by_R_la": true
     }
   ],
   "root_axes": [],
@@ -19500,7 +19533,7 @@
             "mass_kg": 0.144017,
             "com_mm": [
               9.973,
-              33.773,
+              33.774,
               23.955
             ],
             "com_world_mm": [
@@ -20354,7 +20387,7 @@
         "inertia_kg_m2": {
           "ixx": 0.007560999,
           "iyy": 0.04195701,
-          "izz": 0.047213223,
+          "izz": 0.047213224,
           "ixy": 0.013296152,
           "iyz": -0.001703855,
           "ixz": 0.003099703

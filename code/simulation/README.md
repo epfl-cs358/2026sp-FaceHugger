@@ -68,6 +68,24 @@ Writes `facehugger.urdf`. The generator:
 - emits per-leg shoulder joint limits as `[neutral ± 90°]` from `facehugger_config.yaml`'s `shoulder_neutral_deg`;
 - emits 12 servo `<visual>` elements (4 shoulder on `base_link`, 1 hip on each `link2`, 1 knee on each `link3`).
 
+## Step 3.5 — View the URDF (optional)
+
+```bash
+cd code/simulation
+python view_urdf.py
+```
+
+Loads the URDF in standing pose and lets you orbit around it.
+
+| Action | How |
+| --- | --- |
+| Orbit | left-drag |
+| Pan | ctrl + left-drag |
+| Zoom | scroll |
+| Quit | close window or Ctrl+C |
+
+The body is fixed and gravity is off — nothing moves on its own.
+
 ## Step 4 — Simulate
 
 ```bash
