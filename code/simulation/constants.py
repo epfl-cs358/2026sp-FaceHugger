@@ -1,0 +1,22 @@
+"""Shared constants for the FaceHugger simulation (no behavior)."""
+
+import os
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+GENERATED_DIR = os.path.join(HERE, "generated")
+URDF_PATH = os.path.join(GENERATED_DIR, "facehugger.urdf")
+CONFIG_YAML = os.path.join(HERE, "facehugger_config.yaml")
+FUSION_JSON = os.path.join(GENERATED_DIR, "fusion_export.json")
+MESH_DIR = os.path.join(GENERATED_DIR, "exported_meshes")
+
+TIMESTEP = 1.0 / 240.0
+
+# Hip/knee stance is shared across legs (R_L1 = I because yaml rpy_z_deg = 90
+# for all legs). Shoulder stance is per-leg and lives in the yaml as each leg's
+# `shoulder_neutral_deg` — the middle of its quadrant's ±90° range. Standing
+# pose = each leg at its neutral shoulder, so the legs splay into their four
+# corners naturally.
+STANCE_DEG = {
+    "hip":  -40.0,
+    "knee": -60.0,
+}

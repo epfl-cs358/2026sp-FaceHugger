@@ -150,4 +150,4 @@ fixed in world space — the leg geometry flips in place around that point.
 | `facehugger_config.yaml` | Update `mount_point` keys to `LegMountPointXX`; add `side: L/R` per leg; set `rpy_z_deg` per table above; set per-leg shoulder limits per table above |
 | `ExportBodiesToURDF.py`  | Fix `MESH_EXPORTS` for moved bracket; add L/R STL rules; add `collect_joints()`                                                                       |
 | `generate_urdf.py`       | Per-side mesh selection; per-leg limits from table; consume CAD joints when present                                                                   |
-| `simulate_v2.py`         | `shoulder_neutral_deg = 0°` for all legs; per-leg limits from config                                                                                  |
+| `simulate.py`         | `shoulder_neutral_deg = 0°` for all legs; per-leg limits from config                                                                                  |

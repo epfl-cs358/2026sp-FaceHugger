@@ -88,11 +88,11 @@ Full rationale + math in [ALIGNMENT_FIX_PLAN.md](ALIGNMENT_FIX_PLAN.md). User-fa
 
 ---
 
-## Next: Phase J — `simulate_v2.py` FK rewrite (the only thing blocking stand/walk)
+## Next: Phase J — `simulate.py` FK rewrite (the only thing blocking stand/walk)
 
-The URDF is geometrically correct, but `simulate_v2.py`'s analytic FK/IK is calibrated against the OLD URDF (hip/knee axes were `+X`, single sign convention, etc.). With the new URDF:
+The URDF is geometrically correct, but `simulate.py`'s analytic FK/IK is calibrated against the OLD URDF (hip/knee axes were `+X`, single sign convention, etc.). With the new URDF:
 
-1. **Drop `R_L1` per-leg rotation layer** (lines ~538–565 in simulate_v2). Shoulder rpy now encodes per-leg orientation directly; we don't need the per-leg matrix machinery.
+1. **Drop `R_L1` per-leg rotation layer** (lines ~538–565 in simulate). Shoulder rpy now encodes per-leg orientation directly; we don't need the per-leg matrix machinery.
 2. **Switch hip/knee axis from old `+X` (leg-assembly local) to normalized `+Y`** in the analytic FK code.
 3. **Sign convention is uniform across all 4 legs** (Phase H gave us this). FK/IK collapses to one function — no per-side branching.
 4. **Foot tip is now side-dependent**: link2/link3 have `mesh_rpy = (0, π, 0)` for R pair, so the mesh-local foot tip `(x, y, z)` becomes `(-x, y, -z)` in URDF link3 frame for R pair. IK target needs to respect this.
@@ -102,7 +102,7 @@ After Phase J: stance pose lands all 4 feet on the ground, IK resolves without `
 
 ## Then: Phase C — Blender visualizer
 
-**Goal**: regenerate `facehugger.urdf` from the new CAD outputs; the URDF must match what `simulate_v2.py` and the Blender visualizer expect.
+**Goal**: regenerate `facehugger.urdf` from the new CAD outputs; the URDF must match what `simulate.py` and the Blender visualizer expect.
 
 Files to edit:
 - [generate_urdf.py](../generate_urdf.py)
@@ -245,7 +245,7 @@ Update [README.md](../README.md) troubleshooting: **"wrong joint limits in URDF"
 
 ## Order of execution from here
 
-1. **Phase J** — `simulate_v2.py` FK rewrite. Unblocks stance + walk + IK on the new URDF.
+1. **Phase J** — `simulate.py` FK rewrite. Unblocks stance + walk + IK on the new URDF.
 2. **Phase C** — Blender visualizer (independent; can land any time).
 3. **Phase D** — CLI orchestrator (independent; can land any time).
 4. **Transition T** — Drop yaml joint config (now safe — Phase B already wires CAD-joint consumption).
@@ -263,7 +263,7 @@ Update [README.md](../README.md) troubleshooting: **"wrong joint limits in URDF"
 | `fusion_export.txt` | Human-readable mirror of JSON, with `=== Joints ===` block. |
 | [facehugger_config.yaml](../facehugger_config.yaml) | Per-leg placement config (id, mount, side, rpy_z, limits, neutral). |
 | [generate_urdf.py](../generate_urdf.py) | Reads JSON + yaml → emits `facehugger.urdf`. |
-| [simulate_v2.py](../simulate_v2.py) | Loads URDF in PyBullet. |
+| [simulate.py](../simulate.py) | Loads URDF in PyBullet. |
 | [../../animation/scripts/visualize_fusion_export.py](../../../animation/scripts/visualize_fusion_export.py) | Blender debug scene. |
 | [../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py](../../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) | The Fusion add-in. |
 

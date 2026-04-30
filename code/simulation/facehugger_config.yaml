@@ -69,7 +69,7 @@ leg_template:
 #     (FR, BR) vs -X (FL, BL): per §4, +X legs get [-45°, +105°] and -X
 #     legs get [-105°, +45°].
 #   - shoulder_neutral_deg = 0° for all legs — zero is "leg pointing
-#     along the chassis ±X axis" per §4. simulate_v2 derives standing
+#     along the chassis ±X axis" per §4. simulate derives standing
 #     pose from this.
 # ---------------------------------------------------------------------------
 legs:

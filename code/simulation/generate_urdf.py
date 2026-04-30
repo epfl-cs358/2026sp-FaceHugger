@@ -771,7 +771,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
     )
 
     # Emit a machine-parseable comment block with the raw leg-assembly-local
-    # Points. Downstream tools (simulate_v2) read this to avoid re-opening
+    # Points. Downstream tools (simulate) read this to avoid re-opening
     # fusion_export.json — the URDF remains the single source of truth for
     # the leg chain geometry. After re-origin, leg_lower.stl's max +Y is
     # still the foot tip but now relative to Link2ToLink3Point (the new
@@ -864,7 +864,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
         # Hip + knee joints. For the R pair we apply two flips so that
         # the SAME stance-angle value produces the SAME physical motion
         # across all four legs (no per-side hacks needed in
-        # simulate_v2 / IK / gait controllers):
+        # simulate / IK / gait controllers):
         #
         #   1. X-flip the joint origin (geometry: link2/link3 are on
         #      the +X side of link1 for R pair, -X for L pair).

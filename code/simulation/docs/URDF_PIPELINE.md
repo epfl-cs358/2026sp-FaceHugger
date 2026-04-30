@@ -334,7 +334,7 @@ mesh.
 │                12 standalone servos).                             │
 └───────────────┬───────────────────────────────────────────────────┘
                 │
-                ├─→ PyBullet (simulate_v2.py, view_urdf.py)
+                ├─→ PyBullet (simulate.py, view_urdf.py)
                 ├─→ Blender (visualize_fusion_export.py)
                 └─→ ROS, Gazebo, etc.
 ```
@@ -352,7 +352,7 @@ mesh.
 | `code/simulation/facehugger_config.yaml`                                       | Per-leg placement: `mount_point`, `side` (L/R), `rpy_z_deg`, shoulder limits override. |
 | `code/simulation/generate_urdf.py`                                             | Reads JSON + yaml, writes URDF. All per-leg placement math lives here.                 |
 | `code/simulation/generated/facehugger.urdf`                                    | Generated robot description.                                                           |
-| `code/simulation/simulate_v2.py`                                               | Full PyBullet sim with stance/IK/gait. Heavyweight — see Phase J in ALIGNMENT_FIX_PLAN |
+| `code/simulation/simulate.py`                                               | Full PyBullet sim with stance/IK/gait. Heavyweight — see Phase J in ALIGNMENT_FIX_PLAN |
 | `code/simulation/view_urdf.py`                                                 | Lightweight viewer. `--orbit`, `--joints`, `--stance`. Use this to eyeball the robot.  |
 | `code/simulation/docs/PIPELINE_SPEC.md`                                        | What the pipeline should do (decisions, conventions).                                  |
 | `code/simulation/docs/ASSEMBLY_HIERARCHY.md`                                   | What the CAD looks like (occurrences, bodies, points, axes).                           |

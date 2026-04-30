@@ -343,7 +343,7 @@ After Phase E + G:
    - Link2/Link3 visual rpy = `(0, π, 0)` for FR/BL, identity for FL/BR.
 
 3. **PyBullet stand**:
-   - `python simulate_v2.py` — robot stands with feet on the
+   - `python simulate.py` — robot stands with feet on the
      ground, body upright, legs splaying outward in the four
      quadrants.
    - IK should resolve (no `[FAIL]` markers).
@@ -371,7 +371,7 @@ After G lands, R-pair joint angles for hip/knee require opposite sign
 from L-pair to produce the same physical motion (because Link1R is
 mirrored, the hip/knee origins are X-flipped, and the shared joint
 axis = +Y in normalized frame). This forces every downstream consumer
-(simulate_v2, IK, gait controllers) to do per-side sign flips.
+(simulate, IK, gait controllers) to do per-side sign flips.
 
 **Fix B**: in `generate_urdf.py`, when emitting hip + knee joints for
 the R pair (FR, BL), negate the joint axis (`(0, 1, 0)` → `(0, -1, 0)`)
@@ -402,9 +402,9 @@ the servo's Z direction (its shaft) — geometrically wrong for a
 real-world unflippable servo body. Visual fidelity is sacrificed to
 preserve the "single physical part" semantics.
 
-### Phase J — `simulate_v2.py` FK rewrite (later)
+### Phase J — `simulate.py` FK rewrite (later)
 
-Once the URDF is geometrically correct, `simulate_v2.py`'s FK/IK
+Once the URDF is geometrically correct, `simulate.py`'s FK/IK
 needs updating to consume the new conventions. Specifically:
 
 1. **Drop the `R_L1` per-leg rotation layer** (lines ~538–565). With

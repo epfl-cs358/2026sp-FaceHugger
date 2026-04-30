@@ -14,7 +14,7 @@ fusion_export.json    (CAD tree + mesh_files manifest)
 fusion_export.txt     (human-readable tree)
 exported_meshes/*.stl (5 files: chassis + 3 leg links + servo)
    │
-   ├── generate_urdf.py ──► facehugger.urdf ──► simulate_v2.py  (PyBullet)
+   ├── generate_urdf.py ──► facehugger.urdf ──► simulate.py  (PyBullet)
    │
    └── animation/scripts/visualize_fusion_export.py    (Blender 3.3 LTS)
 ```
@@ -81,10 +81,10 @@ The body is fixed and gravity is off — nothing moves on its own.
 ```bash
 cd code/simulation
 
-python simulate_v2.py              # GUI, standing pose (default)
-python simulate_v2.py --walk       # walk gait
-python simulate_v2.py --trot       # trot gait
-python simulate_v2.py --headless   # no GUI — CI smoke-check
+python simulate.py              # GUI, standing pose (default)
+python simulate.py --walk       # walk gait
+python simulate.py --trot       # trot gait
+python simulate.py --headless   # no GUI — CI smoke-check
 ```
 
 The simulator reads geometry from the URDF + `facehugger_config.yaml`; no
@@ -107,7 +107,7 @@ Angles are in degrees in the yaml; `generate_urdf.py` converts to the URDF's rad
 |---|---|
 | Chassis STL has electronics/PCBs baked in | `EXPORT_RULES` `combined.parts` list in [../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py](../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) is out of date — add or remove the right occurrences. |
 | Servos misaligned in Blender / PyBullet | Either the CAD's `ServoMountPoint` is not on the shaft axis, or the URDF's per-role rpy is off — inspect in Blender. |
-| `simulate_v2.py --walk` spawns through floor | Settling / body-height issue — see `--settle SECONDS` flag and the gait-aware `body_height` computation. |
+| `simulate.py --walk` spawns through floor | Settling / body-height issue — see `--settle SECONDS` flag and the gait-aware `body_height` computation. |
 | `URDF is missing LEG ASSEMBLY METADATA` | Regenerate the URDF; the metadata comment block is emitted by `generate_urdf.py`. |
 
 ## File map
@@ -116,7 +116,7 @@ Angles are in degrees in the yaml; `generate_urdf.py` converts to the URDF's rad
 code/simulation/
   facehugger_config.yaml        semantic config (hand-edited)
   generate_urdf.py              URDF generator
-  simulate_v2.py                PyBullet simulator
+  simulate.py                   PyBullet simulator (constants/helpers/kinematics/gaits)
   view_urdf.py                  PyBullet URDF viewer (no physics)
   README.md                     this file
   docs/                         pipeline docs (PIPELINE_SPEC, ASSEMBLY_HIERARCHY, …)
