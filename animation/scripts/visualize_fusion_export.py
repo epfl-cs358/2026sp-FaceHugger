@@ -407,32 +407,24 @@ def visit_root(export, ctx):
 # ---------------------------------------------------------------------------
 
 
-def _legmount_rot_3x3(export, occ_name):
-    """Return the top-left 3x3 of world_transform_rm_cm for LegMountXX:1,
-    or None if not found. Walked via the existing iter_occ helper."""
-    for occ, _ in iter_occ(export.get("occurrences", [])):
-        if occ.get("name") == occ_name:
-            rm = occ.get("world_transform_rm_cm")
-            if rm:
-                return [[rm[i][0], rm[i][1], rm[i][2]] for i in range(3)]
-            return None
-    return None
+# Per-corner rotation: diagonal-pair scheme (see docs/PIPELINE_SPEC.md §1).
+# FL/FR use 0°; BR/BL use 180° about Z. Same table the URDF generator uses
+# (yaml legs[].rpy_z_deg). With the new CAD the bracket occurrences moved
+# inside the leg assembly, so reading per-corner rotations from the export
+# tree (the old _legmount_rot_3x3 path) no longer works — this hardcoded
+# table replaces it.
+_PER_CORNER_RPY_Z_DEG = {"FL": 0.0, "FR": 0.0, "BR": 180.0, "BL": 180.0}
 
 
-def _mat3_mul(a, b):
-    return [[sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
-
-
-def _mat3_transpose(a):
-    return [[a[j][i] for j in range(3)] for i in range(3)]
-
-
-def _mat3_to_blender_4x4(r):
+def _rz_4x4(deg):
+    import math
+    a = math.radians(deg)
+    c, s = math.cos(a), math.sin(a)
     return Matrix((
-        (r[0][0], r[0][1], r[0][2], 0.0),
-        (r[1][0], r[1][1], r[1][2], 0.0),
-        (r[2][0], r[2][1], r[2][2], 0.0),
-        (0.0,     0.0,     0.0,     1.0),
+        (c, -s, 0.0, 0.0),
+        (s,  c, 0.0, 0.0),
+        (0.0, 0.0, 1.0, 0.0),
+        (0.0, 0.0, 0.0, 1.0),
     ))
 
 
@@ -462,17 +454,23 @@ def instance_four_legs(export, collections, ctx):
         bracket rotation. This matches the URDF's chassis-uniform shoulder
         treatment.
 
-    The leg itself (link1/link2/link3 + hip servo + knee servo — five
-    objects per corner) does get a per-corner rotation derived from each
-    `LegMountXX:1` occurrence's `world_transform_rm_cm`:
+    Each corner's leg objects get a per-corner Z-rotation from the
+    diagonal-pair scheme (yaml's `rpy_z_deg`):
 
-        R_rel_N = R_LegMountN @ R_LegMountFL⁻¹
+        FL/FR: Rz(0°)        BR/BL: Rz(180°)
 
-    which resolves to FR=Ry(180°), BR=Rz(180°), BL=Rx(180°) for the
-    current CAD. Each corner's five leg objects are parented to a
-    `{corner}_root` Empty placed at `LegMountXX` (= `BodyToLink1Point`)
-    with that rotation baked in — rotating the Empty pivots the whole
-    leg around the shoulder axis.
+    Same table the URDF generator uses. Each corner's leg objects are
+    parented to a `{corner}_root` Empty placed at `LegMountPointXX` with
+    that rotation baked in — rotating the Empty pivots the whole leg
+    around the shoulder axis.
+
+    KNOWN LIMITATION: this routine duplicates the L-source leg meshes for
+    every corner, so the FR / BL legs (which should use the R-side
+    `leg_shoulder_R.stl` / `leg_mount_R.stl` / mirrored link2/link3) will
+    look L-handed in Blender even though their position/rotation are
+    correct. Use `view_urdf.py` for a kinematically-faithful 4-leg view;
+    this script remains useful for debugging the export tree (chassis,
+    construction points, axis origins, source leg).
 
     Collection tree:
       FusionExport/
@@ -483,7 +481,9 @@ def instance_four_legs(export, collections, ctx):
           BL/  {BL_root, duplicated 5 leg objects}           (R_rel = Rx(180°))
         Shoulders/  {4 shoulder servos, all with FL orientation}
     """
-    # 1. Pull the 4 LegMountXX points from FlexibleSkeleton:1's construction points.
+    # 1. Pull the 4 LegMountPointXX construction points from FlexibleSkeleton:1.
+    # New CAD names them LegMountPointFL/FR/BR/BL (with the "Point" infix);
+    # the older LegMountXX names are gone.
     mounts = {}
     fs = next(
         (o for o in export.get("occurrences", [])
@@ -493,16 +493,17 @@ def instance_four_legs(export, collections, ctx):
     if fs is None:
         print("[instance_legs] FlexibleSkeleton:1 not in export; skipping")
         return
+    PREFIX = "LegMountPoint"
     for pt in fs.get("points", []):
         name = pt.get("name", "")
-        if name.startswith("LegMount") and len(name) > len("LegMount"):
-            corner = name[len("LegMount"):].upper()  # FR/FL/BR/BL
+        if name.startswith(PREFIX) and len(name) > len(PREFIX):
+            corner = name[len(PREFIX):].upper()      # FR/FL/BR/BL
             pos = pt.get("pos_world_mm") or pt.get("pos_mm")
             if pos:
                 mounts[corner] = pos
 
     if not all(c in mounts for c in ("FR", "FL", "BR", "BL")):
-        print(f"[instance_legs] need LegMountFR/FL/BR/BL, found {sorted(mounts)}; skipping")
+        print(f"[instance_legs] need {PREFIX}FR/FL/BR/BL, found {sorted(mounts)}; skipping")
         return
 
     # 2. Create Legs root + 4 per-corner sub-collections.
@@ -547,25 +548,15 @@ def instance_four_legs(export, collections, ctx):
         meshes_coll.objects.unlink(obj)
         corner_colls["FL"].objects.link(obj)
 
-    # 4. Derive per-corner rotations from the LegMountXX:1 occurrences'
-    # world_transform_rm_cm. rot_by_corner[N] = R_N @ R_FL⁻¹ (orthonormal
-    # → transpose for the inverse).
-    r_fl = _legmount_rot_3x3(export, "LegMountFL:1")
-    if r_fl is None:
-        print("[instance_legs] LegMountFL:1 rotation missing from export; skipping")
-        return
-    r_fl_inv = _mat3_transpose(r_fl)
+    # 4. Per-corner rotations from the diagonal-pair scheme. The old code
+    # derived these from the LegMountXX:1 occurrences' world_transform_rm_cm,
+    # but those occurrences moved into the leg assembly in the new CAD and
+    # the lookup no longer resolves. The diagonal-pair table from yaml is
+    # what the URDF generator uses anyway, so it's the source of truth.
+    rot_by_corner = {c: _rz_4x4(_PER_CORNER_RPY_Z_DEG[c])
+                     for c in ("FL", "FR", "BR", "BL")}
 
-    rot_by_corner = {"FL": Matrix.Identity(4)}
-    for corner in ("FR", "BR", "BL"):
-        r_n = _legmount_rot_3x3(export, f"LegMount{corner}:1")
-        if r_n is None:
-            print(f"[instance_legs] LegMount{corner}:1 rotation missing; using identity")
-            rot_by_corner[corner] = Matrix.Identity(4)
-            continue
-        rot_by_corner[corner] = _mat3_to_blender_4x4(_mat3_mul(r_n, r_fl_inv))
-
-    # 5. Create a root Empty per corner at LegMountXX, carrying the per-corner
+    # 5. Create a root Empty per corner at LegMountPointXX, carrying the per-corner
     # rotation. FL's root is placed but the source leg already lives in FL's
     # sub-collection at its source poses, so we parent the children without
     # moving them (matrix_parent_inverse).
@@ -636,26 +627,13 @@ def instance_four_legs(export, collections, ctx):
             shoulders_coll.objects.link(dup)
             n_shoulders += 1
 
-    # Summarize the derived relative rotations for debugging.
-    def _classify(mat4):
-        """Short human tag for a 4x4 whose top-left 3x3 is near identity
-        or ±180° around a principal axis. Falls back to showing the matrix."""
-        r = [[round(mat4[i][j], 3) for j in range(3)] for i in range(3)]
-        tags = {
-            ((1,0,0),(0,1,0),(0,0,1)): "I",
-            ((1,0,0),(0,-1,0),(0,0,-1)): "Rx(180°)",
-            ((-1,0,0),(0,1,0),(0,0,-1)): "Ry(180°)",
-            ((-1,0,0),(0,-1,0),(0,0,1)): "Rz(180°)",
-        }
-        key = tuple(tuple(int(v) if abs(v - round(v)) < 1e-3 else v for v in row) for row in r)
-        return tags.get(key, str(r))
-
-    rels = ", ".join(f"{c}={_classify(rot_by_corner[c])}" for c in ("FR", "BR", "BL"))
+    rels = ", ".join(f"{c}=Rz({_PER_CORNER_RPY_Z_DEG[c]:+.0f}°)"
+                     for c in ("FR", "BR", "BL"))
     print(f"[instance_legs] Legs/FL has {len(leg_source_objs)} source leg objects; "
           f"duplicated to {n_dup_per_leg} objects each in FR/BR/BL; "
           f"Shoulders/ has {n_shoulders} shoulder servos (chassis-fixed)")
-    print(f"[instance_legs] relative rotations — {rels}; "
-          f"each leg parented to a {{FL,FR,BR,BL}}_root Empty at LegMountXX")
+    print(f"[instance_legs] per-corner rotation — {rels}; "
+          f"each leg parented to a {{FL,FR,BR,BL}}_root Empty at LegMountPointXX")
 
 
 # ---------------------------------------------------------------------------
