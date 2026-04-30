@@ -354,10 +354,10 @@ mesh.
 | `code/simulation/facehugger.urdf`                                              | Generated robot description.                                                           |
 | `code/simulation/simulate_v2.py`                                               | Full PyBullet sim with stance/IK/gait. Heavyweight — see Phase J in ALIGNMENT_FIX_PLAN |
 | `code/simulation/view_urdf.py`                                                 | Lightweight viewer. `--orbit`, `--joints`, `--stance`. Use this to eyeball the robot.  |
-| `code/simulation/PIPELINE_SPEC.md`                                             | What the pipeline should do (decisions, conventions).                                  |
-| `code/simulation/ASSEMBLY_HIERARCHY.md`                                        | What the CAD looks like (occurrences, bodies, points, axes).                           |
-| `code/simulation/ALIGNMENT_FIX_PLAN.md`                                        | The plan we executed to land all this. Has Phase J (FK rewrite) for later.             |
-| `code/simulation/URDF_PIPELINE.md`                                             | This document.                                                                         |
+| `code/simulation/docs/PIPELINE_SPEC.md`                                        | What the pipeline should do (decisions, conventions).                                  |
+| `code/simulation/docs/ASSEMBLY_HIERARCHY.md`                                   | What the CAD looks like (occurrences, bodies, points, axes).                           |
+| `code/simulation/docs/ALIGNMENT_FIX_PLAN.md`                                   | The plan we executed to land all this. Has Phase J (FK rewrite) for later.             |
+| `code/simulation/docs/URDF_PIPELINE.md`                                        | This document.                                                                         |
 
 ---
 

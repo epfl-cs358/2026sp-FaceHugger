@@ -6,7 +6,7 @@
 #   - per-leg shoulder pose (zero, limits, rpy)
 #   - chassis-fixed servo properties (effort, velocity, visual flip)
 #
-# Authoritative spec: PIPELINE_SPEC.md and ASSEMBLY_HIERARCHY.md.
+# Authoritative spec: docs/PIPELINE_SPEC.md and docs/ASSEMBLY_HIERARCHY.md.
 # All angles in degrees — generate_urdf.py converts to radians for URDF
 # output. All positions come from fusion_export.json (no hardcoded coords
 # here).

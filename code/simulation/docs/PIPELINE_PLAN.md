@@ -21,11 +21,11 @@ Branch: `feat/urdf-pipeline`. Recent commits (newest last):
 
 ### Phase 0 — DONE ✓
 
-Verification logic was folded into the Fusion add-in itself (`_verify_against_assembly_hierarchy()` in [ExportBodiesToURDF.py](../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py)) — the post-export message box prints PASS/FAIL rows against ASSEMBLY_HIERARCHY, so the standalone phase0_verify.py is gone.
+Verification logic was folded into the Fusion add-in itself (`_verify_against_assembly_hierarchy()` in [ExportBodiesToURDF.py](../../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py)) — the post-export message box prints PASS/FAIL rows against ASSEMBLY_HIERARCHY, so the standalone phase0_verify.py is gone.
 
 ### Phase A — DONE ✓ (verified by user re-export)
 
-[cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py](../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) rebuilt:
+[cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py](../../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) rebuilt:
 
 - **Visibility filtering removed entirely.** Toggle CAD light bulbs however you want — what gets captured is driven by four explicit lists: `EXPORT_RULES` (bodies → STLs), `CONSTRUCTION_POINTS` (named cpoints), `CONSTRUCTION_AXES` (named caxes), `JOINTS` (named joints). The JSON records each entity's `visible` flag as informational metadata only.
 - **The export is the raw material; filtering happens at consumption time.** The `occurrences` tree in `fusion_export.json` is the *complete* design tree (every PCB, OLED, capacitor, etc.) — that's by design, so downstream tools (URDF generator, Blender visualizer) can resolve any occurrence path they need to look up world transforms. The four whitelists above shape **specific slices** of the JSON output: STLs (`EXPORT_RULES`), per-occurrence `points[]` / `axes[]` arrays, and the top-level `joints[]` array. The tree itself is unfiltered; consumers pick out the bits they care about.
@@ -71,7 +71,7 @@ knee:     FaceHuggerLegAssembly:1/Servo_Mouser_Model:3
 
 ### Phase B — DONE ✓ (commit `1e49d08`)
 
-[generate_urdf.py](generate_urdf.py) consumes the CAD-sourced joints from `fusion_export.json` (`axis_dir_local_unit`, `axis_origin_local_mm`, `limits_rad`); emits 4 bracket visuals on `base_link`, per-side L/R link1 meshes, per-leg shoulder limits from yaml. yaml's `leg_template.joints` reduced to `cad_name → urdf_name + parent/child` mapping only.
+[generate_urdf.py](../generate_urdf.py) consumes the CAD-sourced joints from `fusion_export.json` (`axis_dir_local_unit`, `axis_origin_local_mm`, `limits_rad`); emits 4 bracket visuals on `base_link`, per-side L/R link1 meshes, per-leg shoulder limits from yaml. yaml's `leg_template.joints` reduced to `cad_name → urdf_name + parent/child` mapping only.
 
 ### Phase E + G + H + I — Alignment fix DONE ✓ (commit `44b2036`)
 
@@ -105,8 +105,8 @@ After Phase J: stance pose lands all 4 feet on the ground, IK resolves without `
 **Goal**: regenerate `facehugger.urdf` from the new CAD outputs; the URDF must match what `simulate_v2.py` and the Blender visualizer expect.
 
 Files to edit:
-- [generate_urdf.py](generate_urdf.py)
-- [facehugger_config.yaml](facehugger_config.yaml)
+- [generate_urdf.py](../generate_urdf.py)
+- [facehugger_config.yaml](../facehugger_config.yaml)
 
 ### B1 — `leg_mount_{L,R}.stl` visual on `base_link`
 
@@ -168,7 +168,7 @@ Per-leg shoulder limits in the URDF match PIPELINE_SPEC §4 table.
 
 ## Then: Phase C — Blender visualizer
 
-File: [../../animation/scripts/visualize_fusion_export.py](../../animation/scripts/visualize_fusion_export.py).
+File: [../../animation/scripts/visualize_fusion_export.py](../../../animation/scripts/visualize_fusion_export.py).
 
 ### C1 — Mount-point name lookup
 
@@ -214,7 +214,7 @@ New file: `code/simulation/facehugger.py` (~150 lines). One argparse-based entry
 
 Implementation: `subprocess.run(["python", str(SCRIPT_PATH), *args], cwd="code/simulation/")`. Blender bin: `BLENDER_BIN` env → fallback `/Applications/Blender-3.3-LTS.app/Contents/MacOS/Blender` on darwin → clear error otherwise.
 
-Update [README.md](README.md) so the four-step sequence becomes `facehugger.py` invocations.
+Update [README.md](../README.md) so the four-step sequence becomes `facehugger.py` invocations.
 
 ---
 
@@ -239,7 +239,7 @@ servo: { mass_kg: 0.060, effort_nm: 2.94, velocity_rad_s: 5.0,
          visual_flip_rpy_deg: [180, 0, 0] }
 ```
 
-Update [README.md](README.md) troubleshooting: **"wrong joint limits in URDF" → edit the joint in Fusion, re-export** (not yaml).
+Update [README.md](../README.md) troubleshooting: **"wrong joint limits in URDF" → edit the joint in Fusion, re-export** (not yaml).
 
 ---
 
@@ -261,10 +261,10 @@ Update [README.md](README.md) troubleshooting: **"wrong joint limits in URDF" �
 | [ASSEMBLY_HIERARCHY.md](ASSEMBLY_HIERARCHY.md) | Authoritative CAD tree (component / body / construction-point names). |
 | `fusion_export.json` | Generated by the Fusion add-in. Source of truth for downstream. |
 | `fusion_export.txt` | Human-readable mirror of JSON, with `=== Joints ===` block. |
-| [facehugger_config.yaml](facehugger_config.yaml) | Per-leg placement config (id, mount, side, rpy_z, limits, neutral). |
-| [generate_urdf.py](generate_urdf.py) | Reads JSON + yaml → emits `facehugger.urdf`. |
-| [simulate_v2.py](simulate_v2.py) | Loads URDF in PyBullet. |
-| [../../animation/scripts/visualize_fusion_export.py](../../animation/scripts/visualize_fusion_export.py) | Blender debug scene. |
-| [../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py](../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) | The Fusion add-in. |
+| [facehugger_config.yaml](../facehugger_config.yaml) | Per-leg placement config (id, mount, side, rpy_z, limits, neutral). |
+| [generate_urdf.py](../generate_urdf.py) | Reads JSON + yaml → emits `facehugger.urdf`. |
+| [simulate_v2.py](../simulate_v2.py) | Loads URDF in PyBullet. |
+| [../../animation/scripts/visualize_fusion_export.py](../../../animation/scripts/visualize_fusion_export.py) | Blender debug scene. |
+| [../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py](../../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) | The Fusion add-in. |
 
 User reruns the Fusion add-in via *Shift+S → Scripts and Add-Ins → ExportBodiesToURDF → Run* whenever the CAD changes meaningfully.

@@ -48,7 +48,7 @@ Outputs to code/simulation/ (relative to this script's repo location):
                          world frame around the same landmarks.
 
 The post-export message box prints a checklist (✓/✗) verifying the
-assembly matches code/simulation/ASSEMBLY_HIERARCHY.md, so a CAD edit
+assembly matches code/simulation/docs/ASSEMBLY_HIERARCHY.md, so a CAD edit
 that breaks an expected name surfaces immediately.
 
 Re-exports preserve user edits to mesh_files._servo_role_assignment.
@@ -168,7 +168,7 @@ JOINTS = [
 # `mesh_files` manifest section of fusion_export.json to know what was
 # produced and how to place each mesh — they don't hardcode these rules.
 #
-# Per ASSEMBLY_HIERARCHY.md and PIPELINE_SPEC.md: shoulder servo
+# Per docs/ASSEMBLY_HIERARCHY.md and docs/PIPELINE_SPEC.md: shoulder servo
 # (Servo_Mouser_Model:1) is chassis-fixed (bolted to the bracket); hip
 # servo (Servo_Mouser_Model:2) is rigid with link1 via `Link1RigidGroup`;
 # knee servo (Servo_Mouser_Model:3) is rigid with link3 via
