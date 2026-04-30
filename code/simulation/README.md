@@ -85,10 +85,9 @@ python simulate_v2.py              # GUI, standing pose (default)
 python simulate_v2.py --walk       # walk gait
 python simulate_v2.py --trot       # trot gait
 python simulate_v2.py --headless   # no GUI — CI smoke-check
-python simulate_v2.py --urdf v1    # legacy handwritten URDF (facehugger_v1.urdf)
 ```
 
-The v2 simulator reads geometry from the URDF + `facehugger_config.yaml`; no
+The simulator reads geometry from the URDF + `facehugger_config.yaml`; no
 hardcoded leg lengths or stances in Python.
 
 ## Config
@@ -121,8 +120,7 @@ code/simulation/
   exported_meshes/*.stl         generated STLs (do not edit)
   generate_urdf.py              URDF generator
   facehugger.urdf               generated URDF (do not edit)
-  facehugger_v1.urdf            legacy handwritten URDF (reference)
-  simulate_v2.py                PyBullet simulator (v2; default)
+  simulate_v2.py                PyBullet simulator
   README.md                     this file
 
 ../../animation/scripts/

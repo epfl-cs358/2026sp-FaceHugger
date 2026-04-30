@@ -1,18 +1,9 @@
 """
-FaceHugger Quadruped Simulation - v2 (full-introspection variant)
+FaceHugger Quadruped Simulation
 
-Supports both URDFs so they can be compared side-by-side:
-  --urdf v1   facehugger_v1.urdf   legacy hand-written (rl/rr legs, hip/knee
-                                   pitch around Y, leg extends along -X from
-                                   shoulder in its local frame)
-  --urdf v2   facehugger.urdf      Fusion-exported (fr/fl/br/bl legs, hip/knee
-                                   pitch around X, leg extends along +Y from
-                                   shoulder in its local frame)
+Modes: default stand, --walk, --trot.
 
-Modes: default stand, --walk, --trot. Wall-flip is intentionally omitted until
-standing + walking are validated visually on v2.
-
-Geometry sourcing rules for v2 (no duplication of constants in Python):
+Geometry sourcing (no duplication of constants in Python):
   - Mount XYZ, joint origins, joint axes, joint limits, link inertials
       -> parsed from facehugger.urdf via xml.etree (not pybullet.getJointInfo,
          because pybullet silently shifts link frames to COM which skews the
@@ -25,13 +16,6 @@ Geometry sourcing rules for v2 (no duplication of constants in Python):
          taken as the centroid of vertices at max +Y of leg_lower.stl. This
          falls back from a missing "FootTipPoint" construction point in
          fusion_export.json -- if one is added later, read it preferentially.
-
-Only STANCE joint angles are kept as hardcoded semantic constants:
-  HIP_ANGLE = 40 deg, KNEE_ANGLE = -60 deg, SHOULDER_ANGLE = 0.
-  Signs were correct for v1 (hip pitches around +Y). For v2 (hip pitches
-  around +X, leg along +Y) the same numbers may put the legs in the wrong
-  half-space; validate in GUI and flip signs if needed. Tracked in comment
-  below near STANCE_DEG.
 """
 
 import argparse
@@ -48,41 +32,34 @@ import pybullet_data
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-URDF_V1 = os.path.join(HERE, "facehugger_v1.urdf")
-URDF_V2 = os.path.join(HERE, "facehugger.urdf")
+URDF_PATH = os.path.join(HERE, "facehugger.urdf")
 CONFIG_YAML = os.path.join(HERE, "facehugger_config.yaml")
 FUSION_JSON = os.path.join(HERE, "fusion_export.json")
 MESH_DIR = os.path.join(HERE, "exported_meshes")
 
 TIMESTEP = 1.0 / 240.0
 
-# Semantic stance. The v2 chain has hip/knee pitch around +X (was +Y in v1),
-# which inverts the sign of "fold leg down". Verified empirically: with v1 signs
-# (+40 / -60) the v2 FK lifts feet above the body. Flipping hip gets feet below.
-# The numbers themselves match the proposal torque widget; only signs differ.
-STANCE_DEG_V1 = {"shoulder": 0.0, "hip":  40.0, "knee": -60.0}
-
-# V2: hip/knee stance is shared across legs (R_L1 = I because yaml rpy_z_deg = 90
+# Hip/knee stance is shared across legs (R_L1 = I because yaml rpy_z_deg = 90
 # for all legs). Shoulder stance is per-leg and lives in the yaml as each leg's
 # `shoulder_neutral_deg` — the middle of its quadrant's ±90° range. Standing
 # pose = each leg at its neutral shoulder, so the legs splay into their four
 # corners naturally.
-STANCE_DEG_V2 = {
+STANCE_DEG = {
     "hip":  -40.0,
     "knee": -60.0,
 }
 
 
-def _stance_v2_for(leg_id, legs_cfg):
+def _stance_for(leg_id, legs_cfg):
     """Resolve the per-leg standing stance {shoulder/hip/knee} dict.
     Shoulder comes from the yaml's `shoulder_neutral_deg`; hip/knee are
-    shared across all legs via STANCE_DEG_V2."""
+    shared across all legs via STANCE_DEG."""
     entry = next(l for l in legs_cfg if l["id"] == leg_id)
     shoulder_deg = entry.get("shoulder_neutral_deg", 0.0)
     return {
         "shoulder": shoulder_deg,
-        "hip":      STANCE_DEG_V2["hip"],
-        "knee":     STANCE_DEG_V2["knee"],
+        "hip":      STANCE_DEG["hip"],
+        "knee":     STANCE_DEG["knee"],
     }
 
 
@@ -103,7 +80,6 @@ class LegGeom:
 
 @dataclass
 class RobotConfig:
-    version: str                           # "v1" or "v2"
     urdf_path: str
     legs: Dict[str, LegGeom]               # insertion order == leg iteration order
     joint_limits: Dict[str, Tuple[float, float]]  # shoulder/hip/knee -> (lo, hi) rad
@@ -389,139 +365,27 @@ def ik_v2(cfg, foot_body, leg_id):
 
 
 # --------------------------------------------------------------------------- #
-# v1 forward / inverse kinematics (legacy chain)
-# --------------------------------------------------------------------------- #
-# Verbatim math from simulate.py, preserved so v1 can run unchanged as a
-# reference. Old chain: shoulder yaws around Z, then a scalar L1 arm along -X
-# (in shoulder frame), hip + knee pitch around Y, foot drops along -Z.
-
-_V1_L1 = 0.080
-_V1_L2 = 0.075
-_V1_L3 = 0.077
-
-_V1_LEG_INFO = {
-    "fl": {"mount": (-0.080,  0.105, 0.025), "yaw_offset": 0.0},
-    "fr": {"mount": ( 0.080,  0.105, 0.025), "yaw_offset": math.pi},
-    "rl": {"mount": (-0.080, -0.105, 0.025), "yaw_offset": 0.0},
-    "rr": {"mount": ( 0.080, -0.105, 0.025), "yaw_offset": math.pi},
-}
-
-_V1_JOINT_LIMITS = {
-    "shoulder": (-2.356, 2.356),
-    "hip":      (-1.5708, 1.5708),
-    "knee":     (-2.356, 0.5),
-}
-
-
-def ik_v1(cfg, foot_body, leg_id):
-    info = _V1_LEG_INFO[leg_id]
-    sx, sy, sz = info["mount"]
-    yaw_offset = info["yaw_offset"]
-
-    dx = foot_body[0] - sx
-    dy = foot_body[1] - sy
-    dz = foot_body[2] - sz
-    r_xy = math.hypot(dx, dy)
-    theta_s = _wrap_pi(math.atan2(-dy, -dx) - yaw_offset)
-
-    a = r_xy - _V1_L1
-    b = -dz
-    c = math.hypot(a, b)
-    c_max = _V1_L2 + _V1_L3 - 1e-4
-    if c > c_max:
-        scale = c_max / max(c, 1e-9)
-        a *= scale; b *= scale; c = c_max
-
-    cos_alpha = (_V1_L2 ** 2 + _V1_L3 ** 2 - c * c) / (2.0 * _V1_L2 * _V1_L3)
-    theta_k = math.acos(_clamp(cos_alpha, -1.0, 1.0)) - math.pi
-
-    cos_beta = (_V1_L2 ** 2 + c * c - _V1_L3 ** 2) / (2.0 * _V1_L2 * c + 1e-12)
-    theta_h = math.atan2(a, b) + math.acos(_clamp(cos_beta, -1.0, 1.0))
-
-    return (_clamp(theta_s, *cfg.joint_limits["shoulder"]),
-            _clamp(theta_h, *cfg.joint_limits["hip"]),
-            _clamp(theta_k, *cfg.joint_limits["knee"]))
-
-
-def fk_v1(cfg, leg_id, theta_s, theta_h, theta_k):
-    info = _V1_LEG_INFO[leg_id]
-    sx, sy, sz = info["mount"]
-    yaw_offset = info["yaw_offset"]
-    # Old chain: in shoulder frame after Rz(yaw+s), the leg extends along -X
-    # by L1, then 2-link in X-Z plane pitching around Y.
-    dy_leg = -(_V1_L2 * math.sin(theta_h) + _V1_L3 * math.sin(theta_h + theta_k))
-    dx_leg = -_V1_L1 + dy_leg  # confusingly, "dy_leg" here is the sagittal reach
-    # Planar foot in shoulder frame: (foot_x_local, 0, foot_z_local)
-    foot_x_local = -(_V1_L1 + (_V1_L2 * math.sin(theta_h) + _V1_L3 * math.sin(theta_h + theta_k)))
-    foot_z_local = -(_V1_L2 * math.cos(theta_h) + _V1_L3 * math.cos(theta_h + theta_k))
-    # Rotate into body frame by yaw + theta_s, translate by mount.
-    q = yaw_offset + theta_s
-    cq, sq = math.cos(q), math.sin(q)
-    fx = cq * foot_x_local
-    fy = sq * foot_x_local
-    return (sx + fx, sy + fy, sz + foot_z_local)
-
-
-# --------------------------------------------------------------------------- #
-# Config builders
+# Config builder
 # --------------------------------------------------------------------------- #
 
-def build_config_v1():
-    # v1 URDF has symmetric kinematics across all legs, so all 4 share the
-    # same stance dict.
-    stance_one = {k: math.radians(v) for k, v in STANCE_DEG_V1.items()}
-    stance_per_leg = {leg_id: stance_one for leg_id in ("fl", "fr", "rl", "rr")}
-    cfg = RobotConfig(
-        version="v1",
-        urdf_path=URDF_V1,
-        legs={},  # v1 IK does not use LegGeom, kept empty intentionally
-        joint_limits=_V1_JOINT_LIMITS,
-        servo_force=1.47,
-        servo_velocity=5.0,
-        stance_rad=stance_per_leg,
-        leg_ik=ik_v1,
-        leg_fk=fk_v1,
-    )
-    # legs dict populated only to satisfy iteration order; LegGeom fields unused
-    for leg_id in ("fl", "fr", "rl", "rr"):
-        info = _V1_LEG_INFO[leg_id]
-        cfg.legs[leg_id] = LegGeom(
-            leg_id=leg_id,
-            mount=info["mount"],
-            yaw_offset=info["yaw_offset"],
-            L1_vec=(0, 0, 0),
-            L2_vec=(0, 0, 0),
-            foot_L3=(0, 0, 0),
-        )
-    cfg.neutral_foot = {
-        leg_id: fk_v1(cfg, leg_id,
-                      stance_per_leg[leg_id]["shoulder"],
-                      stance_per_leg[leg_id]["hip"],
-                      stance_per_leg[leg_id]["knee"])
-        for leg_id in cfg.legs
-    }
-    cfg.body_height = max(1e-3, -min(f[2] for f in cfg.neutral_foot.values()))
-    return cfg
-
-
-def build_config_v2():
-    if not os.path.exists(URDF_V2):
-        raise FileNotFoundError(f"Missing v2 URDF: {URDF_V2}")
+def build_config():
+    if not os.path.exists(URDF_PATH):
+        raise FileNotFoundError(f"Missing URDF: {URDF_PATH}")
     if not os.path.exists(CONFIG_YAML):
         raise FileNotFoundError(f"Missing config yaml: {CONFIG_YAML}")
     with open(CONFIG_YAML) as f:
         yaml_cfg = yaml.safe_load(f)
 
-    joints = _load_urdf_joints(URDF_V2)
+    joints = _load_urdf_joints(URDF_PATH)
 
     # Prefer an explicit FootTipPoint, else fall back to STL heuristic.
     tip_assembly = _foot_tip_from_fusion(FUSION_JSON)
     if tip_assembly is None:
         tip_assembly = _stl_foot_tip_m(os.path.join(MESH_DIR, "leg_lower.stl"))
-        print(f"[v2] foot tip from STL (no FootTipPoint in fusion_export.json): "
+        print(f"[sim] foot tip from STL (no FootTipPoint in fusion_export.json): "
               f"{tuple(round(v, 4) for v in tip_assembly)} m")
     else:
-        print(f"[v2] foot tip from FootTipPoint: "
+        print(f"[sim] foot tip from FootTipPoint: "
               f"{tuple(round(v, 4) for v in tip_assembly)} m")
 
     # Per-leg: pull mount + yaw offset from URDF shoulder joint.
@@ -546,7 +410,7 @@ def build_config_v2():
     # comparing the URDF's hip xyz (in Link1 frame) to the LAL delta from
     # the comment block -- if they match, r_l1_angle = 0; if they're xy-
     # flipped, r_l1_angle = pi. Cleaner than parsing each link's visual rpy.
-    leg_pts = _parse_leg_points_from_urdf(URDF_V2)
+    leg_pts = _parse_leg_points_from_urdf(URDF_PATH)
     body_to_link1_mm = leg_pts["BodyToLink1Point"]
     link1_to_link2_mm = leg_pts["Link1ToLink2Point"]
     link2_to_link3_mm = leg_pts["Link2ToLink3Point"]
@@ -578,14 +442,13 @@ def build_config_v2():
     stance_per_leg = {
         leg["id"]: {
             k: math.radians(v)
-            for k, v in _stance_v2_for(leg["id"], yaml_cfg["legs"]).items()
+            for k, v in _stance_for(leg["id"], yaml_cfg["legs"]).items()
         }
         for leg in yaml_cfg["legs"]
     }
 
     cfg = RobotConfig(
-        version="v2",
-        urdf_path=URDF_V2,
+        urdf_path=URDF_PATH,
         legs={},
         joint_limits={"shoulder": lim_shoulder, "hip": lim_hip, "knee": lim_knee},
         servo_force=servo_force,
@@ -699,8 +562,7 @@ GAITS = {
         "step_length": 0.04,
         "step_height": 0.02,
         "duty":        0.25,
-        "offsets_v1":  {"fl": 0.00, "rr": 0.25, "fr": 0.50, "rl": 0.75},
-        "offsets_v2":  {"fl": 0.00, "br": 0.25, "fr": 0.50, "bl": 0.75},
+        "offsets":     {"fl": 0.00, "br": 0.25, "fr": 0.50, "bl": 0.75},
         "label":       "Static walk",
     },
     "trot": {
@@ -708,8 +570,7 @@ GAITS = {
         "step_length": 0.05,
         "step_height": 0.025,
         "duty":        0.5,
-        "offsets_v1":  {"fl": 0.0, "rr": 0.0, "fr": 0.5, "rl": 0.5},
-        "offsets_v2":  {"fl": 0.0, "br": 0.0, "fr": 0.5, "bl": 0.5},
+        "offsets":     {"fl": 0.0, "br": 0.0, "fr": 0.5, "bl": 0.5},
         "label":       "Trot (diagonal pairs)",
     },
 }
@@ -717,8 +578,6 @@ GAITS = {
 _TRAJ_COLORS = {
     "fl": (1.0, 0.30, 0.30),
     "fr": (0.30, 1.0, 0.30),
-    "rl": (0.30, 0.50, 1.0),
-    "rr": (1.0, 1.0, 0.30),
     "bl": (0.30, 0.50, 1.0),
     "br": (1.0, 1.0, 0.30),
 }
@@ -727,11 +586,7 @@ _TRAJ_COLORS = {
 def foot_target(neutral_foot, leg_id, phase, step_length, step_height, duty,
                 swing_axis="y"):
     """Body-frame foot target. swing_axis selects which body axis steps forward.
-
-    v1 geometry: leg reaches in body -X (left) / +X (right), but the robot's
-    forward axis is +Y. v2 geometry is the same -- body +Y is forward. Both
-    step along +Y.
-    """
+    Body +Y is forward, so the default swing_axis="y" steps in the forward direction."""
     nx, ny, nz = neutral_foot[leg_id]
     if phase < duty:
         s = phase / duty
@@ -747,7 +602,7 @@ def foot_target(neutral_foot, leg_id, phase, step_length, step_height, duty,
 
 
 def gait_joint_targets(cfg, gait, t):
-    offsets = gait["offsets_v2"] if cfg.version == "v2" else gait["offsets_v1"]
+    offsets = gait["offsets"]
     global_phase = (t / gait["period"]) % 1.0
     targets = {}
     for leg_id, off in offsets.items():
@@ -776,7 +631,7 @@ def _body_to_world(pos_body, base_pos, base_orn):
 
 
 def _precompute_cycle(cfg, gait):
-    offsets = gait["offsets_v2"] if cfg.version == "v2" else gait["offsets_v1"]
+    offsets = gait["offsets"]
     cycles = {}
     for leg_id in offsets:
         pts = [foot_target(cfg.neutral_foot, leg_id, k / _TRAJ_SAMPLES,
@@ -826,7 +681,7 @@ def _body_height_for_gait(cfg, gait, period_s, samples_per_period=100):
     Covers swing + stance feet across all 4 legs. Used in place of the
     neutral-stance depth so the spawn Z accommodates gait trajectories
     where foot-contact Z differs from neutral_foot."""
-    offsets = (gait["offsets_v2"] if cfg.version == "v2" else gait["offsets_v1"])
+    offsets = gait["offsets"]
     worst = 0.0
     for k in range(samples_per_period):
         global_phase = k / samples_per_period
@@ -891,7 +746,7 @@ def _connect_and_setup(cfg, gui):
 
 
 def _print_banner(cfg):
-    print(f"\n=== FaceHugger sim [{cfg.version}] ===")
+    print(f"\n=== FaceHugger sim ===")
     print(f"  URDF: {os.path.basename(cfg.urdf_path)}")
     print(f"  legs: {list(cfg.legs.keys())}")
     print(f"  servo: force={cfg.servo_force} N*m  vel={cfg.servo_velocity} rad/s")
@@ -972,8 +827,7 @@ def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
             apply_joint_targets(robot_id, joint_map, targets,
                                 cfg.servo_force, cfg.servo_velocity)
             if draw_overlay and step % draw_every == 0:
-                offsets = (gait["offsets_v2"] if cfg.version == "v2"
-                           else gait["offsets_v1"])
+                offsets = gait["offsets"]
                 global_phase = (t / gait["period"]) % 1.0
                 cur_targets = {
                     leg_id: foot_target(
@@ -999,8 +853,6 @@ def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
-    parser.add_argument("--urdf", choices=("v1", "v2"), default="v2",
-                        help="Which URDF to load (default: v2).")
     parser.add_argument("--walk", action="store_true")
     parser.add_argument("--trot", action="store_true")
     parser.add_argument("--headless", action="store_true")
@@ -1010,11 +862,7 @@ def main():
                              "Default 0.5.")
     args = parser.parse_args()
 
-    if args.urdf == "v1":
-        cfg = build_config_v1()
-    else:
-        cfg = build_config_v2()
-
+    cfg = build_config()
     gui = not args.headless
     if args.walk:
         run_gait(cfg, "walk", gui=gui, settle_s=args.settle)
