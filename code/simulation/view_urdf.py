@@ -14,7 +14,7 @@ import pybullet as p
 import pybullet_data
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-URDF_PATH = os.path.join(HERE, "facehugger.urdf")
+URDF_PATH = os.path.join(HERE, "generated", "facehugger.urdf")
 TIMESTEP = 1.0 / 240.0
 
 STANCE_RAD = {

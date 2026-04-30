@@ -77,7 +77,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _SIM_DIR = os.path.normpath(
     os.path.join(_HERE, "..", "..", "..", "..", "code", "simulation")
 )
-_MESH_DIR = os.path.join(_SIM_DIR, "exported_meshes")
+_GENERATED_DIR = os.path.join(_SIM_DIR, "generated")
+_MESH_DIR = os.path.join(_GENERATED_DIR, "exported_meshes")
 
 # ---------------------------------------------------------------------------
 # Config
@@ -1706,8 +1707,8 @@ def run(_context: str):
 
         root = design.rootComponent
 
-        os.makedirs(_SIM_DIR, exist_ok=True)
-        json_path = os.path.join(_SIM_DIR, "fusion_export.json")
+        os.makedirs(_GENERATED_DIR, exist_ok=True)
+        json_path = os.path.join(_GENERATED_DIR, "fusion_export.json")
 
         # Preserve user edits to _servo_role_assignment across re-exports.
         preserved_roles = None
@@ -1777,7 +1778,7 @@ def run(_context: str):
             json.dump(export, f, indent=2)
 
         # TXT
-        txt_path = os.path.join(_SIM_DIR, "fusion_export.txt")
+        txt_path = os.path.join(_GENERATED_DIR, "fusion_export.txt")
         header = [
             "=" * 60,
             "FaceHugger Fusion Export",

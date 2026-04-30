@@ -155,11 +155,11 @@ The committed chassis-fixed shoulder-servo logic (uniform rpy = source FL rpy, 4
 
 ```bash
 python code/simulation/generate_urdf.py
-grep -c '<visual>' code/simulation/facehugger.urdf       # >= 21
-grep -c 'leg_shoulder_L.stl' code/simulation/facehugger.urdf   # = 2 (FL, BR)
-grep -c 'leg_shoulder_R.stl' code/simulation/facehugger.urdf   # = 2 (FR, BL)
-grep -c 'leg_mount_L.stl'    code/simulation/facehugger.urdf   # = 2
-grep -c 'leg_mount_R.stl'    code/simulation/facehugger.urdf   # = 2
+grep -c '<visual>' code/simulation/generated/facehugger.urdf       # >= 21
+grep -c 'leg_shoulder_L.stl' code/simulation/generated/facehugger.urdf   # = 2 (FL, BR)
+grep -c 'leg_shoulder_R.stl' code/simulation/generated/facehugger.urdf   # = 2 (FR, BL)
+grep -c 'leg_mount_L.stl'    code/simulation/generated/facehugger.urdf   # = 2
+grep -c 'leg_mount_R.stl'    code/simulation/generated/facehugger.urdf   # = 2
 ```
 
 Per-leg shoulder limits in the URDF match PIPELINE_SPEC §4 table.

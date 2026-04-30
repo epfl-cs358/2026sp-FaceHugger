@@ -2,16 +2,16 @@
 generate_urdf.py  —  FaceHugger URDF generator
 
 Reads:
-  fusion_export.json     (from ExportBodiesToURDF Fusion script)
-  facehugger_config.yaml (robot hierarchy definition)
+  generated/fusion_export.json  (from ExportBodiesToURDF Fusion script)
+  facehugger_config.yaml        (robot hierarchy definition)
 
 Writes:
-  facehugger.urdf        (alongside this script, or --out path)
+  generated/facehugger.urdf     (or --out path)
 
 Usage:
   uv run generate_urdf.py
-  uv run generate_urdf.py --export ~/Desktop/fusion_export.json
-  uv run generate_urdf.py --config facehugger_config.yaml --out ../simulation/facehugger.urdf
+  uv run generate_urdf.py --export some/other/fusion_export.json
+  uv run generate_urdf.py --config facehugger_config.yaml --out generated/facehugger.urdf
 """
 
 import argparse
@@ -31,9 +31,10 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 SCRIPT_DIR = Path(__file__).parent
-DEFAULT_JSON = Path.home() / "Desktop" / "fusion_export.json"
+GENERATED_DIR = SCRIPT_DIR / "generated"
+DEFAULT_JSON = GENERATED_DIR / "fusion_export.json"
 DEFAULT_CFG = SCRIPT_DIR / "facehugger_config.yaml"
-DEFAULT_OUT = SCRIPT_DIR / "facehugger.urdf"
+DEFAULT_OUT = GENERATED_DIR / "facehugger.urdf"
 
 MM_TO_M = 1e-3
 
@@ -777,7 +778,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # local origin), not the leg-assembly origin — the centroid calculation
     # still works since we only need the furthest-+Y vertex cluster.
     tip_mm = _foot_tip_from_stl(
-        Path(__file__).parent / mesh_dir.rstrip("/\\") / "leg_lower.stl"
+        GENERATED_DIR / mesh_dir.rstrip("/\\") / "leg_lower.stl"
     )
     pts_comment = [
         "LEG ASSEMBLY METADATA (mm, leg-assembly-local frame)",

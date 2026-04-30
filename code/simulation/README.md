@@ -27,7 +27,7 @@ exported_meshes/*.stl (5 files: chassis + 3 leg links + servo)
 
 ## Step 1 — Run the Fusion exporter
 
-In Fusion 360, open your assembly and run the add-in from **Scripts and Add-Ins**. It writes to `code/simulation/`:
+In Fusion 360, open your assembly and run the add-in from **Scripts and Add-Ins**. It writes to `code/simulation/generated/`:
 
 | File | Content |
 |---|---|
@@ -49,10 +49,10 @@ Re-runs preserve user edits to `mesh_files._servo_role_assignment` in the JSON.
 
 ```bash
 cd code/simulation
-uv run generate_urdf.py --export fusion_export.json
+uv run generate_urdf.py
 ```
 
-Writes `facehugger.urdf`. The generator:
+Writes `generated/facehugger.urdf`. The generator:
 
 - reads the `mesh_files` manifest to place meshes with the right `origin_shift`;
 - emits per-leg shoulder joint limits as `[neutral ± 90°]` from `facehugger_config.yaml`'s `shoulder_neutral_deg`;
@@ -115,13 +115,16 @@ Angles are in degrees in the yaml; `generate_urdf.py` converts to the URDF's rad
 ```
 code/simulation/
   facehugger_config.yaml        semantic config (hand-edited)
-  fusion_export.json            CAD tree (generated; do not edit)
-  fusion_export.txt             human-readable tree
-  exported_meshes/*.stl         generated STLs (do not edit)
   generate_urdf.py              URDF generator
-  facehugger.urdf               generated URDF (do not edit)
   simulate_v2.py                PyBullet simulator
+  view_urdf.py                  PyBullet URDF viewer (no physics)
   README.md                     this file
+  docs/                         pipeline docs (PIPELINE_SPEC, ASSEMBLY_HIERARCHY, …)
+  generated/                    artifacts produced by the Fusion add-in / generator
+    fusion_export.json          CAD tree (do not edit)
+    fusion_export.txt           human-readable tree
+    exported_meshes/*.stl       generated STLs (do not edit)
+    facehugger.urdf             generated URDF (do not edit)
 
 ../../animation/scripts/
   visualize_fusion_export.py    Blender 3.3 scene builder

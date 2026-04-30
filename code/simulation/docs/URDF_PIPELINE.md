@@ -346,12 +346,12 @@ mesh.
 | File                                                                           | Role                                                                                   |
 | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
 | `cad/scripts/ExportBodiesToURDF/.../ExportBodiesToURDF.py`                     | Fusion add-in. EXPORT_RULES, collect_joints, R_la normalization, JSON+TXT output.      |
-| `code/simulation/fusion_export.json`                                           | Ground-truth structured export. Authoritative for downstream tools.                    |
-| `code/simulation/fusion_export.txt`                                            | Human-readable preview of the same data.                                               |
-| `code/simulation/exported_meshes/*.stl`                                        | 8 re-origined meshes.                                                                  |
+| `code/simulation/generated/fusion_export.json`                                 | Ground-truth structured export. Authoritative for downstream tools.                    |
+| `code/simulation/generated/fusion_export.txt`                                  | Human-readable preview of the same data.                                               |
+| `code/simulation/generated/exported_meshes/*.stl`                              | 8 re-origined meshes.                                                                  |
 | `code/simulation/facehugger_config.yaml`                                       | Per-leg placement: `mount_point`, `side` (L/R), `rpy_z_deg`, shoulder limits override. |
 | `code/simulation/generate_urdf.py`                                             | Reads JSON + yaml, writes URDF. All per-leg placement math lives here.                 |
-| `code/simulation/facehugger.urdf`                                              | Generated robot description.                                                           |
+| `code/simulation/generated/facehugger.urdf`                                    | Generated robot description.                                                           |
 | `code/simulation/simulate_v2.py`                                               | Full PyBullet sim with stance/IK/gait. Heavyweight — see Phase J in ALIGNMENT_FIX_PLAN |
 | `code/simulation/view_urdf.py`                                                 | Lightweight viewer. `--orbit`, `--joints`, `--stance`. Use this to eyeball the robot.  |
 | `code/simulation/docs/PIPELINE_SPEC.md`                                        | What the pipeline should do (decisions, conventions).                                  |

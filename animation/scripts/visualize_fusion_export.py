@@ -2,8 +2,8 @@
 visualize_fusion_export.py  —  Blender 3.3 LTS debug scene builder
 
 Reads:
-  code/simulation/fusion_export.json  (produced by ExportBodiesToURDF.py)
-  code/simulation/meshes/*.stl
+  code/simulation/generated/fusion_export.json  (produced by ExportBodiesToURDF.py)
+  code/simulation/generated/exported_meshes/*.stl
 
 Builds:
   - Chassis + one leg + servos at their exported world poses, each piece
@@ -674,8 +674,8 @@ def _script_dir():
 def parse_args():
     """Argparse splits Blender's argv at `--`. Before the `--` are Blender's
     own args; after, our script's args."""
-    default_export = _script_dir() / ".." / ".." / "code" / "simulation" / "fusion_export.json"
-    default_meshes = _script_dir() / ".." / ".." / "code" / "simulation" / "exported_meshes"
+    default_export = _script_dir() / ".." / ".." / "code" / "simulation" / "generated" / "fusion_export.json"
+    default_meshes = _script_dir() / ".." / ".." / "code" / "simulation" / "generated" / "exported_meshes"
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--export", type=Path, default=default_export.resolve())

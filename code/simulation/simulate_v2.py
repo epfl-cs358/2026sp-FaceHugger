@@ -32,10 +32,11 @@ import pybullet_data
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-URDF_PATH = os.path.join(HERE, "facehugger.urdf")
+GENERATED_DIR = os.path.join(HERE, "generated")
+URDF_PATH = os.path.join(GENERATED_DIR, "facehugger.urdf")
 CONFIG_YAML = os.path.join(HERE, "facehugger_config.yaml")
-FUSION_JSON = os.path.join(HERE, "fusion_export.json")
-MESH_DIR = os.path.join(HERE, "exported_meshes")
+FUSION_JSON = os.path.join(GENERATED_DIR, "fusion_export.json")
+MESH_DIR = os.path.join(GENERATED_DIR, "exported_meshes")
 
 TIMESTEP = 1.0 / 240.0
 
