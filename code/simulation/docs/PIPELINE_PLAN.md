@@ -88,17 +88,19 @@ Full rationale + math in [ALIGNMENT_FIX_PLAN.md](ALIGNMENT_FIX_PLAN.md). User-fa
 
 ---
 
-## Next: Phase J — `simulate.py` FK rewrite (the only thing blocking stand/walk)
+## Phase J — `simulate.py` FK rewrite — DONE ✓
 
-The URDF is geometrically correct, but `simulate.py`'s analytic FK/IK is calibrated against the OLD URDF (hip/knee axes were `+X`, single sign convention, etc.). With the new URDF:
+The analytic FK/IK in [kinematics.py](../kinematics.py) was calibrated against the old URDF (hip/knee axes `+X`, single sign convention, chain along `+Y`). Rewritten for the new URDF:
 
-1. **Drop `R_L1` per-leg rotation layer** (lines ~538–565 in simulate). Shoulder rpy now encodes per-leg orientation directly; we don't need the per-leg matrix machinery.
-2. **Switch hip/knee axis from old `+X` (leg-assembly local) to normalized `+Y`** in the analytic FK code.
-3. **Sign convention is uniform across all 4 legs** (Phase H gave us this). FK/IK collapses to one function — no per-side branching.
-4. **Foot tip is now side-dependent**: link2/link3 have `mesh_rpy = (0, π, 0)` for R pair, so the mesh-local foot tip `(x, y, z)` becomes `(-x, y, -z)` in URDF link3 frame for R pair. IK target needs to respect this.
-5. **Stance height re-calibration**: at `hip=-40°, knee=-60°` the foot-tip world Z is roughly -85 mm relative to body origin. Default `body_height: 1 mm` puts feet 85 mm below ground at startup — bump initial body z to ~90 mm so PyBullet doesn't fight an interpenetration condition.
+1. ✓ Dropped the `R_L1` per-leg rotation layer (no more `_r_l1_angle` / `foot_from_knee_lal_m`). Joint xyz/axis come straight from the URDF.
+2. ✓ Hip/knee rotations now use `_ry`. Per-leg `hip_axis_sign`/`knee_axis_sign` (read from URDF `<axis>` Y component) lets user-facing angles stay uniform while internal FK applies the right rotation.
+3. ✓ Per-leg joint limits live on `LegGeom` (FL/BR have hip range `[-135°, +45°]`, FR/BL have `[-45°, +135°]`; the old code clamped everyone with FR's limits — bug fixed).
+4. ✓ Side-dependent foot tip in link3 frame: L pair = mesh-local `FootTip` from URDF metadata; R pair = `(-x, y, -z)` (link3 visual rpy = `(0, π, 0)` rotates the mesh by `Ry(π)`).
+5. ✓ `body_height` recomputes from neutral-foot Z (~85.9 mm below body origin at stance), spawn position adjusts automatically.
 
-After Phase J: stance pose lands all 4 feet on the ground, IK resolves without `[FAIL]` markers, and gait controllers can be built on top.
+**Verified**: FK→IK round-trip at stance is `[OK]` for every leg (error < 0.1°). All 4 legs land at symmetric foot positions `(±176.0, ±55.8, -85.9)` mm.
+
+**Known workspace constraint**: knee URDF limit is `±90°`; trot's `step_height=25mm` requires the knee to flex to ~-100° at the swing apex, which clamps. The foot ends ~4mm short of the requested swing peak — gait still works, just lifts slightly less than commanded. Lower `step_height`, more crouched stance, or a CAD-side knee limit bump would all resolve it. Out of scope here.
 
 ## Then: Phase C — Blender visualizer
 
