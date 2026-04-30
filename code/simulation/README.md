@@ -37,35 +37,27 @@ In Fusion 360, open your assembly and run the add-in from **Scripts and Add-Ins*
 
 Re-runs preserve user edits to `mesh_files._servo_role_assignment` in the JSON.
 
-## Step 2 — (optional) Inspect exports
+## Driving the pipeline — `facehugger.py`
 
-```bash
-# Open the export in Blender: chassis + 4 legs (instanced) + construction-point spheres
-/Applications/Blender-3.3-LTS.app/Contents/MacOS/Blender \
-    --python animation/scripts/visualize_fusion_export.py
-```
-
-## Step 3 — Generate the URDF
+[facehugger.py](facehugger.py) is the single CLI entry point. Each subcommand wraps one of the underlying scripts:
 
 ```bash
 cd code/simulation
-uv run generate_urdf.py
+
+python facehugger.py urdf                 # regenerate generated/facehugger.urdf
+python facehugger.py view                 # open URDF in PyBullet's viewer (no physics)
+python facehugger.py sim                  # GUI, standing pose
+python facehugger.py sim --walk           # walk gait
+python facehugger.py sim --trot           # trot gait
+python facehugger.py sim --headless       # no GUI — CI smoke-check
+python facehugger.py blender              # Blender debug scene
+python facehugger.py blender --headless --save /tmp/scene.blend
+python facehugger.py all                  # urdf → sim
 ```
 
-Writes `generated/facehugger.urdf`. The generator:
+Set `BLENDER_BIN` to point at a custom Blender install (default on macOS: `/Applications/Blender-3.3-LTS.app/Contents/MacOS/Blender`).
 
-- reads the `mesh_files` manifest to place meshes with the right `origin_shift`;
-- emits per-leg shoulder joint limits as `[neutral ± 90°]` from `facehugger_config.yaml`'s `shoulder_neutral_deg`;
-- emits 12 servo `<visual>` elements (4 shoulder on `base_link`, 1 hip on each `link2`, 1 knee on each `link3`).
-
-## Step 3.5 — View the URDF (optional)
-
-```bash
-cd code/simulation
-python view_urdf.py
-```
-
-Loads the URDF in standing pose and lets you orbit around it.
+`view` mouse controls:
 
 | Action | How |
 | --- | --- |
@@ -74,21 +66,15 @@ Loads the URDF in standing pose and lets you orbit around it.
 | Zoom | scroll |
 | Quit | close window or Ctrl+C |
 
-The body is fixed and gravity is off — nothing moves on its own.
+The viewer holds the body fixed with gravity off — nothing moves on its own.
 
-## Step 4 — Simulate
+The `sim` simulator reads geometry from the URDF + `facehugger_config.yaml`; no hardcoded leg lengths or stances in Python.
 
-```bash
-cd code/simulation
+The URDF generator (`urdf` subcommand):
 
-python simulate.py              # GUI, standing pose (default)
-python simulate.py --walk       # walk gait
-python simulate.py --trot       # trot gait
-python simulate.py --headless   # no GUI — CI smoke-check
-```
-
-The simulator reads geometry from the URDF + `facehugger_config.yaml`; no
-hardcoded leg lengths or stances in Python.
+- reads the `mesh_files` manifest in `generated/fusion_export.json` to place meshes with the right `origin_shift`;
+- emits per-leg shoulder joint limits from `facehugger_config.yaml`'s `shoulder_limits_deg`;
+- emits 12 servo `<visual>` elements (4 shoulder on `base_link`, 4 hip on each `link1`, 4 knee on each `link3`).
 
 ## Config
 
@@ -114,6 +100,7 @@ Angles are in degrees in the yaml; `generate_urdf.py` converts to the URDF's rad
 
 ```
 code/simulation/
+  facehugger.py                 CLI entry point — wraps the scripts below
   facehugger_config.yaml        semantic config (hand-edited)
   generate_urdf.py              URDF generator
   simulate.py                   PyBullet simulator (constants/helpers/kinematics/gaits)
