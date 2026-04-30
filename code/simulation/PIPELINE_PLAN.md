@@ -1,6 +1,6 @@
 # FaceHugger pipeline reflow — state & plan
 
-Living document so the next session picks up without rebuilding context. Read this first, then [PIPELINE_SPEC.md](PIPELINE_SPEC.md) and [ASSEMBLY_HIERARCHY.md](ASSEMBLY_HIERARCHY.md) for the authoritative CAD/URDF spec.
+Living document so the next session picks up without rebuilding context. Read this first, then [PIPELINE_SPEC.md](PIPELINE_SPEC.md) and [ASSEMBLY_HIERARCHY.md](ASSEMBLY_HIERARCHY.md) for the authoritative CAD/URDF spec. End-to-end "how the pipeline works" docs live in [URDF_PIPELINE.md](URDF_PIPELINE.md).
 
 The full original plan with rationale lives at `~/.claude/plans/peppy-cooking-charm.md`. This file is the operational summary: where we are, what to do next, what to skip.
 
@@ -16,6 +16,8 @@ Branch: `feat/urdf-pipeline`. Recent commits (newest last):
 | `a670244` | Phase A: new MESH_EXPORTS, joint capture, post-export checklist |
 | `6716c63` | Fix asBuiltJoints walk + visibility-tolerant occurrence checks |
 | `19be7e1` | UTF-8 file writes + ASCII-only joints formatting |
+| `1e49d08` | Phase B: generate_urdf consumes CAD joints + per-side meshes + bracket visuals |
+| `44b2036` | Alignment fix: leg-assembly normalization (Phase E) + URDF gen rewrite (Phase G/H/I) + standalone servos + view_urdf.py + URDF_PIPELINE.md |
 
 ### Phase 0 — DONE ✓
 
@@ -67,7 +69,38 @@ knee:     FaceHuggerLegAssembly:1/Servo_Mouser_Model:3
 
 ---
 
-## Next: Phase B — generate_urdf.py + facehugger_config.yaml
+### Phase B — DONE ✓ (commit `1e49d08`)
+
+[generate_urdf.py](generate_urdf.py) consumes the CAD-sourced joints from `fusion_export.json` (`axis_dir_local_unit`, `axis_origin_local_mm`, `limits_rad`); emits 4 bracket visuals on `base_link`, per-side L/R link1 meshes, per-leg shoulder limits from yaml. yaml's `leg_template.joints` reduced to `cad_name → urdf_name + parent/child` mapping only.
+
+### Phase E + G + H + I — Alignment fix DONE ✓ (commit `44b2036`)
+
+Two compounding bugs were silently misplacing the legs in PyBullet: (1) the shoulder joint origin sat at the bracket's mounting tab instead of the rotation axis (38mm off), and (2) the leg-assembly's 90°-about-Z world rotation in CAD was never compensated for, so meshes and joint axes were 90° off. Fixed by:
+
+- **Phase E** (exporter): compute `R_la` and apply to `axis_dir` / `axis_origin` for leg-assembly-internal joints. Convert all leg-internal body-rules to combined-rule (which auto-bakes world-frame vertices). Drop servo bake-ins from link STLs; standalone `servo.stl`. Add `landmark_occurrence` field to scope landmark lookups. JSON gets a top-level `leg_assembly_normalization` block.
+- **Phase G** (URDF gen): per-corner shoulder placement = `mount + Rz(rpy_z) · side_offset`. Hip/knee origins X-flipped for R pair. Per-side L/R link1 meshes. Link2/link3 mesh visual rpy `(0, π, 0)` for R pair (shared meshes).
+- **Phase H** (uniform joint sign convention): R-pair hip/knee axis flip + negate-and-swap limits. Same stance value drops every leg uniformly.
+- **Phase I** (standalone servos): 12 servo visuals (4 shoulder + 4 hip + 4 knee). Per-role rpy = `R_role · R_servo1^T` lifts the shoulder-baked mesh's `+Z` shaft to world `+Y` for hip/knee. R pair gets X-flipped position only — no rotation (servo is the same physical part on every leg).
+
+URDF kinematically verified via PyBullet FK. **Visually inspected via `view_urdf.py`** (new minimal viewer) — geometry looks correct from all angles.
+
+Full rationale + math in [ALIGNMENT_FIX_PLAN.md](ALIGNMENT_FIX_PLAN.md). User-facing pipeline docs in [URDF_PIPELINE.md](URDF_PIPELINE.md).
+
+---
+
+## Next: Phase J — `simulate_v2.py` FK rewrite (the only thing blocking stand/walk)
+
+The URDF is geometrically correct, but `simulate_v2.py`'s analytic FK/IK is calibrated against the OLD URDF (hip/knee axes were `+X`, single sign convention, etc.). With the new URDF:
+
+1. **Drop `R_L1` per-leg rotation layer** (lines ~538–565 in simulate_v2). Shoulder rpy now encodes per-leg orientation directly; we don't need the per-leg matrix machinery.
+2. **Switch hip/knee axis from old `+X` (leg-assembly local) to normalized `+Y`** in the analytic FK code.
+3. **Sign convention is uniform across all 4 legs** (Phase H gave us this). FK/IK collapses to one function — no per-side branching.
+4. **Foot tip is now side-dependent**: link2/link3 have `mesh_rpy = (0, π, 0)` for R pair, so the mesh-local foot tip `(x, y, z)` becomes `(-x, y, -z)` in URDF link3 frame for R pair. IK target needs to respect this.
+5. **Stance height re-calibration**: at `hip=-40°, knee=-60°` the foot-tip world Z is roughly -85 mm relative to body origin. Default `body_height: 1 mm` puts feet 85 mm below ground at startup — bump initial body z to ~90 mm so PyBullet doesn't fight an interpenetration condition.
+
+After Phase J: stance pose lands all 4 feet on the ground, IK resolves without `[FAIL]` markers, and gait controllers can be built on top.
+
+## Then: Phase C — Blender visualizer
 
 **Goal**: regenerate `facehugger.urdf` from the new CAD outputs; the URDF must match what `simulate_v2.py` and the Blender visualizer expect.
 
@@ -214,11 +247,11 @@ Update [README.md](README.md) troubleshooting: **"wrong joint limits in URDF" �
 
 ## Order of execution from here
 
-1. **Phase B** — generate_urdf.py + yaml. Verify URDF visuals/joint limits/per-side mesh.
-2. **Phase C** — Blender visualizer. Verify scene with chained scene-dump.
-3. **Phase D** — CLI orchestrator (independent of B/C; can land in parallel).
-4. **Transition T** — Drop yaml joint config once B5/T2b passes byte-equivalence.
-5. **Optional fix** — `axis_construction_name` lookup for AsBuiltJoints (if we ever need the symbolic name; the direction vector is already correct).
+1. **Phase J** — `simulate_v2.py` FK rewrite. Unblocks stance + walk + IK on the new URDF.
+2. **Phase C** — Blender visualizer (independent; can land any time).
+3. **Phase D** — CLI orchestrator (independent; can land any time).
+4. **Transition T** — Drop yaml joint config (now safe — Phase B already wires CAD-joint consumption).
+5. **Optional fix** — `axis_construction_name` lookup for AsBuiltJoints (cosmetic; direction vectors are already correct).
 
 ---
 
