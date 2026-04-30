@@ -840,3 +840,4 @@ cad/scripts/**/.DS_Store
 !animation/scripts/
 !animation/scripts/**
 animation/scripts/**/.DS_Store
+.claude/settings.local.json
