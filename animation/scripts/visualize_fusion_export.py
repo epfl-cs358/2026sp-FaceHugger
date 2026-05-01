@@ -1,23 +1,21 @@
 """
-visualize_fusion_export.py  —  Blender 3.3 LTS debug scene builder
+visualize_fusion_export.py  —  Blender debug scene builder (no rigging)
 
 Reads:
   code/simulation/generated/fusion_export.json  (produced by ExportBodiesToURDF.py)
   code/simulation/generated/exported_meshes/*.stl
 
-Builds:
-  - Chassis + one leg + servos at their exported world poses. Each STL
-    in the `mesh_files` manifest is placed at its `origin_landmark`'s
-    world position (combined-rule meshes are pre-baked in world frame
-    relative to that landmark, so no occurrence-transform math is
-    needed at import time).
+Builds (placement only — no Empties / armatures / parenting):
+  - Chassis + one source leg + chassis-fixed servos at their exported
+    world poses. Each STL in the `mesh_files` manifest is placed at its
+    `origin_landmark`'s `pos_world_mm` from the occurrence tree.
+    Combined-rule meshes are pre-baked in world frame relative to that
+    landmark, so no occurrence-transform math is needed at import time.
+  - 4 brackets + 4 shoulder servos + 4 leg copies at the chassis corners
+    via `instance_four_legs`. Pure mesh duplication; no rig.
   - Red spheres in "Construction Points" sub-collection, one per
     `points[]` entry on every occurrence in the tree.
   - Orange spheres in "Axis Origins" sub-collection, one per `axes[]` entry.
-
-The difference between a construction Point and an Axis origin is exactly
-what we want to debug — seeing both side by side exposes joint-frame bugs
-that are otherwise invisible in generated URDFs.
 
 Usage (GUI — recommended for iterative debugging):
     blender --python animation/scripts/visualize_fusion_export.py
@@ -31,8 +29,8 @@ CLI flags (after the `--` separator per Blender convention):
     --meshes PATH   directory containing exported STLs
     --save PATH     write a .blend here after building the scene
 
-Targets Blender 3.3 LTS specifically — uses `bpy.ops.import_mesh.stl`. On
-4.x swap that one call to `bpy.ops.wm.stl_import`.
+Targets Blender 5.x. (The original 3.3 LTS version of this script used
+`bpy.ops.import_mesh.stl`; 5.x renamed it to `bpy.ops.wm.stl_import`.)
 """
 
 import argparse
@@ -98,8 +96,21 @@ def iter_occ(nodes, parent_path=""):
 
 
 def clear_scene():
-    """Factory-reset the scene so re-runs produce identical output."""
-    bpy.ops.wm.read_factory_settings(use_empty=True)
+    """Wipe objects/collections/orphans so re-runs produce identical output.
+
+    Avoid `bpy.ops.wm.read_factory_settings(use_empty=True)` (the original
+    3.3-LTS version of this clear) — on Blender 5.x it leaves the
+    `bpy.ops.wm.stl_import` operator's poll context invalid until the GUI
+    has fully redrawn, so every subsequent STL import fails with
+    "context is incorrect"."""
+    for obj in list(bpy.data.objects):
+        bpy.data.objects.remove(obj, do_unlink=True)
+    for coll in list(bpy.data.collections):
+        bpy.data.collections.remove(coll)
+    for mat in list(bpy.data.materials):
+        bpy.data.materials.remove(mat)
+    for mesh in list(bpy.data.meshes):
+        bpy.data.meshes.remove(mesh)
     _configure_units()
 
 
@@ -164,9 +175,9 @@ def import_stl(stl_path, name, matrix_world, target_collection):
     `target_collection`. Returns the created object, or None on failure."""
     before = set(bpy.data.objects)
     try:
-        # Blender 3.3: bpy.ops.import_mesh.stl (built-in STL addon). Swap to
-        # bpy.ops.wm.stl_import on 4.x.
-        bpy.ops.import_mesh.stl(filepath=str(stl_path))
+        # Blender 5.x. Scene scale is 1 BU = 1 mm and STL vertices are in mm,
+        # so global_scale=1.0 lands geometry at the right size.
+        bpy.ops.wm.stl_import(filepath=str(stl_path), global_scale=1.0)
     except Exception as e:
         print(f"[warn] STL import failed for {stl_path}: {e}")
         return None
@@ -646,25 +657,19 @@ def instance_four_legs(export, collections, ctx):
             @ Matrix.Translation(-source_anchor_v)
         )
 
-        # Empty root for the corner — animation rigging will hang off this.
-        root = bpy.data.objects.new(f"{corner}_root", None)
-        root.empty_display_type = "ARROWS"
-        root.empty_display_size = 20.0
-        root.matrix_world = Matrix.Translation(target_shoulder) @ rz
-        corner_colls[corner].objects.link(root)
-
+        # No rigging Empty here — pure mesh placement. The duplicates land
+        # in their corner sub-collection at world positions; a future rig
+        # script can parent them onto bones / Empties as needed.
         for src in leg_pool_by_side[side]:
             if src is None:
                 continue
             stl_part = src.name.split("_", 2)[-1]   # strip "FL_<occ>_" → keep "<stl>"
-            dup = _copy_obj(
+            _copy_obj(
                 src,
                 f"{corner}_{stl_part}",
                 corner_colls[corner],
                 leg_xform @ src.matrix_world,
             )
-            dup.parent = root
-            dup.matrix_parent_inverse = root.matrix_world.inverted()
             n_legs_total += 1
 
     print(f"[instance_legs] Brackets/ has {n_brackets}, "
