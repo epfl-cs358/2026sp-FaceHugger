@@ -6,9 +6,11 @@ Reads:
   code/simulation/generated/exported_meshes/*.stl
 
 Builds:
-  - Chassis + one leg + servos at their exported world poses, each piece
-    placed according to the `mesh_files` manifest (or a hardcoded fallback
-    if the manifest isn't present yet).
+  - Chassis + one leg + servos at their exported world poses. Each STL
+    in the `mesh_files` manifest is placed at its `origin_landmark`'s
+    world position (combined-rule meshes are pre-baked in world frame
+    relative to that landmark, so no occurrence-transform math is
+    needed at import time).
   - Red spheres in "Construction Points" sub-collection, one per
     `points[]` entry on every occurrence in the tree.
   - Orange spheres in "Axis Origins" sub-collection, one per `axes[]` entry.
@@ -51,7 +53,6 @@ from mathutils import Matrix, Vector
 # global_scale=1.0 already lands in the right scale with no conversion. All
 # positions in the JSON are in mm too, so we use them at face value.
 MM_SCALE = 1.0   # mm → Blender units (no conversion; kept for readability)
-CM_TO_MM = 10.0  # world_transform_rm_cm's translation column is in cm
 
 SPHERE_RADIUS_MM = 3.0   # 3 mm markers
 
@@ -67,16 +68,10 @@ COLOR_AXIS = (1.0, 0.4, 0.0, 1.0)    # orange
 # CAD — the other three are virtual and only exist in URDF output).
 LEG_SOURCE_PREFIX = "FL"
 
-# Fallback mesh rules used when `mesh_files` isn't in the JSON yet (i.e.
-# you haven't re-run the updated ExportBodiesToURDF.py). Format:
-#   path_suffix: (stl_filename, origin_shift_mm or None)
-# Longer suffixes win via endswith matching, evaluated in dict order.
-FALLBACK_MESH_RULES = {
-    "FlexibleSkeleton:1":                           ("QuadrupedBody.stl", None),
-    "FaceHuggerLegAssembly:1/Link1:1":              ("leg_shoulder.stl",  None),
-    "FaceHuggerLegAssembly:1/Link2:1":              ("leg_upper.stl",     None),
-    "FaceHuggerLegAssembly:1/Link3:1":              ("leg_lower.stl",     None),
-}
+# Path prefix that flags an occurrence as "inside the source leg assembly".
+# Objects whose backing occurrence lives under this path get the FL_ name
+# prefix so `instance_four_legs` can find them as duplicate sources.
+LEG_ASSEMBLY_OCC_PREFIX = "FaceHuggerLegAssembly:1"
 
 
 # ---------------------------------------------------------------------------
@@ -95,13 +90,6 @@ def iter_occ(nodes, parent_path=""):
         path = f"{parent_path}/{n['name']}" if parent_path else n["name"]
         yield n, path
         yield from iter_occ(n.get("children", []), path)
-
-
-def find_occ_by_path(nodes, path):
-    for occ, p in iter_occ(nodes):
-        if p == path:
-            return occ
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -171,51 +159,6 @@ def make_material(name, rgba):
 # ---------------------------------------------------------------------------
 
 
-def _world_matrix_from_occ(occ, shift_mm=None):
-    """Build a Blender `matrix_world` for the mesh imported at this occurrence,
-    with positions in mm (Blender units here = 1 mm — see `_configure_units`).
-
-    shift_mm: the value from mesh_files[...].origin_shift_mm — the landmark
-    position (in the mesh's original local frame) that was subtracted from
-    vertices during STL export. When None/zero, no shift (mesh not re-origined).
-
-    For a re-origined mesh, the mesh's local (0,0,0) corresponds to the
-    landmark at `shift_mm` in the original local frame. Applying the
-    occurrence's world transform to `shift_mm` gives that landmark's world
-    position — which is where we want the mesh's new origin to sit.
-    """
-    rm_cm = occ.get("world_transform_rm_cm")
-    if not rm_cm:
-        # Fall back to just placing at world_origin with identity rotation.
-        origin_mm = occ.get("world_origin_mm", [0.0, 0.0, 0.0])
-        return Matrix.Translation(Vector(origin_mm))
-
-    # Rotation: upper-left 3x3 (dimensionless).
-    rot_3x3 = [row[:3] for row in rm_cm[:3]]
-    # Translation from the matrix: right column is in cm → mm.
-    tx = rm_cm[0][3] * CM_TO_MM
-    ty = rm_cm[1][3] * CM_TO_MM
-    tz = rm_cm[2][3] * CM_TO_MM
-
-    if shift_mm is not None and any(v != 0 for v in shift_mm):
-        # Compute R @ shift (mm), add to translation so the mesh's new (0,0,0)
-        # origin lands at landmark_world = T + R @ shift.
-        sx, sy, sz = shift_mm
-        rx = rot_3x3[0][0] * sx + rot_3x3[0][1] * sy + rot_3x3[0][2] * sz
-        ry = rot_3x3[1][0] * sx + rot_3x3[1][1] * sy + rot_3x3[1][2] * sz
-        rz = rot_3x3[2][0] * sx + rot_3x3[2][1] * sy + rot_3x3[2][2] * sz
-        tx += rx
-        ty += ry
-        tz += rz
-
-    return Matrix((
-        (rot_3x3[0][0], rot_3x3[0][1], rot_3x3[0][2], tx),
-        (rot_3x3[1][0], rot_3x3[1][1], rot_3x3[1][2], ty),
-        (rot_3x3[2][0], rot_3x3[2][1], rot_3x3[2][2], tz),
-        (0.0,           0.0,           0.0,           1.0),
-    ))
-
-
 def import_stl(stl_path, name, matrix_world, target_collection):
     """Import an STL file and place it with the given world matrix inside
     `target_collection`. Returns the created object, or None on failure."""
@@ -276,44 +219,87 @@ def add_marker(world_pos_mm, name, material, target_collection, radius_mm=SPHERE
 
 
 # ---------------------------------------------------------------------------
-# Mesh rule resolution (manifest + fallback)
+# Mesh import (manifest-driven, post-Phase-E exporter)
 # ---------------------------------------------------------------------------
 
 
-def build_mesh_rule_lookup(export):
-    """Return a dict `{occurrence_path: (stl_filename, origin_shift_mm)}`.
+def _find_landmark_world_pos(export, landmark_name):
+    """Find the first construction point with this name anywhere in the
+    occurrence tree, return its `pos_world_mm`. None if not found."""
+    if landmark_name is None:
+        return None
+    for occ, _ in iter_occ(export.get("occurrences", [])):
+        for pt in occ.get("points", []):
+            if pt.get("name") == landmark_name:
+                pos = pt.get("pos_world_mm")
+                if pos is not None:
+                    return pos
+    return None
 
-    Primary source: `mesh_files` manifest written by the updated
-    ExportBodiesToURDF. Each entry's `source_occurrences` list enumerates
-    every occurrence that uses that STL (e.g. 3 Servo_Mouser_Model:N
-    instances all pointing at servo.stl).
 
-    Fallback: the hardcoded FALLBACK_MESH_RULES suffix map, matched via
-    endswith. Kept so the script is useful before the user re-runs Fusion.
+def import_meshes_from_manifest(export, ctx):
+    """Place each STL once at its `origin_landmark`'s world position.
+
+    Background: post-Phase-E, `EXPORT_RULES` for everything inside the
+    leg assembly use the combined-rule, which bakes vertices into world
+    frame and subtracts `landmark_world` so mesh-local (0,0,0) lands on
+    the landmark in world coords. Restoring the world placement is then
+    just `Translation(landmark_world)` — no rotation, since vertices
+    are already world-aligned.
+
+    This replaces the old per-occurrence walk that consumed
+    `mesh_files[*].source_occurrences`. After Phase A that field became
+    `["FlexibleSkeleton:1"]` for every STL (the top-level chassis
+    occurrence the combined rule walks down from), so the old logic
+    collapsed all 8 STLs onto a single key and only one rendered.
     """
-    lookup = {}
-
     manifest = export.get("mesh_files") or {}
-    if manifest:
-        for stl_name, entry in manifest.items():
-            if not isinstance(entry, dict):
-                continue   # skip _servo_role_assignment (a sub-dict)
-            if "source_occurrences" not in entry:
-                continue   # skip anything not describing a mesh
-            shift = entry.get("origin_shift_mm") or [0.0, 0.0, 0.0]
-            for path in entry["source_occurrences"]:
-                lookup[path] = (stl_name, shift)
-        return lookup
+    if not manifest:
+        print("[visualize] no mesh_files manifest — meshes will not import")
+        return
 
-    # No manifest — synthesize rules by matching path suffixes against the tree.
-    # Longest suffixes first so more specific rules win.
-    rules = sorted(FALLBACK_MESH_RULES.items(), key=lambda kv: -len(kv[0]))
-    for occ, path in iter_occ(export.get("occurrences", [])):
-        for suffix, (stl, shift) in rules:
-            if path == suffix or path.endswith("/" + suffix):
-                lookup[path] = (stl, shift)
-                break
-    return lookup
+    chassis_occ = next(
+        (o.get("name") for o in export.get("occurrences", []) if o.get("name")),
+        "scene",
+    )
+
+    for stl_name, entry in manifest.items():
+        if not isinstance(entry, dict) or "parts" not in entry:
+            continue   # skip _servo_role_assignment etc.
+
+        landmark = entry.get("origin_landmark")
+        if landmark is None:
+            # Chassis case (no re-origin): vertices are already in world frame.
+            world_pos = [0.0, 0.0, 0.0]
+        else:
+            world_pos = _find_landmark_world_pos(export, landmark)
+            if world_pos is None:
+                print(f"[warn] landmark {landmark!r} not found in tree; "
+                      f"skipping {stl_name}")
+                continue
+
+        stl_path = ctx.meshes_dir / stl_name
+        if not stl_path.exists():
+            if stl_name not in ctx.missing_meshes:
+                print(f"[warn] mesh missing: {stl_path}")
+                ctx.missing_meshes.append(stl_name)
+            continue
+
+        # Naming: prefix with FL_ if the mesh's primary part lives inside
+        # the leg assembly, so instance_four_legs picks it up as a source-leg
+        # object. Otherwise (chassis / brackets) leave the name plain.
+        parts = entry.get("parts") or []
+        first_occ_path = parts[0].get("occurrence", "") if parts else ""
+        is_leg_internal = first_occ_path.startswith(LEG_ASSEMBLY_OCC_PREFIX)
+        occ_basename = (first_occ_path.split("/")[-1]
+                        if first_occ_path else chassis_occ)
+        prefix = f"{LEG_SOURCE_PREFIX}_" if is_leg_internal else ""
+        obj_name = f"{prefix}{occ_basename}_{stl_name}"
+
+        matrix = Matrix.Translation(Vector(world_pos))
+        if import_stl(stl_path, obj_name, matrix,
+                      ctx.collections[MESHES_COLLECTION]):
+            ctx.meshes_imported += 1
 
 
 # ---------------------------------------------------------------------------
@@ -322,10 +308,9 @@ def build_mesh_rule_lookup(export):
 
 
 class VisitContext:
-    def __init__(self, meshes_dir, collections, mesh_lookup, mat_point, mat_axis):
+    def __init__(self, meshes_dir, collections, mat_point, mat_axis):
         self.meshes_dir = Path(meshes_dir)
         self.collections = collections
-        self.mesh_lookup = mesh_lookup
         self.mat_point = mat_point
         self.mat_axis = mat_axis
         self.meshes_imported = 0
@@ -344,20 +329,6 @@ def _label_name(path, suffix):
 
 
 def visit_occurrence(occ, path, ctx):
-    # Mesh (if a rule matches this path)
-    if path in ctx.mesh_lookup:
-        stl_name, shift_mm = ctx.mesh_lookup[path]
-        stl_path = ctx.meshes_dir / stl_name
-        if not stl_path.exists():
-            if stl_name not in ctx.missing_meshes:
-                print(f"[warn] mesh missing: {stl_path}")
-                ctx.missing_meshes.append(stl_name)
-        else:
-            matrix_world = _world_matrix_from_occ(occ, shift_mm)
-            obj_name = _label_name(path, f"{occ['name']}_{stl_name}")
-            if import_stl(stl_path, obj_name, matrix_world, ctx.collections[MESHES_COLLECTION]):
-                ctx.meshes_imported += 1
-
     # Construction points → red spheres
     for pt in occ.get("points", []):
         if pt.get("pos_world_mm") is None:
@@ -683,11 +654,14 @@ def main():
     mat_point = make_material("ConstructionPointRed", COLOR_POINT)
     mat_axis = make_material("AxisOriginOrange", COLOR_AXIS)
 
-    mesh_lookup = build_mesh_rule_lookup(export)
-    if not (export.get("mesh_files") or {}):
-        print("[visualize] no mesh_files manifest — using fallback hardcoded rules")
+    ctx = VisitContext(args.meshes, collections, mat_point, mat_axis)
 
-    ctx = VisitContext(args.meshes, collections, mesh_lookup, mat_point, mat_axis)
+    # Import the 8 STLs from the manifest, each placed at its
+    # origin_landmark's world position (combined-rule meshes are
+    # already in world frame relative to that landmark).
+    import_meshes_from_manifest(export, ctx)
+
+    # Walk the occurrence tree for construction-point + axis-origin markers.
     visit_root(export, ctx)
 
     # Replicate the source (FL) leg at the other 3 corners via collection
