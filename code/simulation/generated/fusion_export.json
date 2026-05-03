@@ -220,7 +220,6 @@
       "origin_construction_name": null,
       "limits_rad": {
         "rest": 0.0,
-        "current": 0.0,
         "min_enabled": true,
         "min": -1.5707963267948966,
         "max_enabled": true,
@@ -251,7 +250,6 @@
       "origin_construction_name": null,
       "limits_rad": {
         "rest": 0.0,
-        "current": 0.0,
         "min_enabled": true,
         "min": -1.5707963267948966,
         "max_enabled": true,
@@ -282,7 +280,6 @@
       "origin_construction_name": null,
       "limits_rad": {
         "rest": -0.7853981633974483,
-        "current": 0.0,
         "min_enabled": true,
         "min": -2.356194490192345,
         "max_enabled": true,
@@ -20377,22 +20374,22 @@
       "physics": {
         "mass_kg": 2.813979,
         "com_mm": [
-          -99.573,
-          38.995,
+          -99.152,
+          35.202,
           3.582
         ],
         "com_world_mm": [
-          -99.573,
-          38.995,
+          -99.152,
+          35.202,
           3.582
         ],
         "inertia_kg_m2": {
-          "ixx": 0.006901414,
-          "iyy": 0.040186616,
-          "izz": 0.043023395,
-          "ixy": 0.010759469,
-          "iyz": -0.000539923,
-          "ixz": -0.002529107
+          "ixx": 0.006203726,
+          "iyy": 0.039760435,
+          "izz": 0.041899527,
+          "ixy": 0.008853638,
+          "iyz": -0.000803088,
+          "ixz": -0.0024976
         }
       }
     }

@@ -1348,30 +1348,16 @@ def _joint_origin(joint):
 
 
 def _joint_limits(motion, type_tag):
-    """Return a `limits_rad` dict (radians) or None on failure.
-
-    Two sources of "where this joint sits at export time":
-      - `rest`    = `lim.restValue`, the configured mechanical zero
-                    (reproducible across exports unless the user retunes
-                    the joint motion in Fusion).
-      - `current` = `motion.rotationValue` (or `slideValue`), the *live*
-                    angle the joint is dragged to in the active CAD view
-                    at export time. Useful when the user wants the URDF
-                    rest pose to follow whatever they're currently
-                    visualising in Fusion. Downstream picks one via
-                    `facehugger_config.yaml: shoulder_rest_source`.
-    """
+    """Return a `limits_rad` dict (radians) or None on failure."""
     try:
         if type_tag == "revolute":
             lim = motion.rotationLimits
-            current = motion.rotationValue if hasattr(motion, "rotationValue") else 0.0
         else:
             lim = motion.slideLimits
-            current = motion.slideValue if hasattr(motion, "slideValue") else 0.0
         rest = lim.restValue if hasattr(lim, "restValue") else 0.0
     except Exception:
         return None
-    out = {"rest": float(rest), "current": float(current)}
+    out = {"rest": float(rest)}
     try:
         out["min_enabled"] = bool(lim.isMinimumValueEnabled)
         out["min"] = float(lim.minimumValue) if lim.isMinimumValueEnabled else None
