@@ -15,11 +15,17 @@ block, this block wins.
 **SHOULDER (servo 1) — yaw joint, Z axis**
 - Viewed from above, 0° = pointing right (+X), CCW = positive.
 - Rest angles per leg (baked into URDF as `<joint><origin rpy="0 0 …"/>`):
-  - FL: **+135°** &nbsp;&nbsp; FR: **+45°** &nbsp;&nbsp; BR: **-45°** &nbsp;&nbsp; BL: **-135°**
+  - FL: **-45°** &nbsp;&nbsp; FR: **+45°** &nbsp;&nbsp; BL: **+135°** &nbsp;&nbsp; BR: **-135°**
 - URDF limits for all legs: `[-90°, +90°]` (relative to rest).
 - Derived from the FL Fusion export value via:
   `FR = -FL`, `BL = wrap_pi(FL + π)`, `BR = -wrap_pi(FL + π)`.
 - URDF axis: `<axis xyz="0 0 1"/>` uniform across all 4 legs.
+
+> **Note on the FL value.** When Fusion shows 0° on `Link1Revolute`,
+> that corresponds to **-45° in this world-space convention** because the
+> leg-assembly local frame is offset by +135° from world +X. The Fusion
+> mechanical zero (`limits_rad.rest = -π/4` on the current CAD) is what
+> the URDF generator reads and uses as the FL rest in the formula above.
 
 **HIP (servo 2) — pitch joint, Y axis**
 - Rest: **0°**. Positive = leg swings up, negative = leg drops down.
@@ -115,12 +121,14 @@ angle range is `[Fusion.min - Fusion.rest, Fusion.max - Fusion.rest]`. For
 Link1 with `rest=-45°`, `min=-135°`, `max=+45°` → URDF range `[-90°, +90°]`
 — symmetric ±90° about θ=0. That's the goal.
 
-> **Status (2026-05-03):** convention is **decided and documented**; the
-> generator-side implementation (the actual `<origin rpy>` / shifted `<limit>`
-> emission in [generate_urdf.py](../generate_urdf.py)) is **not yet
-> applied** — tracked as the original Step 3 of the merge plan, deferred
-> to its own follow-up PR. The current URDF still uses the legacy
-> `rpy_z_deg ∈ {0, 180}` from yaml.
+> **Status (2026-05-04):** convention is **decided, documented, and
+> implemented** — see commits `80b8e98` (joint rename to
+> `{leg_id}_link{1,2,3}_joint`) and `6e52c45` (Convention A shoulder rest
+> derivation in [generate_urdf.py](../generate_urdf.py)). The yaml
+> `rpy_z_deg` and `shoulder_limits_deg` per-leg fields have been removed;
+> the geometric back-of-pair flip is derived from `leg_id` ("b*" = 180°)
+> and the kinematic shoulder rest is derived from the FL Fusion-export
+> rest via the formula in §4.
 
 ---
 
@@ -136,20 +144,24 @@ BL = wrap_pi(FL + π)               # 180° rotation around vertical
 BR = -wrap_pi(FL + π)              # = wrap_pi(-(FL + π))
 ```
 
-For `FL = -45°`: `FR = +45°`, `BL = +135°`, `BR = -135°`. Plotted on the
-unit circle (top-down view, 0° = body +X right, CCW positive):
+For `FL = -45°` (the current CAD's `Link1Revolute.limits_rad.rest`):
+`FR = +45°`, `BL = +135°`, `BR = -135°`. Plotted on the unit circle
+(top-down view, 0° = body +X right, CCW positive):
 
 | Corner | Body quadrant | Rest angle (deg) | Rest angle (rad) |
 |---|---|---:|---:|
+| FL | -X +Y | -45 | -π/4 |
 | FR | +X +Y | +45 | +π/4 |
-| FL | -X +Y | +135 | +3π/4 |
-| BL | -X -Y | -135 (= +225) | -3π/4 |
-| BR | +X -Y | -45 (= +315) | -π/4 |
+| BL | -X -Y | +135 | +3π/4 |
+| BR | +X -Y | -135 (= +225) | -3π/4 |
 
 See [img/leg-numbering-conventions.png](img/leg-numbering-conventions.png)
-for the body-frame layout. At θ=0 every leg is splayed outward in its
-quadrant; symmetric ROM around 0 means equal forward/backward swing for
-all four.
+for the body-frame layout. The Fusion `Link1Revolute` rest is reported
+in the leg-assembly's local frame (which is offset by +135° from world
++X), so a Fusion-side reading of 0° corresponds to **-45° in this
+world-space convention**. URDF θ=0 lands at each leg's mechanical zero
+under that mapping; symmetric ROM around 0 means equal forward/backward
+swing for all four.
 
 `facehugger_config.yaml` should drop its `rpy_z_deg` per-leg field (it's
 now derived from the JSON `rest` + the formula above). Side handedness
