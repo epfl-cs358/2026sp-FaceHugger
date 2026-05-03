@@ -335,7 +335,7 @@ mesh.
 └───────────────┬───────────────────────────────────────────────────┘
                 │
                 ├─→ PyBullet (simulate.py, view_urdf.py)
-                ├─→ Blender (visualize_fusion_export.py)
+                ├─→ Blender (visualize_urdf.py — chain walk → placed STLs + joint markers)
                 └─→ ROS, Gazebo, etc.
 ```
 

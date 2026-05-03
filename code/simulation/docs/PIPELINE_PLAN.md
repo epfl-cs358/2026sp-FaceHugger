@@ -28,6 +28,12 @@ Branch: `feat/urdf-pipeline`. Latest commits, newest last:
 | `0b03fcb` | Phase C minimal: adapt `visualize_fusion_export.py` to new CAD names |
 | `748bec3` | Phase D: `facehugger.py` CLI entry point |
 | `354f2ee` | Transition T: drop `leg_template.joints` from yaml |
+| `276da29` | `facehugger blender --blender-version` flag + refresh PIPELINE_PLAN |
+| `73fa2a0` | Cleanup stale files before animation branch |
+| `f281d4b` | Phase C real: visualizer imports all 8 STLs from manifest |
+| `bd63104` | Per-side mesh routing + chassis-fixed brackets/shoulders (still buggy) |
+| `2b5742f` | URDF-driven visualizer (`visualize_urdf.py`) matching PyBullet's loadURDF rest pose |
+| `c0c1a59` | Point `facehugger blender` at `visualize_urdf.py`; drop legacy `urdf_to_blender.py` |
 
 ---
 
@@ -53,9 +59,9 @@ FK→IK round-trip at stance is `[OK]` for every leg (error < 0.1°). All 4 legs
 
 **Known workspace edge**: knee URDF limit is `±90°`; trot's `step_height=25mm` clamps at the swing apex (foot lifts ~4 mm short of commanded). Fixable by lowering `step_height` to 20 mm, more crouched stance, or bumping the CAD knee limit.
 
-**Phase C minimal — DONE ✓** (commit `0b03fcb`). [visualize_fusion_export.py](../../../animation/scripts/visualize_fusion_export.py) updated for new CAD: mount points read as `LegMountPointXX` (with the `Point` infix), and `_legmount_rot_3x3` was replaced with the diagonal-pair table (`Rz(0°)` for FL/FR, `Rz(180°)` for BR/BL — same table the URDF generator uses). The dropped `_mat3_*` helpers / `LegMountXX:1` lookups are gone. **Known limitation**: per-side mesh handedness is not implemented — FR/BL render with L-handed meshes in Blender. See "What's left".
+**Phase C — DONE ✓** (replaced `visualize_fusion_export.py` with URDF-driven [visualize_urdf.py](../../../animation/scripts/visualize_urdf.py); the JSON-driven sibling was kept as a CAD-side cross-check). After three iterations of `visualize_fusion_export.py` re-deriving placement math from `fusion_export.json` (commits `0b03fcb`, `f281d4b`, `bd63104`) — and continuing to drift from `generate_urdf.py` — we added a URDF-driven importer that parses the URDF directly. Single source of truth, ~270 lines, stdlib XML parsing only. Walks the joint chain at rest pose (same math PyBullet uses on `loadURDF`), places each of the 29 visuals at `link_world @ visual_origin`, and drops red/orange marker spheres at every joint pivot + axis tip for cross-validation against the JSON visualizer. Placement-only — no rig, no Empties, no parenting. Rigging is deferred to a separate successor script (next branch). Inspired by [HoangGiang93/urdf_importer](https://github.com/HoangGiang93/urdf_importer) (MIT); we don't import its Armature-with-bones machinery because Empties are a 1:1 match for the URDF→Blender mapping.
 
-**Phase D — DONE ✓** (commit `748bec3`). [facehugger.py](../facehugger.py) is the single argparse-driven entry point with `urdf` / `sim` / `view` / `blender` / `all` subcommands. Each wraps the underlying script via `subprocess.run`. Multi-version Blender resolver: `--blender-version` flag (default 3.3) tries the four common `/Applications` app-name conventions, then `blender{V}` and `blender` on `$PATH`. `BLENDER_BIN` env var still wins as a full override.
+**Phase D — DONE ✓** (commit `748bec3`, refined in `276da29` and the URDF-driven rewrite). [facehugger.py](../facehugger.py) is the single argparse-driven entry point with `urdf` / `sim` / `view` / `blender` / `all` subcommands. Each wraps the underlying script via `subprocess.run`. Multi-version Blender resolver: `--blender-version` flag (default **5.1**) tries the four common `/Applications` app-name conventions, then `blender{V}` and `blender` on `$PATH`. `BLENDER_BIN` env var still wins as a full override. `visualize_urdf.py` requires Blender 5.0+ and rejects older versions on startup.
 
 **Transition T — DONE ✓** (commit `354f2ee`). yaml's `leg_template.joints` is gone; the `cad_name → urdf_name + parent/child` mapping is fixed convention, so it lives in `_JOINT_TOPOLOGY` in [generate_urdf.py](../generate_urdf.py). yaml is now strictly leg-instance + servo properties. URDF byte-equivalent before/after.
 
@@ -69,8 +75,8 @@ FK→IK round-trip at stance is `[OK]` for every leg (error < 0.1°). All 4 legs
 ### Known gaps (not blockers)
 
 - `axis_construction_name` / `origin_construction_name` are `None` for all three joints — Fusion's AsBuiltJoint API resolves axis-aligned construction axes to principal-axis enums rather than the originating entity. `axis_dir_local_unit` and `axis_origin_local_mm` are exact, so the URDF generator has everything it needs; this is cosmetic.
-- R-side hip/knee servos not modeled in CAD. `leg_shoulder_R.stl` is just `Link1R`; FR/BL render without their hip/knee servo bodies until the user adds R servos in Fusion. Per PIPELINE_SPEC §5 this is accepted.
-- `MotorMountR:1/LegMountFixedPoint` is unverifiable while the user keeps that occurrence hidden. The R bracket lands at `LegMountPointFR` / `LegMountPointBL` purely via the URDF generator's instancing logic.
+- Single-leg CAD source is fine: only one leg + one set of servos exists in CAD. The URDF generator emits 12 standalone servo `<visual>` elements (4 shoulder + 4 hip + 4 knee) using the shared `servo.stl` mesh + per-role rpy + per-corner positions, so all 4 legs render hip/knee/shoulder servos in the URDF without any R-side CAD bodies.
+- `MotorMountR:1/LegMountFixedPoint` is unverifiable while the user keeps that occurrence hidden. The R bracket lands at `LegMountPointFR` / `LegMountPointBL` purely via the URDF generator's instancing logic — works correctly, just no CAD-side cross-check.
 
 ### What's actually in `mesh_files` after the latest export
 
@@ -99,8 +105,7 @@ knee:     FaceHuggerLegAssembly:1/Servo_Mouser_Model:3
 
 | Priority | Item | Effort | Notes |
 |---|---|---|---|
-| **High** | **Animation pipeline** — `urdf_to_blender.py` + `animation_export.py` | 1–2 sessions | Project-critical. `urdf_to_blender.py` loads `facehugger.urdf` into Blender as a rigged armature (12 controllable bones, one per joint) for keyframing. `animation_export.py` exports the timeline as `(t, 12 servo angles)` rows that the firmware on `main` can stream to its 12 PWM channels. This is what turns the simulator into actual robot motion. |
-| Low | Per-side mesh handedness in `visualize_fusion_export.py` (C3 + C4) | ~2 hours | Currently FR/BL show L-handed meshes. Either implement properly (route Link1L vs Link1R + flip Link2/Link3 visuals + add bracket visuals) or drop the script in favor of `urdf_to_blender.py` once the latter exists. |
+| **High** | **Animation pipeline** — rig + `animation_export.py` | 1–2 sessions | Project-critical, deferred to next branch (`animation-pipeline`). Fork `visualize_urdf.py`: keep the chain walk, add one Empty per link parented per the joint chain, parent each visual mesh to its link Empty via `obj.parent + matrix_local = visual_origin`, then keyframe `rotation_euler` on the 12 joint Empties around their respective `joint.axis`. Then `animation_export.py` exports the timeline as `(t, 12 servo angles)` rows that the firmware on `main` can stream to 12 PWM channels — the bridge from sim to physical motion. |
 | Low | Gait registry expansion: `bound`, `crab` from teammate's `main` | ~30 min | Phase J's uniform IK means teammate's `splayed_foot_ik` / `leg_ik_fixed_yaw` aren't strictly needed — vanilla `ik_v2` per leg with the right `foot_target()` shape suffices. |
 | Low | Gait parameter tuning | ~30 min visual | Trot's 25 mm step_height clamps at the URDF's ±90° knee limit (~4 mm short at swing apex). Drop to 20 mm, or bump the CAD knee limit. Walk hasn't been visually validated end-to-end. |
 | Cosmetic | `axis_construction_name` lookup for AsBuiltJoints in the Fusion add-in | ~15 min | Direction vectors are already correct; this just gives the human-readable name in `fusion_export.txt`. |
@@ -156,24 +161,33 @@ python facehugger.py sim --trot                              # trot gait (knee c
 
 `view` mouse: left-drag orbit, ctrl+left-drag pan, scroll zoom, close window or Ctrl+C to quit.
 
-### Phase C minimal Blender visualizer + multi-version resolver
+### URDF → Blender visualizer
 
 ```bash
-# Default: looks for Blender 3.3 LTS in /Applications
+# Default: looks for Blender 5.1 in /Applications
 python facehugger.py blender
 
 # Specific version — tries Blender-{V}-LTS.app, "Blender {V}.app" (with space),
-# Blender-{V}.app, Blender{V}.app, then blender{V}/blender on $PATH
-python facehugger.py blender --blender-version 4.2
+# Blender-{V}.app, Blender{V}.app, then blender{V}/blender on $PATH.
+# Requires Blender 5.0+; older versions are rejected on startup.
+python facehugger.py blender --blender-version 5.2
 python facehugger.py blender --blender-version 5.1 --headless --save /tmp/scene.blend
 
 # Full override — wins over --blender-version
 BLENDER_BIN=/Applications/Blender.app/Contents/MacOS/Blender python facehugger.py blender
+
+# Pre-5.x rejection (loud failure, not a broken scene)
+python facehugger.py blender --blender-version 3.3 --headless --save /tmp/x.blend 2>&1 | grep "requires Blender 5"
 ```
 
-Console should print `[instance_legs] per-corner rotation — FR=Rz(+0°), BR=Rz(+180°), BL=Rz(+180°)`.
+Headless console output:
 
-Known visual quirk: FR / BL legs render with L-handed meshes (no per-side mesh routing yet — see "What's left"). If Blender isn't found, the CLI prints which paths were tried and exits non-zero.
+```
+[visualize_urdf] parsed — 13 links, 12 joints, root=base_link
+[visualize_urdf] placed 29 visuals, 12 joint pivots, 12 axis tips
+```
+
+In the GUI: chassis at origin, 4 brackets + 4 shoulder servos at the corners (`base_link`), 4 legs splayed outward at the shoulder positions `(±57.9, ±46.2, -9 mm)` — each in its body quadrant, with FL/BR using L-handed meshes and FR/BL using R-handed meshes via per-side `<visual><origin rpy="0 π 0"/>`. Outliner shows three top-level collections: `Meshes/` (29 STL objects, scene-root), `Joint Origins/` (12 red spheres at joint pivots), `Joint Axes/` (12 orange spheres at `pivot + 20mm·axis`).
 
 ### Modularization sanity check
 
@@ -214,7 +228,9 @@ Runs `urdf` → `sim` (default stand) sequentially. Useful for CI; both should e
 | [gaits.py](../gaits.py) | `GAITS` registry + `run_stand` / `run_gait`. |
 | [simulate.py](../simulate.py) | argparse main only. |
 | [view_urdf.py](../view_urdf.py) | Lightweight PyBullet URDF viewer (no physics). |
-| [../../animation/scripts/visualize_fusion_export.py](../../../animation/scripts/visualize_fusion_export.py) | Blender debug scene (corners detected; per-side mesh routing TODO). |
+| [../../animation/scripts/visualize_urdf.py](../../../animation/scripts/visualize_urdf.py) | Blender 5.x scene builder: parses URDF (stdlib XML) → 29 placed STL meshes + joint pivot/axis markers. Placement-only; rigging is a separate future script. |
+| [../../animation/scripts/visualize_fusion_export.py](../../../animation/scripts/visualize_fusion_export.py) | Blender 5.x sibling: reads `fusion_export.json` directly to cross-check the URDF's chain walk against raw CAD landmarks. |
+| [../../animation/scripts/README.md](../../../animation/scripts/README.md) | Overview + run instructions for the two visualizers. |
 | [../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py](../../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) | The Fusion add-in. |
 
 User reruns the Fusion add-in via *Shift+S → Scripts and Add-Ins → ExportBodiesToURDF → Run* whenever the CAD changes meaningfully.

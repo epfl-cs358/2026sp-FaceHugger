@@ -14,16 +14,16 @@ fusion_export.json    (CAD tree + mesh_files manifest)
 fusion_export.txt     (human-readable tree)
 exported_meshes/*.stl (5 files: chassis + 3 leg links + servo)
    │
-   ├── generate_urdf.py ──► facehugger.urdf ──► simulate.py  (PyBullet)
-   │
-   └── animation/scripts/visualize_fusion_export.py    (Blender 3.3 LTS)
+   └── generate_urdf.py ──► facehugger.urdf ──┬─► simulate.py  (PyBullet)
+                                              │
+                                              └─► visualize_urdf.py  (Blender 5.x)
 ```
 
 ## Prerequisites
 
 - Python env: `uv`, `pyyaml`, `pybullet`, `numpy`.
 - Fusion 360 with the ExportBodiesToURDF add-in installed (`cad/scripts/ExportBodiesToURDF/`).
-- Blender 3.3 LTS (optional — only needed for the debug visualizer).
+- Blender 5.0+ (optional — only needed for the URDF visualizer; 3.3 LTS no longer supported).
 
 ## Step 1 — Run the Fusion exporter
 
@@ -50,13 +50,15 @@ python facehugger.py sim                  # GUI, standing pose
 python facehugger.py sim --walk           # walk gait
 python facehugger.py sim --trot           # trot gait
 python facehugger.py sim --headless       # no GUI — CI smoke-check
-python facehugger.py blender                          # Blender debug scene (default 3.3 LTS)
-python facehugger.py blender --blender-version 5.1    # specific Blender version
+python facehugger.py blender                          # URDF in Blender (default 5.1)
+python facehugger.py blender --blender-version 5.2    # specific Blender version
 python facehugger.py blender --headless --save /tmp/scene.blend
 python facehugger.py all                  # urdf → sim
 ```
 
-The `blender` subcommand resolves the Blender executable in this order: `BLENDER_BIN` env var → macOS `/Applications` candidates for the requested `--blender-version` (`Blender-{V}-LTS.app`, `Blender {V}.app` with a space, `Blender-{V}.app`, `Blender{V}.app`) → `blender{V}` on `$PATH` → plain `blender` on `$PATH`. If nothing matches, the CLI prints what it tried and exits non-zero. Set `BLENDER_BIN=/path/to/blender` to bypass the search entirely.
+The `blender` subcommand loads `generated/facehugger.urdf` directly via [animation/scripts/visualize_urdf.py](../../animation/scripts/visualize_urdf.py): walks the joint chain at rest pose (the same math PyBullet uses on `loadURDF`) and places each of the 29 STL visuals at `link_world @ visual_origin`. Placement-only — no rig, no Empties, no parenting. The URDF is the single source of truth. Requires **Blender 5.0+**.
+
+The CLI resolves the Blender executable in this order: `BLENDER_BIN` env var → macOS `/Applications` candidates for the requested `--blender-version` (`Blender-{V}-LTS.app`, `Blender {V}.app` with a space, `Blender-{V}.app`, `Blender{V}.app`) → `blender{V}` on `$PATH` → plain `blender` on `$PATH`. If nothing matches, the CLI prints what it tried and exits non-zero. Set `BLENDER_BIN=/path/to/blender` to bypass the search entirely.
 
 `view` mouse controls:
 
@@ -115,7 +117,8 @@ code/simulation/
     facehugger.urdf             generated URDF (do not edit)
 
 ../../animation/scripts/
-  visualize_fusion_export.py    Blender 3.3 scene builder
+  visualize_urdf.py             Blender 5.x scene builder (URDF → placement + joint markers)
+  visualize_fusion_export.py    Blender 5.x scene builder (fusion_export.json → meshes + landmarks)
 ```
 
 ## Design notes
