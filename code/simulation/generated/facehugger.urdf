@@ -168,11 +168,11 @@
     </collision>
   </link>
 
-  <!-- LEG: BR  (side=L, shoulder_rest=-135.0°, limits=[-90.0°, +90.0°]) -->
+  <!-- LEG: BR  (side=L, shoulder_rest=+135.0°, limits=[-90.0°, +90.0°]) -->
   <joint name="br_link1_joint" type="revolute">
     <parent link="base_link"/>
     <child link="br_link1"/>
-    <origin xyz="0.057901 -0.046222 -0.009000" rpy="0 0 -2.356194"/>
+    <origin xyz="0.057901 -0.046222 -0.009000" rpy="0 0 2.356194"/>
     <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
@@ -352,11 +352,11 @@
     </collision>
   </link>
 
-  <!-- LEG: BL  (side=R, shoulder_rest=+135.0°, limits=[-90.0°, +90.0°]) -->
+  <!-- LEG: BL  (side=R, shoulder_rest=-135.0°, limits=[-90.0°, +90.0°]) -->
   <joint name="bl_link1_joint" type="revolute">
     <parent link="base_link"/>
     <child link="bl_link1"/>
-    <origin xyz="-0.057901 -0.046222 -0.009000" rpy="0 0 2.356194"/>
+    <origin xyz="-0.057901 -0.046222 -0.009000" rpy="0 0 -2.356194"/>
     <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>

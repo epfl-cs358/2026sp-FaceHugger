@@ -151,13 +151,17 @@ def _wrap_pi(x):
 
 def _shoulder_rest_for(leg_id: str, fl_rest_rad: float) -> float:
     """Convention A: derive each leg's shoulder rest (rad) from the FL
-    Fusion-export rest value via mirror+rotate symmetry.
+    Fusion-export rest value via mirror+rotate symmetry. With the current
+    CAD's `fl_rest_rad = -π/4`, this gives all four legs splayed outward
+    in their respective body quadrants.
 
-        FL = fl_rest_rad
-        FR = -fl_rest_rad                       (mirror across body Y-axis)
-        BL = wrap_pi(fl_rest_rad + pi)          (rotate FL by 180° around +Z)
-        BR = -wrap_pi(fl_rest_rad + pi)         (mirror BL)
+        FL =  fl_rest_rad                       (=  -45° from current CAD)
+        FR = -fl_rest_rad                       (=  +45°; mirror across body X-axis)
+        BL = -wrap_pi(fl_rest_rad + pi)         (= -135°)
+        BR =  wrap_pi(fl_rest_rad + pi)         (= +135°)
 
+    Earlier versions of this function had BL and BR swapped (signs
+    flipped) — that sent the back legs splaying INTO the front quadrants.
     See code/simulation/docs/MERGE_AND_CONVENTION.md §0 + §4 for the
     convention spec.
     """
@@ -166,9 +170,9 @@ def _shoulder_rest_for(leg_id: str, fl_rest_rad: float) -> float:
     if leg_id == "fr":
         return -fl_rest_rad
     if leg_id == "bl":
-        return _wrap_pi(fl_rest_rad + math.pi)
-    if leg_id == "br":
         return -_wrap_pi(fl_rest_rad + math.pi)
+    if leg_id == "br":
+        return _wrap_pi(fl_rest_rad + math.pi)
     raise ValueError(f"_shoulder_rest_for: unknown leg_id {leg_id!r}")
 
 

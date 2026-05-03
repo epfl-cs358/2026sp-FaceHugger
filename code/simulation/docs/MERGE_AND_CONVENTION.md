@@ -15,10 +15,10 @@ block, this block wins.
 **SHOULDER (servo 1) — yaw joint, Z axis**
 - Viewed from above, 0° = pointing right (+X), CCW = positive.
 - Rest angles per leg (baked into URDF as `<joint><origin rpy="0 0 …"/>`):
-  - FL: **-45°** &nbsp;&nbsp; FR: **+45°** &nbsp;&nbsp; BL: **+135°** &nbsp;&nbsp; BR: **-135°**
+  - FL: **-45°** &nbsp;&nbsp; FR: **+45°** &nbsp;&nbsp; BL: **-135°** &nbsp;&nbsp; BR: **+135°**
 - URDF limits for all legs: `[-90°, +90°]` (relative to rest).
 - Derived from the FL Fusion export value via:
-  `FR = -FL`, `BL = wrap_pi(FL + π)`, `BR = -wrap_pi(FL + π)`.
+  `FR = -FL`, `BL = -wrap_pi(FL + π)`, `BR = wrap_pi(FL + π)`.
 - URDF axis: `<axis xyz="0 0 1"/>` uniform across all 4 legs.
 
 > **Note on the FL value.** When Fusion shows 0° on `Link1Revolute`,
@@ -138,22 +138,27 @@ The Fusion JSON only defines one `Link1Revolute` rest value (the source-FL
 leg's mechanical zero). The other three corners are derived deterministically:
 
 ```
-FL = json.limits_rad.rest          # canonical, e.g. -45° / -π/4
-FR = -FL                           # mirror across the body Y-axis
-BL = wrap_pi(FL + π)               # 180° rotation around vertical
-BR = -wrap_pi(FL + π)              # = wrap_pi(-(FL + π))
+FL =  json.limits_rad.rest         # canonical, e.g. -45° / -π/4
+FR = -FL                           # mirror across body X-axis
+BL = -wrap_pi(FL + π)              # FL rotated 180° around +Z, then negated
+BR =  wrap_pi(FL + π)              # FL rotated 180° around +Z
 ```
 
 For `FL = -45°` (the current CAD's `Link1Revolute.limits_rad.rest`):
-`FR = +45°`, `BL = +135°`, `BR = -135°`. Plotted on the unit circle
+`FR = +45°`, `BL = -135°`, `BR = +135°`. Plotted on the unit circle
 (top-down view, 0° = body +X right, CCW positive):
 
 | Corner | Body quadrant | Rest angle (deg) | Rest angle (rad) |
 |---|---|---:|---:|
 | FL | -X +Y | -45 | -π/4 |
 | FR | +X +Y | +45 | +π/4 |
-| BL | -X -Y | +135 | +3π/4 |
-| BR | +X -Y | -135 (= +225) | -3π/4 |
+| BL | -X -Y | -135 (= +225) | -3π/4 |
+| BR | +X -Y | +135 | +3π/4 |
+
+Earlier versions of `_shoulder_rest_for()` had the BL and BR signs
+swapped, which sent the back legs splaying *into the front quadrants*
+(visible in Blender as BL pointing toward FL, BR pointing toward FR).
+The signs above are post-fix and verified against the visualizer.
 
 See [img/leg-numbering-conventions.png](img/leg-numbering-conventions.png)
 for the body-frame layout. The Fusion `Link1Revolute` rest is reported
