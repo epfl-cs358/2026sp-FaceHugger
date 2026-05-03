@@ -13,11 +13,42 @@
 #define MIN_PULSE 150
 #define MAX_PULSE 600
 
-struct Calibration {
-    int hipOffset;
-    int thighOffset;
-    int kneeOffset;
-    bool inverted;
-};
+//define PCA addresses for servos as well as default angles
+
+//Front right leg (Leg 0 in spinal_cord.cpp)
+#define FRONT_RIGHT_LEG_HIP_PCA_CHANNEL 0
+#define FRONT_RIGHT_LEG_THIGH_PCA_CHANNEL 1
+#define FRONT_RIGHT_LEG_KNEE_PCA_CHANNEL 2
+
+#define FRONT_RIGHT_LEG_HIP_DEFAULT_ANGLE 90
+#define FRONT_RIGHT_LEG_THIGH_DEFAULT_ANGLE 90
+#define FRONT_RIGHT_LEG_KNEE_DEFAULT_ANGLE 90
+
+//Front left leg (Leg 1 in spinal_cord.cpp)
+#define FRONT_LEFT_LEG_HIP_PCA_CHANNEL 3
+#define FRONT_LEFT_LEG_THIGH_PCA_CHANNEL 4
+#define FRONT_LEFT_LEG_KNEE_PCA_CHANNEL 5
+
+#define FRONT_LEFT_LEG_HIP_DEFAULT_ANGLE 90
+#define FRONT_LEFT_LEG_THIGH_DEFAULT_ANGLE 90
+#define FRONT_LEFT_LEG_KNEE_DEFAULT_ANGLE 90
+
+//Bottom right leg (Leg 2 in spinal_cord.cpp)
+#define BOTTOM_RIGHT_LEG_HIP_PCA_CHANNEL 6
+#define BOTTOM_RIGHT_LEG_THIGH_PCA_CHANNEL 7
+#define BOTTOM_RIGHT_LEG_KNEE_PCA_CHANNEL 8
+
+#define BOTTOM_RIGHT_LEG_HIP_DEFAULT_ANGLE 90
+#define BOTTOM_RIGHT_LEG_THIGH_DEFAULT_ANGLE 90
+#define BOTTOM_RIGHT_LEG_KNEE_DEFAULT_ANGLE 90
+
+//Bottom left leg (Leg 3 in spinal_cord.cpp)
+#define BOTTOM_LEFT_LEG_HIP_PCA_CHANNEL 9
+#define BOTTOM_LEFT_LEG_THIGH_PCA_CHANNEL 10
+#define BOTTOM_LEFT_LEG_KNEE_PCA_CHANNEL 11
+
+#define BOTTOM_LEFT_LEG_HIP_DEFAULT_ANGLE 90
+#define BOTTOM_LEFT_LEG_THIGH_DEFAULT_ANGLE 90
+#define BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE 90
 
 #endif

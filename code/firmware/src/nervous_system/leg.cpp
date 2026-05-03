@@ -2,69 +2,48 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>
+#include "servo.h"
+#include "kinematics.h"
+#include "movements.h"
 #include "../shared/config.h"
 
 Leg::Leg(Adafruit_PWMServoDriver &pwm,
          int legID,
-         uint8_t hipPCAChannel,
-         uint8_t thighPCAChannel,
-         uint8_t kneePCAChannel,
-         uint16_t hipDefaultAngle,
-         uint16_t thighDefaultAngle,
-         uint16_t kneeDefaultAngle)
+         Servo hipServo, Servo thighServo, Servo kneeServo)
     : pwm(pwm),   
       id(legID),
-      hipPCAChannel(hipPCAChannel),
-      thighPCAChannel(thighPCAChannel),
-      kneePCAChannel(kneePCAChannel),
-      hipDefaultAngle(hipDefaultAngle),
-      thighDefaultAngle(thighDefaultAngle),
-      kneeDefaultAngle(kneeDefaultAngle),
-      hipAngle(hipDefaultAngle),
-      thighAngle(thighDefaultAngle),
-      kneeAngle(kneeDefaultAngle)
+      hipServo(hipServo),
+      thighServo(thighServo),
+      kneeServo(kneeServo)
 {
+    returnToDefaultAngles();
 }
 
 void Leg::setPose(float x, float y, float z) {
-    Serial.print("Leg ");
-    Serial.print(id);
-    Serial.printf(" moving to target: %.1f, %.1f, %.1f\n", x, y, z);
-    updateServos();
+    const JointAngles a = legIK((LegId)id, x, y, z);
+    // Convert IK output (radians, joint zero = STANCE) to servo angles
+    // (degrees, neutral = 90). Per-servo sign / offset calibration TBD.
+    const double RAD_TO_DEG_F = 57.29577951308232;
+    const double hipDeg   = 90.0 + a.shoulder * RAD_TO_DEG_F;
+    const double thighDeg = 90.0 + a.hip      * RAD_TO_DEG_F;
+    const double kneeDeg  = 90.0 + a.knee     * RAD_TO_DEG_F;
+    updateServos(hipDeg, thighDeg, kneeDeg);
 }
 
-void Leg::updateServos(){
-    setServoAngle(hipPCAChannel, hipAngle, 0); // Angles offsets set to 0 for the moment, calibrations will be done during testing
-    setServoAngle(thighPCAChannel, thighAngle, 0);
-    setServoAngle(kneePCAChannel, kneeAngle, 0);
+void Leg::updateServos(double hipAngle, double thighAngle, double kneeAngle){
+    hipServo.setServoAngle(hipAngle);
+    thighServo.setServoAngle(thighAngle);
+    kneeServo.setServoAngle(kneeAngle);
 }
 
 void Leg::returnToDefaultAngles(){
-    hipAngle = hipDefaultAngle;
-    thighAngle = thighDefaultAngle;
-    kneeAngle = kneeDefaultAngle;
-    updateServos();
+    hipServo.returnToDefaultAngle();
+    thighServo.returnToDefaultAngle();
+    kneeServo.returnToDefaultAngle();
 }
 
-void Leg::setServoAngle(uint8_t channel, double angle, int offset) {
-    // 20% Logic: Apply Calibration before mapping
-    double calibratedAngle = angle + offset; 
-    
-    // Safety clamp
-    calibratedAngle = constrain(calibratedAngle, 0, 180); //Changed angle limit to 180
-
-    uint16_t pulse = map(calibratedAngle, 0, 180, MIN_PULSE, MAX_PULSE);
-    Serial.printf("DEBUG [Leg %d]: Ch %d -> Angle: %.2f | Pulse: %d\n", id, channel, calibratedAngle, pulse);
-    pwm.setPWM(channel, 0, pulse);
-}
-
-// Test function to send raw angles to the leg directly
-void Leg::identifyAndMove(uint8_t channel, double angle) {
-    Serial.printf("Leg with channel %d rotating to angle %d", channel, angle);
-    if (channel == hipPCAChannel) hipAngle = angle;
-    else if (channel == thighPCAChannel) thighAngle = angle;
-    else if (channel == kneePCAChannel) kneeAngle = angle;
-    else return; // This channel doesn't belong to this leg
-
-    updateServos();
+void Leg::identifyAndMove(uint8_t channel, double angle){
+    if (hipServo.getChannel()   == channel) hipServo.setServoAngle(angle);
+    if (thighServo.getChannel() == channel) thighServo.setServoAngle(angle);
+    if (kneeServo.getChannel()  == channel) kneeServo.setServoAngle(angle);
 }
