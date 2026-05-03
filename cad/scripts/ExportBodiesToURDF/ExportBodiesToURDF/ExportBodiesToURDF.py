@@ -113,9 +113,14 @@ LEG_ASSEMBLY_COMPONENT = "FaceHuggerLegAssembly"
 
 CONSTRUCTION_POINTS = [
     # Body-side mating points (FlexibleSkeleton:1).
-    "LegMountPointFL", "LegMountPointFR", "LegMountPointBR", "LegMountPointBL",
+    "LegMountPointFL",
+    "LegMountPointFR",
+    "LegMountPointBR",
+    "LegMountPointBL",
     # Joint origins (FaceHuggerLegAssembly:1).
-    "BodyToLink1Point", "Link1ToLink2Point", "Link2ToLink3Point",
+    "BodyToLink1Point",
+    "Link1ToLink2Point",
+    "Link2ToLink3Point",
     # Bracket-side mating point (MotorMount + MotorMountR).
     "LegMountFixedPoint",
     # Servo seat (each Servo_Mouser_Model occurrence).
@@ -123,11 +128,15 @@ CONSTRUCTION_POINTS = [
 ]
 
 CONSTRUCTION_AXES = [
-    "BodyToLink1Axis", "Link1ToLink2Axis", "Link2ToLink3Axis",
+    "BodyToLink1Axis",
+    "Link1ToLink2Axis",
+    "Link2ToLink3Axis",
 ]
 
 JOINTS = [
-    "Link1Revolute", "Link2Revolute", "Link3Revolute",
+    "Link1Revolute",
+    "Link2Revolute",
+    "Link3Revolute",
 ]
 
 # Rules driving STL export. Three rule types supported:
@@ -180,76 +189,97 @@ EXPORT_RULES = [
     # excluded by NOT being in this list, regardless of CAD visibility.
     # Brackets (MotorMount{,R}) live in the leg assembly and are exported
     # separately as leg_mount_{L,R}.stl.
-    {"type": "combined", "stl": "QuadrupedBody.stl", "parts": [
-        {"occurrence": "FlexibleSkeleton:1/QuadrupedBody:1",
-         "body": "QuadrupedBody"},
-        {"occurrence": "FlexibleSkeleton:1/LipoCage:1",
-         "body": "LipoCage"},
-    ]},
-
+    {
+        "type": "combined",
+        "stl": "QuadrupedBody.stl",
+        "parts": [
+            {
+                "occurrence": "FlexibleSkeleton:1/QuadrupedBody:1",
+                "body": "QuadrupedBody",
+            },
+            {"occurrence": "FlexibleSkeleton:1/LipoCage:1", "body": "LipoCage"},
+        ],
+    },
     # Brackets. Combined-rule (single part each) so the output is in
     # world-frame vertices — the leg-assembly's CAD-local rotation gets
     # absorbed for free by `_transform_triangle`. `landmark_occurrence`
     # scopes the LegMountFixedPoint lookup to the right bracket; without
     # it the tree walk could pick the wrong one (both brackets share
     # the same landmark name).
-    {"type": "combined", "stl": "leg_mount_L.stl",
-     "origin_landmark": "LegMountFixedPoint",
-     "landmark_occurrence": "FaceHuggerLegAssembly:1/MotorMount:1",
-     "parts": [
-         {"occurrence": "FaceHuggerLegAssembly:1/MotorMount:1",
-          "body": "LegMountL"},
-     ]},
-    {"type": "combined", "stl": "leg_mount_R.stl",
-     "origin_landmark": "LegMountFixedPoint",
-     "landmark_occurrence": "FaceHuggerLegAssembly:1/MotorMountR:1",
-     "parts": [
-         {"occurrence": "FaceHuggerLegAssembly:1/MotorMountR:1",
-          "body": "LegMountR"},
-     ]},
-
+    {
+        "type": "combined",
+        "stl": "leg_mount_L.stl",
+        "origin_landmark": "LegMountFixedPoint",
+        "landmark_occurrence": "FaceHuggerLegAssembly:1/MotorMount:1",
+        "parts": [
+            {"occurrence": "FaceHuggerLegAssembly:1/MotorMount:1", "body": "LegMountL"},
+        ],
+    },
+    {
+        "type": "combined",
+        "stl": "leg_mount_R.stl",
+        "origin_landmark": "LegMountFixedPoint",
+        "landmark_occurrence": "FaceHuggerLegAssembly:1/MotorMountR:1",
+        "parts": [
+            {
+                "occurrence": "FaceHuggerLegAssembly:1/MotorMountR:1",
+                "body": "LegMountR",
+            },
+        ],
+    },
     # Shoulder links — L and R variants. NO servo bake-in: the URDF
     # generator emits standalone servo visuals on each link from
     # servo.stl, with per-leg position/rpy. This avoids needing a R-side
     # servo in CAD and a per-rule mirror flag in the exporter.
-    {"type": "combined", "stl": "leg_shoulder_L.stl",
-     "origin_landmark": "BodyToLink1Point",
-     "parts": [
-         {"occurrence": "FaceHuggerLegAssembly:1/Link1L:1",
-          "body": "Link1"},
-     ]},
-    {"type": "combined", "stl": "leg_shoulder_R.stl",
-     "origin_landmark": "BodyToLink1Point",
-     "parts": [
-         {"occurrence": "FaceHuggerLegAssembly:1/Link1R:1",
-          "body": "Link1R"},
-     ]},
-
+    {
+        "type": "combined",
+        "stl": "leg_shoulder_L.stl",
+        "origin_landmark": "BodyToLink1Point",
+        "parts": [
+            {"occurrence": "FaceHuggerLegAssembly:1/Link1L:1", "body": "Link1"},
+        ],
+    },
+    {
+        "type": "combined",
+        "stl": "leg_shoulder_R.stl",
+        "origin_landmark": "BodyToLink1Point",
+        "parts": [
+            {"occurrence": "FaceHuggerLegAssembly:1/Link1R:1", "body": "Link1R"},
+        ],
+    },
     # Upper / lower leg: shared (no mirror in CAD). The URDF generator
     # applies a (0, π, 0) visual rpy on the R-pair link2/link3 so the
     # mesh's knee/foot end up on the correct side.
-    {"type": "combined", "stl": "leg_upper.stl",
-     "origin_landmark": "Link1ToLink2Point",
-     "parts": [
-         {"occurrence": "FaceHuggerLegAssembly:1/Link2L:1",
-          "body": "Link2"},
-     ]},
-    {"type": "combined", "stl": "leg_lower.stl",
-     "origin_landmark": "Link2ToLink3Point",
-     "parts": [
-         {"occurrence": "FaceHuggerLegAssembly:1/Link3L:1",
-          "body": "Link3"},
-     ]},
-
+    {
+        "type": "combined",
+        "stl": "leg_upper.stl",
+        "origin_landmark": "Link1ToLink2Point",
+        "parts": [
+            {"occurrence": "FaceHuggerLegAssembly:1/Link2L:1", "body": "Link2"},
+        ],
+    },
+    {
+        "type": "combined",
+        "stl": "leg_lower.stl",
+        "origin_landmark": "Link2ToLink3Point",
+        "parts": [
+            {"occurrence": "FaceHuggerLegAssembly:1/Link3L:1", "body": "Link3"},
+        ],
+    },
     # Single shared servo mesh — instanced 12× by the URDF generator
     # (4 shoulder + 4 hip + 4 knee). Re-origined to ServoMountPoint so
     # the URDF can place each instance at its servo seat.
-    {"type": "combined", "stl": "servo.stl",
-     "origin_landmark": "ServoMountPoint",
-     "parts": [
-         {"occurrence": "FaceHuggerLegAssembly:1/Servo_Mouser_Model:1",
-          "body": "ServoBase"},
-     ]},
+    {
+        "type": "combined",
+        "stl": "servo.stl",
+        "origin_landmark": "ServoMountPoint",
+        "parts": [
+            {
+                "occurrence": "FaceHuggerLegAssembly:1/Servo_Mouser_Model:1",
+                "body": "ServoBase",
+            },
+        ],
+    },
 ]
 
 
@@ -614,7 +644,7 @@ def _find_occ_and_world_transform(tree, occurrences_json, path):
         if node is None:
             return live_occ, None
         nodes = node.get("children", [])
-    if node is None:   # empty path case
+    if node is None:  # empty path case
         return live_occ, None
     return live_occ, node.get("world_transform_rm_cm")
 
@@ -663,6 +693,7 @@ def _find_landmark_world_pos_mm(occurrences_json, landmark_name):
     landmark. Used by the combined rule's re-origin step, where vertices are
     in world frame so the shift must also be world. Returns None if not found.
     """
+
     def walk(nodes):
         for n in nodes or []:
             for p in n.get("points") or []:
@@ -672,6 +703,7 @@ def _find_landmark_world_pos_mm(occurrences_json, landmark_name):
             if r is not None:
                 return r
         return None
+
     return walk(occurrences_json)
 
 
@@ -995,9 +1027,9 @@ def _apply_R_3x3(R, v):
     if R is None or v is None:
         return v
     return [
-        R[0][0]*v[0] + R[0][1]*v[1] + R[0][2]*v[2],
-        R[1][0]*v[0] + R[1][1]*v[1] + R[1][2]*v[2],
-        R[2][0]*v[0] + R[2][1]*v[1] + R[2][2]*v[2],
+        R[0][0] * v[0] + R[0][1] * v[1] + R[0][2] * v[2],
+        R[1][0] * v[0] + R[1][1] * v[1] + R[1][2] * v[2],
+        R[2][0] * v[0] + R[2][1] * v[1] + R[2][2] * v[2],
     ]
 
 
@@ -1222,7 +1254,7 @@ def _joint_axis(motion):
         name = getattr(custom_entity, "name", None)
         try:
             geom = custom_entity.geometry  # InfiniteLine3D
-            d = geom.direction             # Vector3D
+            d = geom.direction  # Vector3D
             # Normalize defensively.
             mag = (d.x * d.x + d.y * d.y + d.z * d.z) ** 0.5
             if mag > 0:
@@ -1306,10 +1338,9 @@ def _joint_limits(motion, type_tag):
     try:
         if type_tag == "revolute":
             lim = motion.rotationLimits
-            rest = motion.restValue if hasattr(motion, "restValue") else 0.0
         else:
             lim = motion.slideLimits
-            rest = motion.restValue if hasattr(motion, "restValue") else 0.0
+        rest = lim.restValue if hasattr(lim, "restValue") else 0.0
     except Exception:
         return None
     out = {"rest": float(rest)}
@@ -1497,10 +1528,14 @@ def fmt_joints(joints):
         lim = j.get("limits_rad") or {}
         if lim:
             min_d = (
-                f"{_rad_to_deg(lim['min']):+.1f}deg" if lim.get("min") is not None else "--"
+                f"{_rad_to_deg(lim['min']):+.1f}deg"
+                if lim.get("min") is not None
+                else "--"
             )
             max_d = (
-                f"{_rad_to_deg(lim['max']):+.1f}deg" if lim.get("max") is not None else "--"
+                f"{_rad_to_deg(lim['max']):+.1f}deg"
+                if lim.get("max") is not None
+                else "--"
             )
             rest = lim.get("rest", 0.0)
             rest_d = _rad_to_deg(rest) if rest is not None else 0.0
@@ -1525,8 +1560,7 @@ def _summarize_joint(j):
     range_txt = ""
     if lim and lim.get("min") is not None and lim.get("max") is not None:
         range_txt = (
-            f"  [{_rad_to_deg(lim['min']):+.0f}deg, "
-            f"{_rad_to_deg(lim['max']):+.0f}deg]"
+            f"  [{_rad_to_deg(lim['min']):+.0f}deg, {_rad_to_deg(lim['max']):+.0f}deg]"
         )
     axis_name = j.get("axis_construction_name") or "?"
     return f"  {name} ({type_tag}, axis={axis_name}){range_txt}"
@@ -1534,6 +1568,7 @@ def _summarize_joint(j):
 
 def _rad_to_deg(rad):
     import math
+
     try:
         return math.degrees(float(rad))
     except Exception:
@@ -1543,21 +1578,26 @@ def _rad_to_deg(rad):
 # A re-export immediately tells the user whether the CAD still matches
 # ASSEMBLY_HIERARCHY.md.
 _REQUIRED_FS_POINTS = (
-    "LegMountPointFL", "LegMountPointFR", "LegMountPointBR", "LegMountPointBL",
+    "LegMountPointFL",
+    "LegMountPointFR",
+    "LegMountPointBR",
+    "LegMountPointBL",
 )
 _REQUIRED_FHLA_POINTS = (
-    "BodyToLink1Point", "Link1ToLink2Point", "Link2ToLink3Point",
+    "BodyToLink1Point",
+    "Link1ToLink2Point",
+    "Link2ToLink3Point",
 )
 _REQUIRED_FHLA_OCCS = {
-    "Link1L:1":              {"body": "Link1"},
-    "Link1R:1":              {"body": "Link1R"},
-    "Link2L:1":              {"body": "Link2"},
-    "Link3L:1":              {"body": "Link3"},
-    "MotorMount:1":          {"body": "LegMountL", "point": "LegMountFixedPoint"},
-    "MotorMountR:1":         {"body": "LegMountR", "point": "LegMountFixedPoint"},
-    "Servo_Mouser_Model:1":  {"body": "ServoBase"},
-    "Servo_Mouser_Model:2":  {"body": "ServoBase"},
-    "Servo_Mouser_Model:3":  {"body": "ServoBase"},
+    "Link1L:1": {"body": "Link1"},
+    "Link1R:1": {"body": "Link1R"},
+    "Link2L:1": {"body": "Link2"},
+    "Link3L:1": {"body": "Link3"},
+    "MotorMount:1": {"body": "LegMountL", "point": "LegMountFixedPoint"},
+    "MotorMountR:1": {"body": "LegMountR", "point": "LegMountFixedPoint"},
+    "Servo_Mouser_Model:1": {"body": "ServoBase"},
+    "Servo_Mouser_Model:2": {"body": "ServoBase"},
+    "Servo_Mouser_Model:3": {"body": "ServoBase"},
 }
 _REQUIRED_JOINTS = ("Link1Revolute", "Link2Revolute", "Link3Revolute")
 
@@ -1578,8 +1618,7 @@ def _verify_against_assembly_hierarchy(occurrences_json, joints, mesh_files):
         None,
     )
     fhla = next(
-        (o for o in occurrences_json
-         if o.get("name") == "FaceHuggerLegAssembly:1"),
+        (o for o in occurrences_json if o.get("name") == "FaceHuggerLegAssembly:1"),
         None,
     )
 
@@ -1589,8 +1628,7 @@ def _verify_against_assembly_hierarchy(occurrences_json, joints, mesh_files):
     def _has_body(node, body_name):
         bodies = node.get("bodies") or []
         return any(
-            (b.get("name") if isinstance(b, dict) else b) == body_name
-            for b in bodies
+            (b.get("name") if isinstance(b, dict) else b) == body_name for b in bodies
         )
 
     def _mark(ok):
@@ -1600,15 +1638,16 @@ def _verify_against_assembly_hierarchy(occurrences_json, joints, mesh_files):
 
     # 1. FlexibleSkeleton points
     fs_ok = bool(fs) and all(_has_point(fs, n) for n in _REQUIRED_FS_POINTS)
-    rows.append(f"  {_mark(fs_ok)} FlexibleSkeleton points "
-                f"({', '.join(_REQUIRED_FS_POINTS)})")
+    rows.append(
+        f"  {_mark(fs_ok)} FlexibleSkeleton points ({', '.join(_REQUIRED_FS_POINTS)})"
+    )
 
     # 2. FaceHuggerLegAssembly points
-    fhla_pts_ok = (
-        bool(fhla) and all(_has_point(fhla, n) for n in _REQUIRED_FHLA_POINTS)
+    fhla_pts_ok = bool(fhla) and all(_has_point(fhla, n) for n in _REQUIRED_FHLA_POINTS)
+    rows.append(
+        f"  {_mark(fhla_pts_ok)} FaceHuggerLegAssembly points "
+        f"({', '.join(_REQUIRED_FHLA_POINTS)})"
     )
-    rows.append(f"  {_mark(fhla_pts_ok)} FaceHuggerLegAssembly points "
-                f"({', '.join(_REQUIRED_FHLA_POINTS)})")
 
     # 3. Bracket alignment cross-check
     cross_ok = False
@@ -1616,14 +1655,20 @@ def _verify_against_assembly_hierarchy(occurrences_json, joints, mesh_files):
         fs_pts = {p.get("name"): p for p in (fs.get("points") or [])}
         fl = fs_pts.get("LegMountPointFL")
         mm = next(
-            (c for c in (fhla.get("children") or [])
-             if c.get("name") == "MotorMount:1"),
+            (
+                c
+                for c in (fhla.get("children") or [])
+                if c.get("name") == "MotorMount:1"
+            ),
             None,
         )
         if fl and mm:
             fp = next(
-                (p for p in (mm.get("points") or [])
-                 if p.get("name") == "LegMountFixedPoint"),
+                (
+                    p
+                    for p in (mm.get("points") or [])
+                    if p.get("name") == "LegMountFixedPoint"
+                ),
                 None,
             )
             if fp:
@@ -1631,8 +1676,9 @@ def _verify_against_assembly_hierarchy(occurrences_json, joints, mesh_files):
                 b = fp.get("pos_world_mm") or [0, 0, 0]
                 d = sum((a[i] - b[i]) ** 2 for i in range(3)) ** 0.5
                 cross_ok = d <= 1.0
-    rows.append(f"  {_mark(cross_ok)} MotorMount LegMountFixedPoint "
-                "≈ LegMountPointFL (≤ 1mm)")
+    rows.append(
+        f"  {_mark(cross_ok)} MotorMount LegMountFixedPoint ≈ LegMountPointFL (≤ 1mm)"
+    )
 
     # 4. FaceHuggerLegAssembly occurrences + bodies. Visibility-tolerant:
     # an occurrence counts as "found" if it's either in the (visibility-
@@ -1679,16 +1725,17 @@ def _verify_against_assembly_hierarchy(occurrences_json, joints, mesh_files):
                     point_warnings.append(
                         f"{occ_name} is hidden — can't verify {expect['point']}"
                     )
-    rows.append(f"  {_mark(occ_ok)} LegAssembly occurrences + bodies "
-                "(via JSON tree or mesh_files)")
+    rows.append(
+        f"  {_mark(occ_ok)} LegAssembly occurrences + bodies "
+        "(via JSON tree or mesh_files)"
+    )
     for w in point_warnings:
         rows.append(f"    note: {w}")
 
     # 5. Joints
     joint_names = {j.get("name") for j in joints}
     j_ok = all(n in joint_names for n in _REQUIRED_JOINTS)
-    rows.append(f"  {_mark(j_ok)} Joints array "
-                f"({', '.join(_REQUIRED_JOINTS)})")
+    rows.append(f"  {_mark(j_ok)} Joints array ({', '.join(_REQUIRED_JOINTS)})")
 
     return rows
 
@@ -1817,9 +1864,11 @@ def run(_context: str):
         # CAD names / construction-point names don't blow up on a default
         # cp1252-style write encoding inside Fusion.
         with open(txt_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(
-                header + fmt_tree(export["occurrences"]) + [""] + joints_lines
-            ))
+            f.write(
+                "\n".join(
+                    header + fmt_tree(export["occurrences"]) + [""] + joints_lines
+                )
+            )
 
         # Diagnostic against ASSEMBLY_HIERARCHY checklist. Lets the user see
         # immediately whether the export lines up with the spec.
