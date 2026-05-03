@@ -189,9 +189,9 @@ def run_teleop(gait_name="trot", gui=True, duration=600.0):
                 cfg.get("shoulder_splay", 0.0),
                 cfg.get("splay_signs", {}),
             )
-            targets[f"{leg_id}_shoulder_joint"] = theta_s
-            targets[f"{leg_id}_hip_joint"] = theta_h
-            targets[f"{leg_id}_knee_joint"] = theta_k
+            targets[f"{leg_id}_link1_joint"] = theta_s
+            targets[f"{leg_id}_link2_joint"] = theta_h
+            targets[f"{leg_id}_link3_joint"] = theta_k
 
         for joint_name, angle in targets.items():
             idx = joint_map.get(joint_name)

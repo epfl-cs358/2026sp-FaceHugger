@@ -10,7 +10,10 @@ import pybullet_data
 from constants import TIMESTEP
 from helpers import (
     _wrap_pi,
-    apply_joint_targets, apply_leg_pose, build_joint_map, reset_to_stance,
+    apply_joint_targets,
+    apply_leg_pose,
+    build_joint_map,
+    reset_to_stance,
 )
 
 
@@ -20,20 +23,20 @@ from helpers import (
 
 GAITS = {
     "walk": {
-        "period":      2.4,
+        "period": 2.4,
         "step_length": 0.04,
         "step_height": 0.02,
-        "duty":        0.25,
-        "offsets":     {"fl": 0.00, "br": 0.25, "fr": 0.50, "bl": 0.75},
-        "label":       "Static walk",
+        "duty": 0.25,
+        "offsets": {"fl": 0.00, "br": 0.25, "fr": 0.50, "bl": 0.75},
+        "label": "Static walk",
     },
     "trot": {
-        "period":      0.8,
+        "period": 0.8,
         "step_length": 0.05,
         "step_height": 0.025,
-        "duty":        0.5,
-        "offsets":     {"fl": 0.0, "br": 0.0, "fr": 0.5, "bl": 0.5},
-        "label":       "Trot (diagonal pairs)",
+        "duty": 0.5,
+        "offsets": {"fl": 0.0, "br": 0.0, "fr": 0.5, "bl": 0.5},
+        "label": "Trot (diagonal pairs)",
     },
 }
 
@@ -49,8 +52,10 @@ _TRAJ_COLORS = {
 # Foot trajectory + per-tick joint targets
 # --------------------------------------------------------------------------- #
 
-def foot_target(neutral_foot, leg_id, phase, step_length, step_height, duty,
-                swing_axis="y"):
+
+def foot_target(
+    neutral_foot, leg_id, phase, step_length, step_height, duty, swing_axis="y"
+):
     """Body-frame foot target. swing_axis selects which body axis steps forward.
     Body +Y is forward, so the default swing_axis="y" steps in the forward direction."""
     nx, ny, nz = neutral_foot[leg_id]
@@ -73,12 +78,18 @@ def gait_joint_targets(cfg, gait, t):
     targets = {}
     for leg_id, off in offsets.items():
         phase = (global_phase - off) % 1.0
-        foot = foot_target(cfg.neutral_foot, leg_id, phase,
-                           gait["step_length"], gait["step_height"], gait["duty"])
+        foot = foot_target(
+            cfg.neutral_foot,
+            leg_id,
+            phase,
+            gait["step_length"],
+            gait["step_height"],
+            gait["duty"],
+        )
         s, h, k = cfg.leg_ik(cfg, foot, leg_id)
-        targets[f"{leg_id}_shoulder_joint"] = s
-        targets[f"{leg_id}_hip_joint"]      = h
-        targets[f"{leg_id}_knee_joint"]     = k
+        targets[f"{leg_id}_link1_joint"] = s
+        targets[f"{leg_id}_link2_joint"] = h
+        targets[f"{leg_id}_link3_joint"] = k
     return targets
 
 
@@ -100,9 +111,17 @@ def _precompute_cycle(cfg, gait):
     offsets = gait["offsets"]
     cycles = {}
     for leg_id in offsets:
-        pts = [foot_target(cfg.neutral_foot, leg_id, k / _TRAJ_SAMPLES,
-                           gait["step_length"], gait["step_height"], gait["duty"])
-               for k in range(_TRAJ_SAMPLES)]
+        pts = [
+            foot_target(
+                cfg.neutral_foot,
+                leg_id,
+                k / _TRAJ_SAMPLES,
+                gait["step_length"],
+                gait["step_height"],
+                gait["duty"],
+            )
+            for k in range(_TRAJ_SAMPLES)
+        ]
         pts.append(pts[0])
         cycles[leg_id] = pts
     return cycles
@@ -118,22 +137,30 @@ def _draw_overlay(robot_id, cycles, current_targets):
             key = (leg_id, k - 1)
             lid = _LINE_IDS.get(key)
             _LINE_IDS[key] = p.addUserDebugLine(
-                prev, cur, lineColorRGB=color, lineWidth=1.5,
+                prev,
+                cur,
+                lineColorRGB=color,
+                lineWidth=1.5,
                 replaceItemUniqueId=lid if lid is not None else -1,
             )
             prev = cur
         tw = _body_to_world(current_targets[leg_id], base_pos, base_orn)
         s = 0.012
-        axes = [((-s, 0, 0), (s, 0, 0)),
-                ((0, -s, 0), (0, s, 0)),
-                ((0, 0, -s), (0, 0, s))]
+        axes = [
+            ((-s, 0, 0), (s, 0, 0)),
+            ((0, -s, 0), (0, s, 0)),
+            ((0, 0, -s), (0, 0, s)),
+        ]
         for i, (a, b) in enumerate(axes):
             p0 = tuple(tw[j] + a[j] for j in range(3))
             p1 = tuple(tw[j] + b[j] for j in range(3))
             mkey = (leg_id, i)
             mid = _MARK_IDS.get(mkey)
             _MARK_IDS[mkey] = p.addUserDebugLine(
-                p0, p1, lineColorRGB=color, lineWidth=3.0,
+                p0,
+                p1,
+                lineColorRGB=color,
+                lineWidth=3.0,
                 replaceItemUniqueId=mid if mid is not None else -1,
             )
 
@@ -141,6 +168,7 @@ def _draw_overlay(robot_id, cycles, current_targets):
 # --------------------------------------------------------------------------- #
 # Simulation entry points
 # --------------------------------------------------------------------------- #
+
 
 def _body_height_for_gait(cfg, gait, period_s, samples_per_period=100):
     """Maximum foot-depth below body origin sampled over one gait period.
@@ -154,8 +182,12 @@ def _body_height_for_gait(cfg, gait, period_s, samples_per_period=100):
         for leg_id, off in offsets.items():
             phase = (global_phase - off) % 1.0
             foot = foot_target(
-                cfg.neutral_foot, leg_id, phase,
-                gait["step_length"], gait["step_height"], gait["duty"],
+                cfg.neutral_foot,
+                leg_id,
+                phase,
+                gait["step_length"],
+                gait["step_height"],
+                gait["duty"],
             )
             if -foot[2] > worst:
                 worst = -foot[2]
@@ -168,8 +200,9 @@ def _settle(robot_id, joint_map, cfg, duration_s):
     No visible debug draws here — just physics."""
     n_steps = int(duration_s / TIMESTEP)
     for _ in range(n_steps):
-        apply_leg_pose(robot_id, joint_map, cfg.stance_rad,
-                       cfg.servo_force, cfg.servo_velocity)
+        apply_leg_pose(
+            robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity
+        )
         p.stepSimulation()
 
 
@@ -195,8 +228,9 @@ def _connect_and_setup(cfg, gui):
     joint_map = build_joint_map(robot_id)
     # stance_rad is already per-leg; reset + motor-command from the same dict.
     reset_to_stance(robot_id, joint_map, cfg.stance_rad)
-    apply_leg_pose(robot_id, joint_map, cfg.stance_rad,
-                   cfg.servo_force, cfg.servo_velocity)
+    apply_leg_pose(
+        robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity
+    )
 
     # Friction on the distal link (knee joint's child = lower leg).
     for name, idx in joint_map.items():
@@ -205,25 +239,31 @@ def _connect_and_setup(cfg, gui):
 
     if gui:
         p.resetDebugVisualizerCamera(
-            cameraDistance=0.55, cameraYaw=45, cameraPitch=-25,
+            cameraDistance=0.55,
+            cameraYaw=45,
+            cameraPitch=-25,
             cameraTargetPosition=[0, 0, 0.1],
         )
     return robot_id, joint_map
 
 
 def _print_banner(cfg):
-    print(f"\n=== FaceHugger sim ===")
+    print("\n=== FaceHugger sim ===")
     print(f"  URDF: {os.path.basename(cfg.urdf_path)}")
     print(f"  legs: {list(cfg.legs.keys())}")
     print(f"  servo: force={cfg.servo_force} N*m  vel={cfg.servo_velocity} rad/s")
-    print(f"  body_height: {cfg.body_height*1000:.1f} mm")
-    print(f"  stance (deg, per leg):")
+    print(f"  body_height: {cfg.body_height * 1000:.1f} mm")
+    print("  stance (deg, per leg):")
     for leg_id, s in cfg.stance_rad.items():
-        print(f"    {leg_id}: shoulder={math.degrees(s['shoulder']):+.1f}  "
-              f"hip={math.degrees(s['hip']):+.1f}  knee={math.degrees(s['knee']):+.1f}")
+        print(
+            f"    {leg_id}: shoulder={math.degrees(s['shoulder']):+.1f}  "
+            f"hip={math.degrees(s['hip']):+.1f}  knee={math.degrees(s['knee']):+.1f}"
+        )
     for leg_id, foot in cfg.neutral_foot.items():
-        print(f"    {leg_id}: foot = "
-              f"({foot[0]*1000:+6.1f}, {foot[1]*1000:+6.1f}, {foot[2]*1000:+6.1f}) mm")
+        print(
+            f"    {leg_id}: foot = "
+            f"({foot[0] * 1000:+6.1f}, {foot[1] * 1000:+6.1f}, {foot[2] * 1000:+6.1f}) mm"
+        )
 
     # IK round-trip check: recover stance angles from neutral foot.
     tol = math.radians(2.0)
@@ -235,8 +275,10 @@ def _print_banner(cfg):
         dk = abs(k - target["knee"])
         ok = max(ds, dh, dk) < tol
         tag = "OK" if ok else "FAIL"
-        print(f"    IK[{leg_id}]: ds={math.degrees(ds):+.2f} dh={math.degrees(dh):+.2f} "
-              f"dk={math.degrees(dk):+.2f} [{tag}]")
+        print(
+            f"    IK[{leg_id}]: ds={math.degrees(ds):+.2f} dh={math.degrees(dh):+.2f} "
+            f"dk={math.degrees(dk):+.2f} [{tag}]"
+        )
 
 
 def run_stand(cfg, gui=True, settle_s=0.5):
@@ -268,8 +310,10 @@ def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
     # gait's stance-phase Z differs from the neutral Z used at build time.
     gait_depth_m = _body_height_for_gait(cfg, gait, gait["period"])
     if gait_depth_m > cfg.body_height:
-        print(f"[body_height] lifting spawn from {cfg.body_height*1000:.1f} mm "
-              f"to {gait_depth_m*1000:.1f} mm for {gait_name} trajectory")
+        print(
+            f"[body_height] lifting spawn from {cfg.body_height * 1000:.1f} mm "
+            f"to {gait_depth_m * 1000:.1f} mm for {gait_name} trajectory"
+        )
         cfg.body_height = gait_depth_m
 
     robot_id, joint_map = _connect_and_setup(cfg, gui)
@@ -277,9 +321,11 @@ def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
     if settle_s > 0:
         print(f"\n[settle] holding stance for {settle_s:.2f}s before gait")
         _settle(robot_id, joint_map, cfg, settle_s)
-    print(f"\n{gait['label']}: period={gait['period']:.2f}s  "
-          f"len={gait['step_length']*1000:.0f}mm  h={gait['step_height']*1000:.0f}mm  "
-          f"duty={gait['duty']:.2f}")
+    print(
+        f"\n{gait['label']}: period={gait['period']:.2f}s  "
+        f"len={gait['step_length'] * 1000:.0f}mm  h={gait['step_height'] * 1000:.0f}mm  "
+        f"duty={gait['duty']:.2f}"
+    )
 
     draw_overlay = gui
     cycles = _precompute_cycle(cfg, gait) if draw_overlay else None
@@ -290,16 +336,22 @@ def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
     try:
         while p.isConnected():
             targets = gait_joint_targets(cfg, gait, t)
-            apply_joint_targets(robot_id, joint_map, targets,
-                                cfg.servo_force, cfg.servo_velocity)
+            apply_joint_targets(
+                robot_id, joint_map, targets, cfg.servo_force, cfg.servo_velocity
+            )
             if draw_overlay and step % draw_every == 0:
                 offsets = gait["offsets"]
                 global_phase = (t / gait["period"]) % 1.0
                 cur_targets = {
                     leg_id: foot_target(
-                        cfg.neutral_foot, leg_id, (global_phase - off) % 1.0,
-                        gait["step_length"], gait["step_height"], gait["duty"],
-                    ) for leg_id, off in offsets.items()
+                        cfg.neutral_foot,
+                        leg_id,
+                        (global_phase - off) % 1.0,
+                        gait["step_length"],
+                        gait["step_height"],
+                        gait["duty"],
+                    )
+                    for leg_id, off in offsets.items()
                 }
                 _draw_overlay(robot_id, cycles, cur_targets)
 

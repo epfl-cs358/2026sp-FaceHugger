@@ -13,6 +13,7 @@ import pybullet as p
 # Math utilities
 # --------------------------------------------------------------------------- #
 
+
 def _clamp(x, lo, hi):
     return max(lo, min(hi, x))
 
@@ -28,6 +29,7 @@ def _parse_xyz(s):
 # --------------------------------------------------------------------------- #
 # URDF / STL / fusion_export.json parsing
 # --------------------------------------------------------------------------- #
+
 
 def _parse_leg_points_from_urdf(urdf_path):
     """Read the LEG ASSEMBLY METADATA comment block the generator writes near
@@ -75,14 +77,17 @@ def _load_urdf_joints(urdf_path):
         axis = _parse_xyz(ax.get("xyz")) if ax is not None else (1, 0, 0)
         lim = j.find("limit")
         if lim is not None:
-            limits = (float(lim.get("lower", -math.pi)),
-                      float(lim.get("upper",  math.pi)),
-                      float(lim.get("effort", 0.0)),
-                      float(lim.get("velocity", 0.0)))
+            limits = (
+                float(lim.get("lower", -math.pi)),
+                float(lim.get("upper", math.pi)),
+                float(lim.get("effort", 0.0)),
+                float(lim.get("velocity", 0.0)),
+            )
         else:
             limits = (-math.pi, math.pi, 0.0, 0.0)
-        out[name] = dict(parent=parent, child=child, xyz=xyz, rpy=rpy,
-                         axis=axis, limits=limits)
+        out[name] = dict(
+            parent=parent, child=child, xyz=xyz, rpy=rpy, axis=axis, limits=limits
+        )
     return out
 
 
@@ -153,10 +158,17 @@ def _foot_tip_from_fusion(fusion_json_path):
 # Joint-map plumbing + motor application
 # --------------------------------------------------------------------------- #
 
+
 def _joint_type_from_name(name):
-    if "shoulder" in name: return "shoulder"
-    if "hip" in name:      return "hip"
-    if "knee" in name:     return "knee"
+    # URDF joint names follow the Fusion-aligned `{leg_id}_link{1,2,3}_joint`
+    # pattern; the role mapping (link1=shoulder, link2=hip, link3=knee)
+    # lives here so callers can keep speaking in semantic stance keys.
+    if "link1" in name:
+        return "shoulder"
+    if "link2" in name:
+        return "hip"
+    if "link3" in name:
+        return "knee"
     return None
 
 
@@ -192,9 +204,12 @@ def apply_leg_pose(robot_id, joint_map, per_leg_stance, force, velocity):
         if jtype is None or leg not in per_leg_stance:
             continue
         p.setJointMotorControl2(
-            robot_id, idx, p.POSITION_CONTROL,
+            robot_id,
+            idx,
+            p.POSITION_CONTROL,
             targetPosition=per_leg_stance[leg][jtype],
-            force=force, maxVelocity=velocity,
+            force=force,
+            maxVelocity=velocity,
         )
 
 
@@ -205,6 +220,10 @@ def apply_joint_targets(robot_id, joint_map, targets, force, velocity):
         if idx is None:
             continue
         p.setJointMotorControl2(
-            robot_id, idx, p.POSITION_CONTROL,
-            targetPosition=angle, force=force, maxVelocity=velocity,
+            robot_id,
+            idx,
+            p.POSITION_CONTROL,
+            targetPosition=angle,
+            force=force,
+            maxVelocity=velocity,
         )

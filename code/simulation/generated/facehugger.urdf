@@ -77,21 +77,21 @@
          FootTip (leg_lower.stl max +Y centroid, in link3 frame): -30.946 -13.000 0.024 -->
 
   <!-- LEG: FL  (side=L, rpy_z_deg=+0.0, shoulder limits=[-105.0°, +45.0°]) -->
-  <joint name="fl_shoulder_joint" type="revolute">
+  <joint name="fl_link1_joint" type="revolute">
     <parent link="base_link"/>
     <child link="fl_link1"/>
     <origin xyz="-0.057901 0.046222 -0.009000" rpy="0 0 0.0"/>
     <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
     <limit lower="-1.832596" upper="0.785398" effort="2.94" velocity="5.0"/>
   </joint>
-  <joint name="fl_hip_joint" type="revolute">
+  <joint name="fl_link2_joint" type="revolute">
     <parent link="fl_link1"/>
     <child link="fl_link2"/>
     <origin xyz="-0.055920 0.022595 0.014446" rpy="0 0 0.0"/>
     <axis xyz="1.1796119636642283e-16 1.000000000000004 2.428612866511427e-17"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
-  <joint name="fl_knee_joint" type="revolute">
+  <joint name="fl_link3_joint" type="revolute">
     <parent link="fl_link2"/>
     <child link="fl_link3"/>
     <origin xyz="-0.089700 0.000005 0.000000" rpy="0 0 0.0"/>
@@ -169,21 +169,21 @@
   </link>
 
   <!-- LEG: BR  (side=L, rpy_z_deg=+180.0, shoulder limits=[-45.0°, +105.0°]) -->
-  <joint name="br_shoulder_joint" type="revolute">
+  <joint name="br_link1_joint" type="revolute">
     <parent link="base_link"/>
     <child link="br_link1"/>
     <origin xyz="0.057901 -0.046222 -0.009000" rpy="0 0 3.141593"/>
     <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
     <limit lower="-0.785398" upper="1.832596" effort="2.94" velocity="5.0"/>
   </joint>
-  <joint name="br_hip_joint" type="revolute">
+  <joint name="br_link2_joint" type="revolute">
     <parent link="br_link1"/>
     <child link="br_link2"/>
     <origin xyz="-0.055920 0.022595 0.014446" rpy="0 0 0.0"/>
     <axis xyz="1.1796119636642283e-16 1.000000000000004 2.428612866511427e-17"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
-  <joint name="br_knee_joint" type="revolute">
+  <joint name="br_link3_joint" type="revolute">
     <parent link="br_link2"/>
     <child link="br_link3"/>
     <origin xyz="-0.089700 0.000005 0.000000" rpy="0 0 0.0"/>
@@ -261,21 +261,21 @@
   </link>
 
   <!-- LEG: FR  (side=R, rpy_z_deg=+0.0, shoulder limits=[-45.0°, +105.0°]) -->
-  <joint name="fr_shoulder_joint" type="revolute">
+  <joint name="fr_link1_joint" type="revolute">
     <parent link="base_link"/>
     <child link="fr_link1"/>
     <origin xyz="0.057901 0.046222 -0.009000" rpy="0 0 0.0"/>
     <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
     <limit lower="-0.785398" upper="1.832596" effort="2.94" velocity="5.0"/>
   </joint>
-  <joint name="fr_hip_joint" type="revolute">
+  <joint name="fr_link2_joint" type="revolute">
     <parent link="fr_link1"/>
     <child link="fr_link2"/>
     <origin xyz="0.055920 0.022595 0.014446" rpy="0 0 0.0"/>
     <axis xyz="-1.1796119636642283e-16 -1.000000000000004 -2.428612866511427e-17"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
-  <joint name="fr_knee_joint" type="revolute">
+  <joint name="fr_link3_joint" type="revolute">
     <parent link="fr_link2"/>
     <child link="fr_link3"/>
     <origin xyz="0.089700 0.000005 0.000000" rpy="0 0 0.0"/>
@@ -353,21 +353,21 @@
   </link>
 
   <!-- LEG: BL  (side=R, rpy_z_deg=+180.0, shoulder limits=[-105.0°, +45.0°]) -->
-  <joint name="bl_shoulder_joint" type="revolute">
+  <joint name="bl_link1_joint" type="revolute">
     <parent link="base_link"/>
     <child link="bl_link1"/>
     <origin xyz="-0.057901 -0.046222 -0.009000" rpy="0 0 3.141593"/>
     <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
     <limit lower="-1.832596" upper="0.785398" effort="2.94" velocity="5.0"/>
   </joint>
-  <joint name="bl_hip_joint" type="revolute">
+  <joint name="bl_link2_joint" type="revolute">
     <parent link="bl_link1"/>
     <child link="bl_link2"/>
     <origin xyz="0.055920 0.022595 0.014446" rpy="0 0 0.0"/>
     <axis xyz="-1.1796119636642283e-16 -1.000000000000004 -2.428612866511427e-17"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
-  <joint name="bl_knee_joint" type="revolute">
+  <joint name="bl_link3_joint" type="revolute">
     <parent link="bl_link2"/>
     <child link="bl_link3"/>
     <origin xyz="0.089700 0.000005 0.000000" rpy="0 0 0.0"/>

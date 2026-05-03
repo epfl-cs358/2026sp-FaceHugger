@@ -236,9 +236,15 @@ class URDF:
             # inertial origin tracks the visible geometry.
             R = _euler_to_rot(mesh_rpy)
             com_local = [
-                R[0][0]*com_local[0] + R[0][1]*com_local[1] + R[0][2]*com_local[2],
-                R[1][0]*com_local[0] + R[1][1]*com_local[1] + R[1][2]*com_local[2],
-                R[2][0]*com_local[0] + R[2][1]*com_local[1] + R[2][2]*com_local[2],
+                R[0][0] * com_local[0]
+                + R[0][1] * com_local[1]
+                + R[0][2] * com_local[2],
+                R[1][0] * com_local[0]
+                + R[1][1] * com_local[1]
+                + R[1][2] * com_local[2],
+                R[2][0] * com_local[0]
+                + R[2][1] * com_local[1]
+                + R[2][2] * com_local[2],
             ]
         xyz_com = fmt_xyz(com_local)
         primary_rpy = mesh_rpy if mesh_rpy is not None else (0.0, 0.0, 0.0)
@@ -443,6 +449,7 @@ def _find_occ_rot(occs: list, name: str) -> list | None:
 
 # --- small 3x3 matrix helpers ------------------------------------------------
 
+
 def _mat_transpose_3x3(m):
     return [[m[j][i] for j in range(3)] for i in range(3)]
 
@@ -461,7 +468,7 @@ def _rot_to_urdf_rpy(r) -> tuple:
     at |pitch| = π/2 with the roll=0 convention."""
     # sin(pitch) = -r[2][0]   (from the ZYX decomposition)
     sp = -r[2][0]
-    sp = max(-1.0, min(1.0, sp))   # clip tiny FP overshoot
+    sp = max(-1.0, min(1.0, sp))  # clip tiny FP overshoot
     if abs(sp) > 1.0 - 1e-9:
         pitch = math.copysign(math.pi / 2, sp)
         roll = 0.0
@@ -481,7 +488,7 @@ def _link_rot_world(rpy_z_deg: float) -> list:
     s = math.sin(math.radians(rpy_z_deg))
     return [
         [c, -s, 0.0],
-        [s,  c, 0.0],
+        [s, c, 0.0],
         [0.0, 0.0, 1.0],
     ]
 
@@ -495,7 +502,7 @@ def _euler_to_rot(rpy_rad) -> list:
     return [
         [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
         [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
-        [-sp,      cp * sr,                 cp * cr],
+        [-sp, cp * sr, cp * cr],
     ]
 
 
@@ -522,13 +529,31 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # (rest/min/max). The cad-name → urdf-name + parent/child mapping is
     # fixed by convention (Link1Revolute = shoulder, etc.) so it lives
     # here rather than in the yaml.
+    # `urdf_name` here is the joint-name suffix (e.g. urdf_name="link1"
+    # → joint name "fl_link1_joint"), aligned with the Fusion CAD
+    # `LinkNRevolute` naming so the URDF, the JSON export, and the CAD
+    # all share one mental model. The semantic mapping
+    # link1=shoulder, link2=hip, link3=knee lives in
+    # helpers._joint_type_from_name.
     _JOINT_TOPOLOGY = [
-        {"cad_name": "Link1Revolute", "urdf_name": "shoulder",
-         "parent": "base_link", "child": "link1"},
-        {"cad_name": "Link2Revolute", "urdf_name": "hip",
-         "parent": "link1",     "child": "link2"},
-        {"cad_name": "Link3Revolute", "urdf_name": "knee",
-         "parent": "link2",     "child": "link3"},
+        {
+            "cad_name": "Link1Revolute",
+            "urdf_name": "link1",
+            "parent": "base_link",
+            "child": "link1",
+        },
+        {
+            "cad_name": "Link2Revolute",
+            "urdf_name": "link2",
+            "parent": "link1",
+            "child": "link2",
+        },
+        {
+            "cad_name": "Link3Revolute",
+            "urdf_name": "link3",
+            "parent": "link2",
+            "child": "link3",
+        },
     ]
 
     leg_tmpl = cfg["leg_template"]
@@ -538,9 +563,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
             f"Leg assembly occurrence not found: {leg_tmpl['leg_assembly_occurrence']}"
         )
 
-    cad_joints_by_name = {
-        j.get("name"): j for j in (export.get("joints") or [])
-    }
+    cad_joints_by_name = {j.get("name"): j for j in (export.get("joints") or [])}
 
     joint_defs = []
     for jcfg in _JOINT_TOPOLOGY:
@@ -559,21 +582,19 @@ def generate(export: dict, cfg: dict, out_path: Path):
                 f"axis_dir_local_unit in the export."
             )
         lim = cad.get("limits_rad") or {}
-        lim_min_deg = (
-            math.degrees(lim["min"]) if lim.get("min") is not None else None
+        lim_min_deg = math.degrees(lim["min"]) if lim.get("min") is not None else None
+        lim_max_deg = math.degrees(lim["max"]) if lim.get("max") is not None else None
+        joint_defs.append(
+            {
+                "urdf_name": jcfg["urdf_name"],
+                "parent": jcfg["parent"],
+                "child": jcfg["child"],
+                "cad_name": cad_name,
+                "origin_local_mm": origin_mm,
+                "axis_dir": axis_dir,
+                "limits_deg": [lim_min_deg, lim_max_deg],
+            }
         )
-        lim_max_deg = (
-            math.degrees(lim["max"]) if lim.get("max") is not None else None
-        )
-        joint_defs.append({
-            "urdf_name": jcfg["urdf_name"],
-            "parent": jcfg["parent"],
-            "child": jcfg["child"],
-            "cad_name": cad_name,
-            "origin_local_mm": origin_mm,
-            "axis_dir": axis_dir,
-            "limits_deg": [lim_min_deg, lim_max_deg],
-        })
 
     # Offsets between successive joints, in LAL (leg-assembly-local) frame
     # (== URDF link frame since rpy_z_deg only acts at the shoulder joint).
@@ -604,8 +625,15 @@ def generate(export: dict, cfg: dict, out_path: Path):
     mount_R_world = find_point_world_at_occurrence(
         occs, f"{LEG_ASSEMBLY}/MotorMountR:1", "LegMountFixedPoint"
     )
-    if any(v is None for v in (body_to_link1_world, link2_to_link3_world,
-                               mount_L_world, mount_R_world)):
+    if any(
+        v is None
+        for v in (
+            body_to_link1_world,
+            link2_to_link3_world,
+            mount_L_world,
+            mount_R_world,
+        )
+    ):
         raise ValueError(
             "Missing required construction points: BodyToLink1Point / "
             "Link2ToLink3Point / MotorMount(R) LegMountFixedPoint."
@@ -624,11 +652,13 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # position is the place where that bracket's shoulder servo sits in
     # the source-FL placement (L bracket) or the mirror (R bracket).
     shoulder_servo_L_world = find_point_world_at_occurrence(
-        occs, f"{LEG_ASSEMBLY}/MotorMount:1/Servo_Mouser_Model:1",
+        occs,
+        f"{LEG_ASSEMBLY}/MotorMount:1/Servo_Mouser_Model:1",
         "ServoMountPoint",
     )
     shoulder_servo_R_world = find_point_world_at_occurrence(
-        occs, f"{LEG_ASSEMBLY}/MotorMountR:1/Servo_Mouser_Model(Mirror):1",
+        occs,
+        f"{LEG_ASSEMBLY}/MotorMountR:1/Servo_Mouser_Model(Mirror):1",
         "ServoMountPoint",
     )
     # Top-level hip / knee servos: shared (no L/R variants in CAD).
@@ -640,20 +670,16 @@ def generate(export: dict, cfg: dict, out_path: Path):
     )
 
     shoulder_servo_L_offset = (
-        sub(shoulder_servo_L_world, mount_L_world)
-        if shoulder_servo_L_world else None
+        sub(shoulder_servo_L_world, mount_L_world) if shoulder_servo_L_world else None
     )
     shoulder_servo_R_offset = (
-        sub(shoulder_servo_R_world, mount_R_world)
-        if shoulder_servo_R_world else None
+        sub(shoulder_servo_R_world, mount_R_world) if shoulder_servo_R_world else None
     )
     hip_servo_offset_in_link1 = (
-        sub(hip_servo_world, body_to_link1_world)
-        if hip_servo_world else None
+        sub(hip_servo_world, body_to_link1_world) if hip_servo_world else None
     )
     knee_servo_offset_in_link3 = (
-        sub(knee_servo_world, link2_to_link3_world)
-        if knee_servo_world else None
+        sub(knee_servo_world, link2_to_link3_world) if knee_servo_world else None
     )
 
     # Per-role servo orientations. The shared `servo.stl` was exported
@@ -671,9 +697,9 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # Computed from JSON, this gives:
     #     M_hip  = Rx(-π/2)            →  rpy = (-π/2, 0, 0)
     #     M_knee = Rz(-π/2)·Ry(-π/2)   →  rpy = (0, -π/2, -π/2)
-    R_servo1 = _find_occ_rot(occs, "Servo_Mouser_Model:1")    # shoulder
-    R_servo2 = _find_occ_rot(occs, "Servo_Mouser_Model:2")    # hip
-    R_servo3 = _find_occ_rot(occs, "Servo_Mouser_Model:3")    # knee
+    R_servo1 = _find_occ_rot(occs, "Servo_Mouser_Model:1")  # shoulder
+    R_servo2 = _find_occ_rot(occs, "Servo_Mouser_Model:2")  # hip
+    R_servo3 = _find_occ_rot(occs, "Servo_Mouser_Model:3")  # knee
 
     def _relative_rpy(R_target):
         if R_target is None or R_servo1 is None:
@@ -700,7 +726,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
             return v
         c = math.cos(math.radians(angle_deg))
         s = math.sin(math.radians(angle_deg))
-        return [c*v[0] - s*v[1], s*v[0] + c*v[1], v[2]]
+        return [c * v[0] - s * v[1], s * v[0] + c * v[1], v[2]]
 
     # --- base_link ---
     urdf.comment("BASE LINK")
@@ -747,9 +773,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
 
         bracket_mesh = f"leg_mount_{side}.stl"
         if bracket_mesh in (export.get("mesh_files") or {}):
-            base_extra_visuals.append(
-                (bracket_mesh, list(mount_mm), bracket_rpy)
-            )
+            base_extra_visuals.append((bracket_mesh, list(mount_mm), bracket_rpy))
         else:
             print(
                 f"warning: {bracket_mesh} not in mesh_files; "
@@ -764,17 +788,19 @@ def generate(export: dict, cfg: dict, out_path: Path):
         # different world rotations (R_R · R_L^T = Ry(π)), but applying
         # that would flip the servo's Z-direction (shaft) which is
         # geometrically wrong for an unflippable physical part.
-        ss_offset = (
-            shoulder_servo_L_offset if side == "L"
-            else shoulder_servo_R_offset
-        )
+        ss_offset = shoulder_servo_L_offset if side == "L" else shoulder_servo_R_offset
         if servo_mesh_name and ss_offset is not None:
             rotated = _rotate_z(ss_offset, rpy_z_deg)
             ss_xyz = [mount_mm[i] + rotated[i] for i in range(3)]
             base_extra_visuals.append((servo_mesh_name, ss_xyz, bracket_rpy))
 
     urdf.link(
-        base_cfg["name"], base_cfg["mesh"], mesh_dir, mass, com, inertia,
+        base_cfg["name"],
+        base_cfg["mesh"],
+        mesh_dir,
+        mass,
+        com,
+        inertia,
         origin_shift_mm=_mesh_shift(export, base_cfg["mesh"]),
         extra_visuals=base_extra_visuals,
     )
@@ -837,9 +863,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
         # rotate by rpy_z for the back-of-pair flip.
         axis_offset = L_axis_offset if side == "L" else R_axis_offset
         rotated_axis_offset = _rotate_z(axis_offset, rpy_z)
-        shoulder_origin_xyz = [
-            mount_mm[i] + rotated_axis_offset[i] for i in range(3)
-        ]
+        shoulder_origin_xyz = [mount_mm[i] + rotated_axis_offset[i] for i in range(3)]
 
         # Shoulder limits per-leg from yaml (PIPELINE_SPEC §4 table).
         sj = joint_defs[0]
@@ -959,7 +983,12 @@ def generate(export: dict, cfg: dict, out_path: Path):
             )
             mass, com, inertia = get_physics(link_occ, fallback_mass=0.05)
             urdf.link(
-                link_name, mesh_name, mesh_dir, mass, com, inertia,
+                link_name,
+                mesh_name,
+                mesh_dir,
+                mass,
+                com,
+                inertia,
                 origin_shift_mm=_mesh_shift(export, mesh_name),
                 extra_visuals=link_extra_servos.get(link_key, []),
                 mesh_rpy=link_mesh_rpy.get(link_key),
