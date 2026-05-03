@@ -144,6 +144,42 @@ def fmt_rpy(r, p, y_deg):
     return f"0 0 {deg2rad(y_deg)}"
 
 
+def _wrap_pi(x):
+    """Wrap an angle in radians to (-pi, pi]."""
+    return (x + math.pi) % (2.0 * math.pi) - math.pi
+
+
+def _shoulder_rest_for(leg_id: str, fl_rest_rad: float) -> float:
+    """Convention A: derive each leg's shoulder rest (rad) from the FL
+    Fusion-export rest value via mirror+rotate symmetry.
+
+        FL = fl_rest_rad
+        FR = -fl_rest_rad                       (mirror across body Y-axis)
+        BL = wrap_pi(fl_rest_rad + pi)          (rotate FL by 180° around +Z)
+        BR = -wrap_pi(fl_rest_rad + pi)         (mirror BL)
+
+    See code/simulation/docs/MERGE_AND_CONVENTION.md §0 + §4 for the
+    convention spec.
+    """
+    if leg_id == "fl":
+        return fl_rest_rad
+    if leg_id == "fr":
+        return -fl_rest_rad
+    if leg_id == "bl":
+        return _wrap_pi(fl_rest_rad + math.pi)
+    if leg_id == "br":
+        return -_wrap_pi(fl_rest_rad + math.pi)
+    raise ValueError(f"_shoulder_rest_for: unknown leg_id {leg_id!r}")
+
+
+def _back_of_pair_rpy_z_deg(leg_id: str) -> float:
+    """Geometric back-of-pair flip: front legs (fl/fr) sit at 0°, back
+    legs (bl/br) at 180°. This is the Rz that positions the shoulder
+    pivot and back-bracket mesh — *separate* from Convention A's
+    kinematic shoulder rest, which goes into the URDF joint <origin rpy>."""
+    return 180.0 if leg_id.startswith("b") else 0.0
+
+
 def _foot_tip_from_stl(stl_path: Path, y_tol_mm: float = 2.0) -> list:
     """Centroid (in mm) of leg_lower STL vertices within y_tol_mm of max Y.
 
@@ -582,8 +618,11 @@ def generate(export: dict, cfg: dict, out_path: Path):
                 f"axis_dir_local_unit in the export."
             )
         lim = cad.get("limits_rad") or {}
-        lim_min_deg = math.degrees(lim["min"]) if lim.get("min") is not None else None
-        lim_max_deg = math.degrees(lim["max"]) if lim.get("max") is not None else None
+        lim_min_rad = lim.get("min")
+        lim_max_rad = lim.get("max")
+        lim_rest_rad = lim.get("rest", 0.0) or 0.0
+        lim_min_deg = math.degrees(lim_min_rad) if lim_min_rad is not None else None
+        lim_max_deg = math.degrees(lim_max_rad) if lim_max_rad is not None else None
         joint_defs.append(
             {
                 "urdf_name": jcfg["urdf_name"],
@@ -593,8 +632,29 @@ def generate(export: dict, cfg: dict, out_path: Path):
                 "origin_local_mm": origin_mm,
                 "axis_dir": axis_dir,
                 "limits_deg": [lim_min_deg, lim_max_deg],
+                "limits_rad": {
+                    "min": lim_min_rad,
+                    "max": lim_max_rad,
+                    "rest": lim_rest_rad,
+                },
             }
         )
+
+    # Convention A: the shoulder (Link1Revolute) rest value in the JSON
+    # defines FL's mechanical zero. The other 3 corners are derived via
+    # _shoulder_rest_for(leg_id, fl_rest_rad). The Fusion limits are also
+    # FL-relative; URDF limits = Fusion limits shifted by FL's rest, which
+    # by mirror symmetry produces the same shifted range for every leg.
+    fl_rest_rad = joint_defs[0]["limits_rad"]["rest"]
+    fl_min_rad = joint_defs[0]["limits_rad"]["min"]
+    fl_max_rad = joint_defs[0]["limits_rad"]["max"]
+    if fl_min_rad is None or fl_max_rad is None:
+        raise ValueError(
+            "Link1Revolute missing limits_rad.min/max in the export — "
+            "Convention A needs them to derive the URDF shoulder limit window."
+        )
+    shoulder_lower_deg = math.degrees(fl_min_rad - fl_rest_rad)
+    shoulder_upper_deg = math.degrees(fl_max_rad - fl_rest_rad)
 
     # Offsets between successive joints, in LAL (leg-assembly-local) frame
     # (== URDF link frame since rpy_z_deg only acts at the shoulder joint).
@@ -768,7 +828,10 @@ def generate(export: dict, cfg: dict, out_path: Path):
             )
             continue
         side = leg.get("side", "L")
-        rpy_z_deg = leg.get("rpy_z_deg", 0)
+        # Geometric back-of-pair flip (chassis-fixed bracket + servo). Derived
+        # from leg_id; not the kinematic shoulder rest (that's Convention A,
+        # applied to the URDF joint <origin rpy> only).
+        rpy_z_deg = _back_of_pair_rpy_z_deg(leg["id"])
         bracket_rpy = (0.0, 0.0, math.radians(rpy_z_deg))
 
         bracket_mesh = f"leg_mount_{side}.stl"
@@ -851,7 +914,6 @@ def generate(export: dict, cfg: dict, out_path: Path):
     #   * Knee servo (servo₃) same idea on link3.
     for leg in cfg["legs"]:
         leg_id = leg["id"]
-        rpy_z = leg.get("rpy_z_deg", 0)
         mount_key = leg["mount_point"]
         side = leg.get("side", "L")
 
@@ -859,27 +921,35 @@ def generate(export: dict, cfg: dict, out_path: Path):
         if not mount_mm:
             raise ValueError(f"Mount point not found in export: {mount_key}")
 
-        # Per-side axis offset (mounting-tab → rotation-axis), then
-        # rotate by rpy_z for the back-of-pair flip.
+        # Geometric back-of-pair rotation (0° front, 180° back) — used to
+        # position the shoulder joint origin in world. Distinct from the
+        # Convention-A kinematic shoulder rest, which goes into the URDF
+        # joint's <origin rpy>.
+        geometric_rpy_z_deg = _back_of_pair_rpy_z_deg(leg_id)
+
+        # Per-side axis offset (mounting-tab → rotation-axis), then rotate
+        # by the back-of-pair Rz so the shoulder pivot lands on
+        # BodyToLink1Point for this corner.
         axis_offset = L_axis_offset if side == "L" else R_axis_offset
-        rotated_axis_offset = _rotate_z(axis_offset, rpy_z)
+        rotated_axis_offset = _rotate_z(axis_offset, geometric_rpy_z_deg)
         shoulder_origin_xyz = [mount_mm[i] + rotated_axis_offset[i] for i in range(3)]
 
-        # Shoulder limits per-leg from yaml (PIPELINE_SPEC §4 table).
+        # Convention A: shoulder rest baked into the URDF rpy comes from
+        # FL's Fusion-export rest, mirrored per-leg via _shoulder_rest_for.
+        # URDF θ=0 then equals each leg's mechanical zero.
         sj = joint_defs[0]
-        per_leg_limits = leg.get("shoulder_limits_deg")
-        if per_leg_limits is not None:
-            sj_lower, sj_upper = per_leg_limits
-        else:
-            sj_lower, sj_upper = sj["limits_deg"]
+        shoulder_rest_rad = _shoulder_rest_for(leg_id, fl_rest_rad)
+        shoulder_rest_deg = math.degrees(shoulder_rest_rad)
 
         urdf.comment(
-            f"LEG: {leg_id.upper()}  (side={side}, rpy_z_deg={rpy_z:+.1f}, "
-            f"shoulder limits=[{sj_lower:+.1f}°, {sj_upper:+.1f}°])"
+            f"LEG: {leg_id.upper()}  (side={side}, "
+            f"shoulder_rest={shoulder_rest_deg:+.1f}°, "
+            f"limits=[{shoulder_lower_deg:+.1f}°, {shoulder_upper_deg:+.1f}°])"
         )
 
-        # Shoulder joint: origin = world position of the rotation axis
-        # for this corner (= mount + rotated side-offset).
+        # Shoulder joint: origin = world position of the rotation axis for
+        # this corner (= mount + rotated side-offset). rpy_z carries the
+        # Convention-A rest so URDF θ=0 lands at the Fusion mechanical zero.
         urdf.joint(
             name=f"{leg_id}_{sj['urdf_name']}_joint",
             jtype="revolute",
@@ -887,11 +957,11 @@ def generate(export: dict, cfg: dict, out_path: Path):
             child=f"{leg_id}_link1",
             origin_mm=shoulder_origin_xyz,
             axis=sj["axis_dir"],
-            lower_deg=sj_lower,
-            upper_deg=sj_upper,
+            lower_deg=shoulder_lower_deg,
+            upper_deg=shoulder_upper_deg,
             effort=effort,
             velocity=vel,
-            rpy_z_deg=rpy_z,
+            rpy_z_deg=shoulder_rest_deg,
         )
 
         # Hip + knee joints. For the R pair we apply two flips so that

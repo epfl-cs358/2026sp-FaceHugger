@@ -49,49 +49,42 @@ leg_template:
       mesh: "leg_lower.stl"
 
 # ---------------------------------------------------------------------------
-# 4 leg instances. PIPELINE_SPEC §1, §3, §4 are authoritative for these
-# values. In short:
+# 4 leg instances. Each entry only tells the URDF generator three things
+# the JSON can't: the human-readable id, which body landmark to mount on,
+# and which side mesh to use (L vs R).
 #
-#   - Diagonal pairs share a mesh. {FL, BR} use the L mesh; {FR, BL} use R.
-#   - rpy_z_deg = 0 for the "base" leg of each pair (FL with L, FR with R).
-#     rpy_z_deg = 180 for the "back" leg of each pair (BR, BL) — rotates
-#     the leg geometry 180° around its own LegMountPointXX so it faces
-#     outward instead of inward.
-#   - Shoulder limits are flipped for legs whose zero direction is +X
-#     (FR, BR) vs -X (FL, BL): per §4, +X legs get [-45°, +105°] and -X
-#     legs get [-105°, +45°].
-#   - shoulder_neutral_deg = 0° for all legs — zero is "leg pointing
-#     along the chassis ±X axis" per §4. simulate derives standing
-#     pose from this.
+# All three former yaml fields below were dropped after Convention A
+# landed (see code/simulation/docs/MERGE_AND_CONVENTION.md):
+#
+#   - rpy_z_deg            -> derived from the FL Fusion rest in JSON
+#                             (FR=-FL, BL=wrap_pi(FL+π), BR=-wrap_pi(FL+π)).
+#                             The geometric back-of-pair flip (0° / 180°)
+#                             is now derived from leg_id ("b*" = back).
+#   - shoulder_limits_deg  -> URDF limits = Fusion limits shifted relative
+#                             to FL's rest; symmetric for every leg by
+#                             mirror symmetry. Computed in generate_urdf.py.
+#   - shoulder_neutral_deg -> identical to URDF θ=0 under Convention A
+#                             (URDF rest IS the Fusion mechanical zero).
+#                             Stance code reads stance_rad["shoulder"] = 0.
+#
+# Diagonal-pair mesh sharing: {FL, BR} use the L mesh; {FR, BL} use R.
 # ---------------------------------------------------------------------------
 legs:
   - id: fl
     mount_point: LegMountPointFL
     side: L
-    rpy_z_deg: 0
-    shoulder_limits_deg: [-105, +45]
-    shoulder_neutral_deg: 0
 
   - id: br
     mount_point: LegMountPointBR
     side: L
-    rpy_z_deg: 180
-    shoulder_limits_deg: [-45, +105]
-    shoulder_neutral_deg: 0
 
   - id: fr
     mount_point: LegMountPointFR
     side: R
-    rpy_z_deg: 0
-    shoulder_limits_deg: [-45, +105]
-    shoulder_neutral_deg: 0
 
   - id: bl
     mount_point: LegMountPointBL
     side: R
-    rpy_z_deg: 180
-    shoulder_limits_deg: [-105, +45]
-    shoulder_neutral_deg: 0
 
 # ---------------------------------------------------------------------------
 # Servo physical properties (used for inertial blocks if physics export
