@@ -11,12 +11,10 @@ MESH_DIR = os.path.join(GENERATED_DIR, "exported_meshes")
 
 TIMESTEP = 1.0 / 240.0
 
-# Hip/knee stance is shared across legs (R_L1 = I because yaml rpy_z_deg = 90
-# for all legs). Shoulder stance is per-leg and lives in the yaml as each leg's
-# `shoulder_neutral_deg` — the middle of its quadrant's ±90° range. Standing
-# pose = each leg at its neutral shoulder, so the legs splay into their four
-# corners naturally.
+# Standing-pose hip/knee bend, shared across all 4 legs. Shoulder stance is
+# 0 under Convention A (URDF θ=0 already places each leg at its mechanical
+# zero — see code/simulation/docs/MERGE_AND_CONVENTION.md).
 STANCE_DEG = {
-    "hip":  -40.0,
+    "hip": -40.0,
     "knee": -60.0,
 }

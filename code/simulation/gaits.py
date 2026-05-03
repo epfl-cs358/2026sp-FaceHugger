@@ -170,7 +170,7 @@ def _draw_overlay(robot_id, cycles, current_targets):
 # --------------------------------------------------------------------------- #
 
 
-def _body_height_for_gait(cfg, gait, period_s, samples_per_period=100):
+def _body_height_for_gait(cfg, gait, samples_per_period=100):
     """Maximum foot-depth below body origin sampled over one gait period.
     Covers swing + stance feet across all 4 legs. Used in place of the
     neutral-stance depth so the spawn Z accommodates gait trajectories
@@ -308,7 +308,7 @@ def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
     # Gait-aware spawn height: worst foot Z across a full period, not just
     # neutral_foot. Prevents the body from sinking into the floor when a
     # gait's stance-phase Z differs from the neutral Z used at build time.
-    gait_depth_m = _body_height_for_gait(cfg, gait, gait["period"])
+    gait_depth_m = _body_height_for_gait(cfg, gait)
     if gait_depth_m > cfg.body_height:
         print(
             f"[body_height] lifting spawn from {cfg.body_height * 1000:.1f} mm "
