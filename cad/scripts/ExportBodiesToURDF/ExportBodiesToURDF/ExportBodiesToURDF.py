@@ -407,11 +407,13 @@ def collect_bodies(comp):
     metadata only — visibility no longer filters output."""
     out = []
     for body in comp.bRepBodies:
-        out.append({
-            "name": body.name,
-            "visible": body.isLightBulbOn,
-            "bbox_center_mm": bbox_center_mm(body),
-        })
+        out.append(
+            {
+                "name": body.name,
+                "visible": body.isLightBulbOn,
+                "bbox_center_mm": bbox_center_mm(body),
+            }
+        )
     return out
 
 
@@ -427,14 +429,16 @@ def collect_axes(comp, world_transform):
             continue
         try:
             geom = axis.geometry  # Line3D
-            out.append({
-                "name": axis.name,
-                "visible": axis.isLightBulbOn,
-                "origin_mm": pt_mm(geom.origin),
-                "dir": vec3(geom.direction),
-                "origin_world_mm": point_world_mm(geom.origin, world_transform),
-                "dir_world": dir_world(geom.direction, world_transform),
-            })
+            out.append(
+                {
+                    "name": axis.name,
+                    "visible": axis.isLightBulbOn,
+                    "origin_mm": pt_mm(geom.origin),
+                    "dir": vec3(geom.direction),
+                    "origin_world_mm": point_world_mm(geom.origin, world_transform),
+                    "dir_world": dir_world(geom.direction, world_transform),
+                }
+            )
         except Exception as e:
             out.append({"name": axis.name, "error": str(e)})
     return out
@@ -448,12 +452,14 @@ def collect_points(comp, world_transform):
             continue
         try:
             geom = point.geometry
-            out.append({
-                "name": point.name,
-                "visible": point.isLightBulbOn,
-                "pos_mm": pt_mm(geom),
-                "pos_world_mm": point_world_mm(geom, world_transform),
-            })
+            out.append(
+                {
+                    "name": point.name,
+                    "visible": point.isLightBulbOn,
+                    "pos_mm": pt_mm(geom),
+                    "pos_world_mm": point_world_mm(geom, world_transform),
+                }
+            )
         except Exception as e:
             out.append({"name": point.name, "error": str(e)})
     return out
@@ -775,13 +781,15 @@ def export_stls(design, root, occurrences_json):
                     failed.append(f"{stl_name}: no occurrence named {match}")
                     continue
                 _export_one(mgr, target_occ, filename)
-                exported.append({
-                    "stl": stl_name,
-                    "source_type": "occurrence",
-                    "source_occurrences": [source_path],
-                    "origin_landmark": None,
-                    "origin_shift_mm": [0.0, 0.0, 0.0],
-                })
+                exported.append(
+                    {
+                        "stl": stl_name,
+                        "source_type": "occurrence",
+                        "source_occurrences": [source_path],
+                        "origin_landmark": None,
+                        "origin_shift_mm": [0.0, 0.0, 0.0],
+                    }
+                )
             elif rtype == "body":
                 match = rule["match"]
                 component_filter = rule.get("component")
@@ -835,15 +843,17 @@ def export_stls(design, root, occurrences_json):
                     else:
                         _translate_binary_stl(filename, pos)
                         shift_mm = pos
-                exported.append({
-                    "stl": stl_name,
-                    "source_type": "body",
-                    "source_body": match,
-                    "source_component": component_filter,
-                    "source_occurrences": matching_paths,
-                    "origin_landmark": landmark,
-                    "origin_shift_mm": shift_mm,
-                })
+                exported.append(
+                    {
+                        "stl": stl_name,
+                        "source_type": "body",
+                        "source_body": match,
+                        "source_component": component_filter,
+                        "source_occurrences": matching_paths,
+                        "origin_landmark": landmark,
+                        "origin_shift_mm": shift_mm,
+                    }
+                )
             elif rtype == "combined":
                 # Explicit list of (occurrence_path, body_name) parts. For each,
                 # export the body alone (native component body), then transform
@@ -930,27 +940,31 @@ def export_stls(design, root, occurrences_json):
                         shifted_tris = []
                         for tri in out_tris:
                             n, v0, v1, v2 = tri
-                            shifted_tris.append((
-                                n,
-                                (v0[0] - sx, v0[1] - sy, v0[2] - sz),
-                                (v1[0] - sx, v1[1] - sy, v1[2] - sz),
-                                (v2[0] - sx, v2[1] - sy, v2[2] - sz),
-                            ))
+                            shifted_tris.append(
+                                (
+                                    n,
+                                    (v0[0] - sx, v0[1] - sy, v0[2] - sz),
+                                    (v1[0] - sx, v1[1] - sy, v1[2] - sz),
+                                    (v2[0] - sx, v2[1] - sy, v2[2] - sz),
+                                )
+                            )
                         out_tris = shifted_tris
                         shift_mm = list(pos)
                 _write_binary_stl(filename, out_tris)
-                exported.append({
-                    "stl": stl_name,
-                    "source_type": "combined",
-                    # Place at world origin — vertices are already in world frame
-                    # (and re-origined to landmark world position if specified).
-                    # Using FlexibleSkeleton:1 (which is at origin) so the Blender
-                    # consumer's world_transform lookup yields identity.
-                    "source_occurrences": ["FlexibleSkeleton:1"],
-                    "parts": list(parts),
-                    "origin_landmark": landmark,
-                    "origin_shift_mm": shift_mm,
-                })
+                exported.append(
+                    {
+                        "stl": stl_name,
+                        "source_type": "combined",
+                        # Place at world origin — vertices are already in world frame
+                        # (and re-origined to landmark world position if specified).
+                        # Using FlexibleSkeleton:1 (which is at origin) so the Blender
+                        # consumer's world_transform lookup yields identity.
+                        "source_occurrences": ["FlexibleSkeleton:1"],
+                        "parts": list(parts),
+                        "origin_landmark": landmark,
+                        "origin_shift_mm": shift_mm,
+                    }
+                )
             else:
                 failed.append(f"{stl_name}: unknown rule type {rtype!r}")
         except Exception as e:
@@ -1334,16 +1348,30 @@ def _joint_origin(joint):
 
 
 def _joint_limits(motion, type_tag):
-    """Return a `limits_rad` dict (radians) or None on failure."""
+    """Return a `limits_rad` dict (radians) or None on failure.
+
+    Two sources of "where this joint sits at export time":
+      - `rest`    = `lim.restValue`, the configured mechanical zero
+                    (reproducible across exports unless the user retunes
+                    the joint motion in Fusion).
+      - `current` = `motion.rotationValue` (or `slideValue`), the *live*
+                    angle the joint is dragged to in the active CAD view
+                    at export time. Useful when the user wants the URDF
+                    rest pose to follow whatever they're currently
+                    visualising in Fusion. Downstream picks one via
+                    `facehugger_config.yaml: shoulder_rest_source`.
+    """
     try:
         if type_tag == "revolute":
             lim = motion.rotationLimits
+            current = motion.rotationValue if hasattr(motion, "rotationValue") else 0.0
         else:
             lim = motion.slideLimits
+            current = motion.slideValue if hasattr(motion, "slideValue") else 0.0
         rest = lim.restValue if hasattr(lim, "restValue") else 0.0
     except Exception:
         return None
-    out = {"rest": float(rest)}
+    out = {"rest": float(rest), "current": float(current)}
     try:
         out["min_enabled"] = bool(lim.isMinimumValueEnabled)
         out["min"] = float(lim.minimumValue) if lim.isMinimumValueEnabled else None

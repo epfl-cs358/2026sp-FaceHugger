@@ -1657,7 +1657,7 @@ FaceHuggerLegAssembly:1 [xref]
   cpoint: BodyToLink1Point | local pos_mm: (11.97, -0.0, -4.2) | world pos_mm: (-57.901, 46.222, -9.0)
   cpoint: Link1ToLink2Point | local pos_mm: (34.565, 55.92, 10.246) | world pos_mm: (-113.821, 68.816, 5.446)
   cpoint: Link2ToLink3Point | local pos_mm: (34.57, 145.62, 10.246) | world pos_mm: (-203.521, 68.822, 5.446)
-  mass: 2.813979 kg | com local: (-87.887, 75.133, 13.281) | com world: (-87.887, 75.133, 13.281)
+  mass: 2.813979 kg | com local: (-99.573, 38.995, 3.582) | com world: (-99.573, 38.995, 3.582)
   Servo_Mouser_Model:1 [xref]
     parent_origin_mm: (1.85, 0.0, 0.0)  world_origin_mm: (-57.901, 36.101, -4.8)
     body: ServoBase | bbox_center_mm: (6.068, 0.0, 20.922)

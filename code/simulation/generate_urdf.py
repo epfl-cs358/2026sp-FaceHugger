@@ -625,6 +625,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
         lim_min_rad = lim.get("min")
         lim_max_rad = lim.get("max")
         lim_rest_rad = lim.get("rest", 0.0) or 0.0
+        lim_current_rad = lim.get("current", 0.0) or 0.0
         lim_min_deg = math.degrees(lim_min_rad) if lim_min_rad is not None else None
         lim_max_deg = math.degrees(lim_max_rad) if lim_max_rad is not None else None
         joint_defs.append(
@@ -640,6 +641,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
                     "min": lim_min_rad,
                     "max": lim_max_rad,
                     "rest": lim_rest_rad,
+                    "current": lim_current_rad,
                 },
             }
         )
@@ -649,7 +651,21 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # _shoulder_rest_for(leg_id, fl_rest_rad). The Fusion limits are also
     # FL-relative; URDF limits = Fusion limits shifted by FL's rest, which
     # by mirror symmetry produces the same shifted range for every leg.
-    fl_rest_rad = joint_defs[0]["limits_rad"]["rest"]
+    #
+    # `shoulder_rest_source` (yaml) picks which JSON field to read:
+    #   "rest"    -> limits_rad.rest    (configured mechanical zero, default)
+    #   "current" -> limits_rad.current (live joint angle at export time)
+    rest_source = cfg.get("shoulder_rest_source", "rest")
+    if rest_source not in ("rest", "current"):
+        raise ValueError(
+            f"facehugger_config.yaml: shoulder_rest_source must be "
+            f"'rest' or 'current' (got {rest_source!r})."
+        )
+    fl_rest_rad = joint_defs[0]["limits_rad"][rest_source]
+    print(
+        f"[generate_urdf] FL shoulder rest source = {rest_source!r} "
+        f"-> {math.degrees(fl_rest_rad):+.2f}°"
+    )
     fl_min_rad = joint_defs[0]["limits_rad"]["min"]
     fl_max_rad = joint_defs[0]["limits_rad"]["max"]
     if fl_min_rad is None or fl_max_rad is None:
