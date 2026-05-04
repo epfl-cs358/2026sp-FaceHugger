@@ -74,6 +74,21 @@ sign on hip/knee (URDF `<axis>0 -1 0</axis>` for FR/BL). This means:
 - A positive `rotation_euler.z` rotates the leg "up" the same way on
   both L and R sides.
 
+**Why this works** — `align_roll(target)` only achieves
+`bone-local Z = target` when the target is perpendicular to the bone's
+Y axis (head→tail); when it isn't, Blender projects the target into
+the plane ⊥ Y and the resulting bone-Z drifts from the URDF axis
+(≈13° on `*_link1` because of the joint origin's Z lift, ≈23° on
+`*_link3` because of the foot tip's Y component).
+[`_bone_endpoints_world_mm`](../../../animation/scripts/urdf_to_blender_rigged.py)
+fixes this at rig-build time by projecting each bone's tail onto the
+plane perpendicular to its joint axis. After projection, bone-Y is ⊥
+joint axis, `align_roll` is exact, and the
+`rotation_euler[2] == joint angle` contract above is literal. The bone
+is therefore a rotation control whose Y is **not** along the limb on
+`*_link1` / `*_link3`; mesh geometry comes from `attach_visuals`'
+explicit `matrix_world` and is unaffected.
+
 Constraints (auto-applied at rig-build time):
 
 | Constraint | On which bones | Effect |

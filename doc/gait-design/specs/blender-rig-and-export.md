@@ -75,6 +75,19 @@ in world frame. The per-side ±Y sign flip on hip/knee (URDF
 `<axis>0 -1 0</axis>` for FR/BL, `0 1 0` for FL/BR) is absorbed into the
 bone roll automatically.
 
+This claim only holds because
+[`_bone_endpoints_world_mm`](../../../animation/scripts/urdf_to_blender_rigged.py)
+projects each bone's tail onto the plane perpendicular to that bone's
+joint axis at rig-build time. `align_roll(target)` is exact only when
+`target ⊥ bone-Y`; otherwise it projects internally and bone-local Z
+drifts from the URDF axis (≈13° on `*_link1`, where the joint origin
+has a Z lift; ≈23° on `*_link3`, where the foot tip has a Y component).
+The tail projection forces bone-Y ⊥ joint axis on every bone, making
+`align_roll` exact and the `rotation_euler[2] == joint angle` contract
+literal. The bone becomes a rotation control whose Y is not along the
+limb on `*_link1` / `*_link3`; mesh geometry is set independently via
+`matrix_world` in `attach_visuals` and is unaffected.
+
 | Joint type | URDF `<axis>` | Bone-local axis after `align_roll` | Blender channel |
 |---|---|---|---|
 | All 12 (shoulder + hip + knee) | per URDF | local Z | `rotation_euler[2]` |

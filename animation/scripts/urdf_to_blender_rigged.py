@@ -1,40 +1,46 @@
 """
-urdf_to_blender_rigged.py — Armature-based URDF importer with IK + joint limits
+urdf_to_blender_rigged.py — Armature-based URDF importer (FK only)
 
 Sibling of `visualize_urdf.py`. Same URDF parsing + scene bootstrap, but
 builds a real Blender Armature so the rig can be posed/animated. The
 animator-facing import path (placement-only `visualize_urdf.py` stays as
 the cross-check against PyBullet).
 
-Architecture (per RIGGING_PLAN.md, Option B — Armature):
-  1. Parse URDF (parse_urdf, same as visualize_urdf).
+Architecture:
+  1. Parse URDF.
   2. Compute link world matrices at rest pose (all joint angles 0°).
   3. Build a single Armature in edit mode:
        - One bone per URDF link (12 leg bones + base_link), named to
          match the URDF link names exactly (`fl_link1`, `fr_link2`, …).
-       - Bone head = parent joint pivot world; tail = next joint pivot
-         (or for `*_link3`, the foot tip in link3 frame, projected to
-         world).
-       - Bone roll = `EditBone.align_roll(joint_axis_world)`. After
-         roll alignment, **bone-local Z = the URDF joint axis** for all
-         12 joints uniformly. The per-side ±Y sign on hip/knee falls
-         out automatically.
-       - Parent in chain via `EditBone.parent`, `use_connect=False` (so
-         the parent's tail need not coincide with the child's head — for
-         our robot the head sits at the joint pivot, which is offset from
-         the parent's tail by the joint origin).
+       - Bone head = parent joint pivot world; tail = next joint pivot,
+         **projected onto the plane perpendicular to that joint's URDF
+         axis**. The projection makes bone-Y ⊥ joint axis for every
+         bone, which is the precondition for `EditBone.align_roll(axis)`
+         to land bone-local Z exactly on the joint axis. Without it,
+         `align_roll` projects internally and bone-local Z drifts from
+         the joint axis (≈13° on `*_link1`, ≈23° on `*_link3` for this
+         URDF). The bone is a rotation control; mesh geometry is set
+         independently in `attach_visuals` via `matrix_world`, so the
+         visible limb is unaffected.
+       - Bone roll = `EditBone.align_roll(joint_axis_world)`. After the
+         tail projection above, **bone-local Z = the URDF joint axis**
+         for all 12 joints uniformly. The per-side ±Y sign on hip/knee
+         falls out automatically.
+       - Parent in chain via `EditBone.parent`, `use_connect=False` (the
+         child's head sits at its joint pivot, offset from the parent's
+         tail).
   4. Pose mode: `LIMIT_ROTATION` on every joint bone (use_limit_z =
      True, min_z/max_z from URDF `<limit lower upper>`).
   5. Attach `<visual>` STLs via `parent_type='BONE'` to their link's
      bone. After parenting, set `obj.matrix_world = link_world @
      visual_origin` so rest-pose geometry matches `visualize_urdf.py`
      byte-for-byte.
-  6. Per leg: place a `{leg}_foot_target` Empty at the rest-pose foot
-     tip, add an IK constraint to the knee bone targeting that empty.
-     `chain_count` is set by `--ik-chain` (default 2 = hip+knee solve;
-     experimental 3 also includes shoulder).
-  7. Joint-pivot/axis markers placed but `hide_viewport=True` by default
+  6. Joint-pivot/axis markers placed but `hide_viewport=True` by default
      (toggle in outliner for debugging).
+
+IK (foot targets, per-bone IK locks, `--ik-chain` flag) was removed in
+favour of an FK-only build for verification. See git history for the
+prior IK setup.
 
 Usage (GUI — recommended):
     /Applications/Blender-5.1.app/Contents/MacOS/Blender \
@@ -49,14 +55,11 @@ CLI flags (after the `--` separator per Blender convention):
     --urdf PATH      path to facehugger.urdf
     --meshes PATH    directory containing exported STLs
     --save PATH      write a .blend here after building the scene
-    --ik-chain N     IK chain length per leg (2 default = hip+knee solve;
-                     3 = shoulder+hip+knee solve, experimental)
 
 Targets Blender 5.x.
 """
 
 import argparse
-import json
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -79,29 +82,18 @@ ARMATURE_COLLECTION = "Armature"
 MESHES_COLLECTION = "Meshes"
 JOINTS_COLLECTION = "Joint Origins"
 AXES_COLLECTION = "Joint Axes"
-TARGETS_COLLECTION = "IK Targets"
 
 COLOR_JOINT = (1.0, 0.0, 0.0, 1.0)  # red
 COLOR_AXIS = (1.0, 0.4, 0.0, 1.0)  # orange
-COLOR_TARGET = (0.0, 0.6, 1.0, 1.0)  # blue
 
 ARMATURE_NAME = "FaceHuggerRig"
 
-# Fallback foot tip in link3 frame (mm) — used if fusion_export.json is
-# missing or hasn't been re-exported with the Link3TipAxis construction
-# axis yet. The CAD now defines the foot tip via a `Link3TipAxis`
-# construction axis (whitelisted in ExportBodiesToURDF.CONSTRUCTION_AXES);
-# the rigged importer reads each leg's foot tip from that axis's
-# `origin_world_mm` in fusion_export.json. This constant is the
-# pre-Link3TipAxis hardcoded value; it stays as a fallback so the
-# importer keeps working before the user re-exports Fusion.
+# Foot tip in link3 frame (mm) — leg_lower.stl max +Y centroid, copied
+# from the URDF metadata comment block. Used as the cosmetic tail of
+# `*_link3` bones (which is then projected ⊥ to the joint axis in
+# `_bone_endpoints_world_mm`). The mesh visual is independent of this
+# value, so a small drift (e.g. when the CAD changes) is harmless.
 FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M = Vector((-0.030946, -0.013000, 0.000024))
-
-# Naming patterns
-FOOT_TARGET_FMT = "{leg}_foot_target"
-LEG_IDS = ("fl", "fr", "bl", "br")
-SHOULDER_BONE_FMT = "{leg}_link1"
-KNEE_BONE_FMT = "{leg}_link3"
 
 
 # ---------------------------------------------------------------------------
@@ -216,75 +208,6 @@ def compute_link_world(robot):
     return link_world
 
 
-def load_foot_tip_in_link3_frame(json_path, link_world):
-    """Read Link2ToLink3Axis and Link3TipAxis from fusion_export.json
-    and return the foot tip position in link3-local frame, metres.
-
-    The JSON stores exactly ONE construction axis instance per name
-    (from the leg-assembly source occurrence), not four. Their
-    `origin_world_mm` reflects the CAD construction pose (all joint
-    angles zero in CAD), NOT the URDF rest pose (which applies
-    Convention A's per-leg shoulder offset on top). Inverting
-    `link3_world` from URDF rest against `origin_world_mm` gives the
-    wrong link3-local position because the two frames disagree by the
-    Convention A rotation.
-
-    Correct path: use `origin_mm` (in leg-assembly-source frame) and
-    take the foot-relative-to-knee delta. That delta lives in the
-    source frame, so apply the same R_la rotation the export script
-    pre-applies to joint axes (R_la = Rz(90°), derived by comparing
-    Link1ToLink2Axis source-frame `dir`=(1,0,0) to URDF FL hip axis
-    (0,1,0) and verifying the joint origin transforms match link1's
-    URDF rest frame).
-
-    Returns a `mathutils.Vector` (metres, link3-local frame) or None
-    if either axis is missing from the JSON."""
-    if not json_path or not Path(json_path).exists():
-        return None
-    try:
-        data = json.loads(Path(json_path).read_text())
-    except (OSError, json.JSONDecodeError) as e:
-        print(f"[warn] could not read {json_path}: {e}")
-        return None
-
-    knee_source_mm = [None]
-    foot_source_mm = [None]
-
-    def _walk(node):
-        for axis in node.get("axes", []) or []:
-            name = axis.get("name")
-            xyz = axis.get("origin_mm")
-            if xyz and len(xyz) >= 3:
-                if name == "Link2ToLink3Axis" and knee_source_mm[0] is None:
-                    knee_source_mm[0] = Vector(xyz[:3])
-                elif name == "Link3TipAxis" and foot_source_mm[0] is None:
-                    foot_source_mm[0] = Vector(xyz[:3])
-        for child in node.get("children", []) or []:
-            if knee_source_mm[0] is not None and foot_source_mm[0] is not None:
-                return
-            _walk(child)
-
-    for occ in data.get("occurrences", []) or []:
-        _walk(occ)
-        if knee_source_mm[0] is not None and foot_source_mm[0] is not None:
-            break
-
-    if knee_source_mm[0] is None or foot_source_mm[0] is None:
-        return None
-
-    # Foot relative to knee in source frame (mm). Sibling axes share
-    # the same parent occurrence frame, so no per-axis transform.
-    delta_source_mm = foot_source_mm[0] - knee_source_mm[0]
-    # R_la = Rz(90°): X(source) → Y(link), Y(source) → -X(link), Z→Z.
-    # Same rotation the export script pre-applies to joint axes per
-    # ExportBodiesToURDF._extract_joint(...).
-    import math as _math
-
-    R_la = Matrix.Rotation(_math.pi / 2.0, 4, "Z")
-    delta_link3_mm = R_la @ delta_source_mm
-    return delta_link3_mm / M_TO_MM
-
-
 def matrix_m_to_mm(M):
     out = M.copy()
     out.translation = out.translation * M_TO_MM
@@ -331,7 +254,6 @@ def make_collections():
     for name in (
         ARMATURE_COLLECTION,
         MESHES_COLLECTION,
-        TARGETS_COLLECTION,
         JOINTS_COLLECTION,
         AXES_COLLECTION,
     ):
@@ -380,14 +302,26 @@ def _bone_endpoints_world_mm(robot, link_world, link_name):
     if child_joint_origin_m is not None:
         tail_m = child_joint_origin_m
     elif link_name.endswith("_link3"):
-        # Foot tip in link3 frame → world. Uses the fallback constant
-        # for bone-tail placement only (cosmetic; the foot target IK
-        # uses the Link3TipAxis world position from JSON when available).
         tail_m = link_world[link_name] @ FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M
     else:
-        # Fallback for base_link or any leaf link without a foot definition.
-        # 50 mm bump in +Y world so the bone is visible.
+        # base_link or any leaf without a foot definition — 50 mm bump in
+        # +Y world so the bone is visible.
         tail_m = head_m + Vector((0.0, 0.050, 0.0))
+
+    # Bone-Y MUST be perpendicular to the URDF joint axis so that
+    # EditBone.align_roll(axis) lands exactly on bone-local Z = axis.
+    # Where the link-to-link offset has a component along the joint axis
+    # (link1 has a Z lift; link3 foot tip has a Y component), project that
+    # component out — the bone becomes a guide rod for rotation, not a
+    # visual limb. Mesh geometry is set independently via matrix_world in
+    # attach_visuals(), so the limb still looks correct.
+    j = robot["joints"].get(link_name)
+    if j is not None and j["axis"].length > 1e-6:
+        axis_world = (link_world[link_name].to_3x3() @ j["axis"]).normalized()
+        bone_dir = tail_m - head_m
+        proj = bone_dir - bone_dir.dot(axis_world) * axis_world
+        if proj.length > 1e-6:
+            tail_m = head_m + proj
 
     return head_m * M_TO_MM, tail_m * M_TO_MM
 
@@ -485,39 +419,6 @@ def add_limit_rotation_constraints(robot, arm_obj):
     return n
 
 
-def lock_ik_axes(robot, arm_obj):
-    """Lock IK rotation on bone-local X and Y for every leg bone, leave
-    Z free. After align_roll, bone-local Z IS the URDF joint axis, so
-    the IK solver should rotate only around Z. Without these locks the
-    solver can bend bones around X/Y to reach the target — visually
-    correct distance, physically nonsense for a 1-DOF revolute joint.
-
-    Belt-and-suspenders: in addition to `lock_ik_x` / `_y` (which in
-    practice was observed to allow occasional sideways bending in the
-    viewport), also set `ik_stiffness_x` / `_y = 1.0` (maximally stiff
-    — solver treats the axis as effectively immovable). The two
-    mechanisms work together: locks remove the DOF from the solver's
-    iteration; stiffness biases the solver away from rotating that
-    axis even on residual numerical pushback. Z stays free
-    (lock=False, stiffness=0)."""
-    bpy.context.view_layer.objects.active = arm_obj
-    bpy.ops.object.mode_set(mode="POSE")
-    n = 0
-    for pb in arm_obj.pose.bones:
-        # Leg bones only — base_link doesn't participate in any IK chain.
-        if pb.name == robot["root"]:
-            continue
-        pb.lock_ik_x = True
-        pb.lock_ik_y = True
-        pb.lock_ik_z = False
-        pb.ik_stiffness_x = 1.0
-        pb.ik_stiffness_y = 1.0
-        pb.ik_stiffness_z = 0.0
-        n += 1
-    bpy.ops.object.mode_set(mode="OBJECT")
-    return n
-
-
 # ---------------------------------------------------------------------------
 # Mesh attachment
 # ---------------------------------------------------------------------------
@@ -568,104 +469,6 @@ def attach_visuals(robot, link_world, arm_obj, meshes_dir, target_collection):
             obj.matrix_world = matrix_m_to_mm(link_W @ visual_origin)
             placed += 1
     return placed
-
-
-# ---------------------------------------------------------------------------
-# Foot targets + IK
-# ---------------------------------------------------------------------------
-
-
-def _add_empty(
-    name, location_mm, target_collection, color_mat=None, kind="SPHERE", size_mm=8.0
-):
-    bpy.ops.object.empty_add(type=kind, radius=size_mm, location=tuple(location_mm))
-    obj = bpy.context.object
-    obj.name = name
-    for c in list(obj.users_collection):
-        c.objects.unlink(obj)
-    target_collection.objects.link(obj)
-    return obj
-
-
-def place_foot_targets_and_ik(
-    robot, link_world, arm_obj, ik_chain, collection, foot_tip_in_link3_m
-):
-    """Per leg, place a {leg}_foot_target Empty at the rest-pose foot
-    tip and add an IK constraint on the *_link3 pose bone targeting it.
-
-    `foot_tip_in_link3_m` is a `mathutils.Vector` giving the foot tip
-    in link3-local frame (metres). It comes from
-    load_foot_tip_in_link3_frame(fusion_export.json) when available,
-    otherwise FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M.
-
-    The foot target is parented to the leg's link1 bone (parent_type=
-    'BONE') so the target rotates with the shoulder automatically — no
-    driver needed. World position is set AFTER parenting so Blender
-    back-computes matrix_parent_inverse and the visual placement is
-    preserved.
-
-    No pole target: the per-bone IK axis locks (lock_ik_x = lock_ik_y =
-    True, set in lock_ik_axes) leave only Z free per bone, so the IK
-    solver has exactly one solution — no chain-plane ambiguity to
-    resolve, and a pole target would fight the axis locks.
-
-    use_stretch = False because this is a rigid robot — bones must not
-    stretch to reach the target (the IK should rotate to fit, or fall
-    short).
-
-    chain_count = ik_chain (default 2 = hip+knee solve, shoulder stays
-    FK). Matches the physical workflow: animator rotates the shoulder
-    manually with FK to aim the leg; the foot target moves with the
-    shoulder via parenting; IK then solves only the hip+knee reach.
-    chain=3 (shoulder included in IK) is unstable in combination with
-    the parenting — IK rotates link1 → foot target moves with link1 →
-    solver chases a moving target. Use --ik-chain 3 only after dropping
-    the parenting (separate workflow)."""
-    bpy.ops.object.mode_set(mode="OBJECT")
-    n_targets = 0
-    n_ik = 0
-    for leg in LEG_IDS:
-        link3 = f"{leg}_link3"
-        if link3 not in link_world:
-            continue
-
-        foot_world_mm = (link_world[link3] @ foot_tip_in_link3_m) * M_TO_MM
-
-        foot_empty = _add_empty(
-            FOOT_TARGET_FMT.format(leg=leg),
-            foot_world_mm,
-            collection,
-            kind="SPHERE",
-            size_mm=8.0,
-        )
-        n_targets += 1
-
-        # Parent foot target to the leg's link1 bone so it rotates with
-        # the shoulder. Set matrix_world AFTER parenting so Blender
-        # back-computes matrix_parent_inverse to keep world position.
-        shoulder_bone = SHOULDER_BONE_FMT.format(leg=leg)
-        foot_empty.parent = arm_obj
-        foot_empty.parent_type = "BONE"
-        foot_empty.parent_bone = shoulder_bone
-        foot_empty.matrix_parent_inverse = Matrix.Identity(4)
-        bpy.context.view_layer.update()
-        foot_empty.matrix_world = Matrix.Translation(Vector(foot_world_mm))
-
-        bpy.context.view_layer.objects.active = arm_obj
-        bpy.ops.object.mode_set(mode="POSE")
-        knee_pb = arm_obj.pose.bones.get(KNEE_BONE_FMT.format(leg=leg))
-        if knee_pb is None:
-            bpy.ops.object.mode_set(mode="OBJECT")
-            continue
-        ik = knee_pb.constraints.new("IK")
-        ik.target = foot_empty
-        ik.chain_count = ik_chain
-        ik.use_rotation = False
-        ik.use_tail = True
-        ik.use_stretch = False
-        bpy.ops.object.mode_set(mode="OBJECT")
-        n_ik += 1
-    return n_targets, n_ik
 
 
 # ---------------------------------------------------------------------------
@@ -769,42 +572,11 @@ def parse_args():
         / "generated"
         / "exported_meshes"
     )
-    default_json = (
-        _script_dir()
-        / ".."
-        / ".."
-        / "code"
-        / "simulation"
-        / "generated"
-        / "fusion_export.json"
-    )
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--urdf", type=Path, default=default_urdf.resolve())
     parser.add_argument("--meshes", type=Path, default=default_meshes.resolve())
-    parser.add_argument(
-        "--json",
-        type=Path,
-        default=default_json.resolve(),
-        help="fusion_export.json path. Used to read each leg's "
-        "Link3TipAxis origin for foot-target placement; falls back to "
-        "the URDF + a hardcoded link3-frame foot tip if the axis isn't "
-        "present in the export yet.",
-    )
     parser.add_argument("--save", type=Path, default=None)
-    parser.add_argument(
-        "--ik-chain",
-        type=int,
-        choices=(2, 3),
-        default=2,
-        help="IK chain length per leg. 2 (default) = hip+knee solve, "
-        "shoulder stays FK. Matches the physical workflow: animator "
-        "rotates the shoulder by hand to aim the leg, IK solves the "
-        "reach. The foot target is parented to link1 so it follows "
-        "the shoulder rotation automatically. 3 = shoulder+hip+knee "
-        "all solve, but unstable in combination with the foot target "
-        "parented to link1 (IK chases a moving target).",
-    )
 
     argv = sys.argv
     argv = argv[argv.index("--") + 1 :] if "--" in argv else []
@@ -813,10 +585,8 @@ def parse_args():
 
 def main():
     args = parse_args()
-    print(f"[urdf_to_blender_rigged] urdf      : {args.urdf}")
-    print(f"[urdf_to_blender_rigged] meshes    : {args.meshes}")
-    print(f"[urdf_to_blender_rigged] json      : {args.json}")
-    print(f"[urdf_to_blender_rigged] ik_chain  : {args.ik_chain}")
+    print(f"[urdf_to_blender_rigged] urdf   : {args.urdf}")
+    print(f"[urdf_to_blender_rigged] meshes : {args.meshes}")
 
     if not args.urdf.exists():
         raise SystemExit(f"URDF not found: {args.urdf}")
@@ -827,22 +597,6 @@ def main():
         f"{len(robot['joints'])} joints, root={robot['root']}"
     )
     link_world = compute_link_world(robot)
-
-    foot_tip_in_link3_m = load_foot_tip_in_link3_frame(args.json, link_world)
-    if foot_tip_in_link3_m is not None:
-        print(
-            f"[urdf_to_blender_rigged] foot tip  : link3-local "
-            f"{tuple(round(v * M_TO_MM, 3) for v in foot_tip_in_link3_m)} mm "
-            f"(from Link3TipAxis in {args.json.name})"
-        )
-    else:
-        foot_tip_in_link3_m = FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M
-        print(
-            f"[urdf_to_blender_rigged] foot tip  : link3-local "
-            f"{tuple(round(v * M_TO_MM, 3) for v in foot_tip_in_link3_m)} mm "
-            "(hardcoded fallback — Link3TipAxis missing from JSON; "
-            "re-export Fusion to populate it)"
-        )
 
     clear_scene()
     collections = make_collections()
@@ -855,19 +609,7 @@ def main():
     n_meshes = attach_visuals(
         robot, link_world, arm_obj, args.meshes, collections[MESHES_COLLECTION]
     )
-    # IK BEFORE LIMIT_ROTATION: the LIMIT_ROTATION constraint must sit
-    # below IK in the stack so it clamps the IK-solved pose. Adding it
-    # second guarantees the order without bpy.ops.constraint.move_up.
-    n_targets, n_ik = place_foot_targets_and_ik(
-        robot,
-        link_world,
-        arm_obj,
-        args.ik_chain,
-        collections[TARGETS_COLLECTION],
-        foot_tip_in_link3_m,
-    )
     n_lim = add_limit_rotation_constraints(robot, arm_obj)
-    n_locked = lock_ik_axes(robot, arm_obj)
     n_joints, n_axes = place_joint_markers(
         robot,
         link_world,
@@ -878,11 +620,13 @@ def main():
         collections[AXES_COLLECTION],
     )
 
+    # Sanity check: every joint bone's local Z should now equal the
+    # URDF joint axis (world frame). Print the worst-case angular error.
+    max_err_deg = _check_bone_z_alignment(robot, link_world, arm_obj)
     print(
         f"[urdf_to_blender_rigged] armature: {n_bones} bones, "
-        f"{n_lim} LIMIT_ROTATION, {n_ik} IK (chain={args.ik_chain}, "
-        f"no stretch), {n_targets} foot targets, "
-        f"{n_locked} bones with IK X/Y locked"
+        f"{n_lim} LIMIT_ROTATION, "
+        f"max bone-Z vs joint-axis error = {max_err_deg:.4f}°"
     )
     print(
         f"[urdf_to_blender_rigged] geometry: {n_meshes} visuals, "
@@ -893,6 +637,32 @@ def main():
         args.save.parent.mkdir(parents=True, exist_ok=True)
         bpy.ops.wm.save_as_mainfile(filepath=str(args.save))
         print(f"[urdf_to_blender_rigged] saved: {args.save}")
+
+
+def _check_bone_z_alignment(robot, link_world, arm_obj):
+    """Return the worst-case angle (degrees) between each bone's local Z
+    (armature-space, read from `bone.matrix_local`) and the URDF joint
+    axis it should equal. A clean rig prints < 1e-3°.
+
+    NOTE: `bone.y_axis` / `bone.z_axis` are in parent-bone-local space,
+    not armature space — use `bone.matrix_local.col[1]` (Y) and
+    `.col[2]` (Z) for armature-space directions.
+    """
+    import math as _math
+
+    worst = 0.0
+    for child_link, j in robot["joints"].items():
+        bone = arm_obj.data.bones.get(child_link)
+        if bone is None:
+            continue
+        axis_world = (link_world[child_link].to_3x3() @ j["axis"]).normalized()
+        ml = bone.matrix_local
+        y_world = Vector(ml.col[1][:3]).normalized()
+        z_world = Vector(ml.col[2][:3]).normalized()
+        cos_t = max(-1.0, min(1.0, abs(z_world.dot(axis_world))))
+        err_deg = _math.degrees(_math.acos(cos_t))
+        worst = max(worst, err_deg)
+    return worst
 
 
 if __name__ == "__main__":
