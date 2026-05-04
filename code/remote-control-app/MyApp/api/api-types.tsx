@@ -5,26 +5,40 @@ export enum FSMStatus {
     STATE_FAILSAFE = 3
 }
 
-export type FSMStateModification = {
+export enum DirectionVector {
+    FW = 0,
+    BW = 1,
+    FR = 2,
+    FL = 3,
+    BR = 4,
+    BL = 5,
+    STOP = 6
+}
+
+export type PacketType = {
+    T: number
+}
+
+export type ManualMovement = PacketType & {
+    d: number
+}
+
+export type FSMStateModification = PacketType & {
     s: number //FSM state
 }
 
-export type BodyPose = {
-    h: number, //chassis height
-    p: number, //pitch (tilt forward back)
-    r: number //tilt side to side
-}
-
-export type ServoCalibration = {
+export type ServoCalibration = PacketType & {
     id: number //leg id to calibrate servo of
     servo_id: number //servo id to calibrate leg of
-    a: number //angle to write in the servo
+    a: number //angle to write in the servo (0-180 range)
 }
 
-export type SystemStatus = { //T10
+export type SystemStatus = PacketType & { //T10
     s: number, // current fsm state
     b: number, //battery voltage
     d: Array<number>, //tof distance readings
-    a: boolean, //stabilization pid status
+    a: Array<number>, //AMU array containing speed + gyroscope [Speed, Rotation X, Rotation Y, Rotation Z]
+    g: number, //current gait mode of the robot
+    pc: number, //current percentage of the movement gait accomplished
     e: string //error message
 } 
