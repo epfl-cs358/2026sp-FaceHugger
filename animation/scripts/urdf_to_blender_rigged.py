@@ -408,6 +408,29 @@ def add_limit_rotation_constraints(robot, arm_obj):
     return n
 
 
+def lock_ik_axes(robot, arm_obj):
+    """Lock IK rotation on bone-local X and Y for every leg bone, leave
+    Z free. After align_roll, bone-local Z IS the URDF joint axis, so
+    the IK solver should rotate only around Z. Without these locks the
+    solver can bend bones around X/Y to reach the target — visually
+    correct distance, physically nonsense for a 1-DOF revolute joint.
+
+    Set on the PoseBone (not the IK constraint): `lock_ik_x` / `_y`."""
+    bpy.context.view_layer.objects.active = arm_obj
+    bpy.ops.object.mode_set(mode="POSE")
+    n = 0
+    for pb in arm_obj.pose.bones:
+        # Leg bones only — base_link doesn't participate in any IK chain.
+        if pb.name == robot["root"]:
+            continue
+        pb.lock_ik_x = True
+        pb.lock_ik_y = True
+        pb.lock_ik_z = False
+        n += 1
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return n
+
+
 # ---------------------------------------------------------------------------
 # Mesh attachment
 # ---------------------------------------------------------------------------
@@ -478,8 +501,18 @@ def _add_empty(
 
 
 def place_foot_targets_and_ik(robot, link_world, arm_obj, ik_chain, collection):
-    """One Empty per leg at the rest-pose foot tip. IK on each *_link3
-    pose bone targeting that empty. chain_count = ik_chain (2 default)."""
+    """Per leg, place a {leg}_foot_target Empty at the rest-pose foot tip
+    and add an IK constraint on the *_link3 pose bone targeting it.
+    chain_count = ik_chain (2 default = hip+knee solve).
+
+    No pole target: the per-bone IK axis locks (lock_ik_x = lock_ik_y =
+    True, set in lock_ik_axes) leave only Z free per bone, so the IK
+    solver has exactly one solution — no chain-plane ambiguity to
+    resolve, and a pole target would fight the axis locks.
+
+    use_stretch = False because this is a rigid robot — bones must not
+    stretch to reach the target (the IK should rotate to fit, or fall
+    short)."""
     bpy.ops.object.mode_set(mode="OBJECT")
     n_targets = 0
     n_ik = 0
@@ -487,9 +520,10 @@ def place_foot_targets_and_ik(robot, link_world, arm_obj, ik_chain, collection):
         link3 = f"{leg}_link3"
         if link3 not in link_world:
             continue
+
         foot_world_m = link_world[link3] @ FOOT_TIP_IN_LINK3_FRAME_M
         foot_world_mm = foot_world_m * M_TO_MM
-        empty = _add_empty(
+        foot_empty = _add_empty(
             FOOT_TARGET_FMT.format(leg=leg),
             foot_world_mm,
             collection,
@@ -505,10 +539,11 @@ def place_foot_targets_and_ik(robot, link_world, arm_obj, ik_chain, collection):
             bpy.ops.object.mode_set(mode="OBJECT")
             continue
         ik = knee_pb.constraints.new("IK")
-        ik.target = empty
+        ik.target = foot_empty
         ik.chain_count = ik_chain
         ik.use_rotation = False
         ik.use_tail = True
+        ik.use_stretch = False
         bpy.ops.object.mode_set(mode="OBJECT")
         n_ik += 1
     return n_targets, n_ik
@@ -673,6 +708,7 @@ def main():
         collections[TARGETS_COLLECTION],
     )
     n_lim = add_limit_rotation_constraints(robot, arm_obj)
+    n_locked = lock_ik_axes(robot, arm_obj)
     n_joints, n_axes = place_joint_markers(
         robot,
         link_world,
@@ -685,8 +721,9 @@ def main():
 
     print(
         f"[urdf_to_blender_rigged] armature: {n_bones} bones, "
-        f"{n_lim} LIMIT_ROTATION, {n_ik} IK (chain={args.ik_chain}), "
-        f"{n_targets} foot targets"
+        f"{n_lim} LIMIT_ROTATION, {n_ik} IK (chain={args.ik_chain}, "
+        f"no stretch), {n_targets} foot targets, "
+        f"{n_locked} bones with IK X/Y locked"
     )
     print(
         f"[urdf_to_blender_rigged] geometry: {n_meshes} visuals, "
