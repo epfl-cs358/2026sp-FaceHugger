@@ -171,7 +171,8 @@
   "construction_axes_whitelist": [
     "BodyToLink1Axis",
     "Link1ToLink2Axis",
-    "Link2ToLink3Axis"
+    "Link2ToLink3Axis",
+    "Link3TipAxis"
   ],
   "joints_whitelist": [
     "Link1Revolute",
@@ -18804,6 +18805,30 @@
           "dir_world": [
             0.0,
             1.0,
+            -0.0
+          ]
+        },
+        {
+          "name": "Link3TipAxis",
+          "visible": true,
+          "origin_mm": [
+            19.07,
+            234.203,
+            10.246
+          ],
+          "dir": [
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "origin_world_mm": [
+            -292.103,
+            53.322,
+            5.446
+          ],
+          "dir_world": [
+            -1.0,
+            0.0,
             -0.0
           ]
         }

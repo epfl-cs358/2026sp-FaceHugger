@@ -131,6 +131,12 @@ CONSTRUCTION_AXES = [
     "BodyToLink1Axis",
     "Link1ToLink2Axis",
     "Link2ToLink3Axis",
+    # Foot tip — origin of this axis is the leg's "tip" point in link3
+    # frame. Used by the rigged Blender importer to place the per-leg
+    # IK foot target. The CAD must contain a construction axis named
+    # exactly "Link3TipAxis" inside each Link3 occurrence (or it'll be
+    # missing and the rigged importer falls back to a hardcoded value).
+    "Link3TipAxis",
 ]
 
 JOINTS = [

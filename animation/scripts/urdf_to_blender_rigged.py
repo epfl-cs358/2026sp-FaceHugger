@@ -56,6 +56,7 @@ Targets Blender 5.x.
 """
 
 import argparse
+import json
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -86,15 +87,20 @@ COLOR_TARGET = (0.0, 0.6, 1.0, 1.0)  # blue
 
 ARMATURE_NAME = "FaceHuggerRig"
 
-# Foot tip in link3 frame, in mm. Documented in the URDF comment block
-# (leg_lower.stl max +Y centroid). Same for all 4 legs by symmetry. If
-# the CAD changes such that this drifts, update this constant — the
-# URDF generator emits it as a comment in facehugger.urdf for reference.
-FOOT_TIP_IN_LINK3_FRAME_M = Vector((-0.030946, -0.013000, 0.000024))
+# Fallback foot tip in link3 frame (mm) — used if fusion_export.json is
+# missing or hasn't been re-exported with the Link3TipAxis construction
+# axis yet. The CAD now defines the foot tip via a `Link3TipAxis`
+# construction axis (whitelisted in ExportBodiesToURDF.CONSTRUCTION_AXES);
+# the rigged importer reads each leg's foot tip from that axis's
+# `origin_world_mm` in fusion_export.json. This constant is the
+# pre-Link3TipAxis hardcoded value; it stays as a fallback so the
+# importer keeps working before the user re-exports Fusion.
+FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M = Vector((-0.030946, -0.013000, 0.000024))
 
 # Naming patterns
 FOOT_TARGET_FMT = "{leg}_foot_target"
 LEG_IDS = ("fl", "fr", "bl", "br")
+SHOULDER_BONE_FMT = "{leg}_link1"
 KNEE_BONE_FMT = "{leg}_link3"
 
 
@@ -210,6 +216,75 @@ def compute_link_world(robot):
     return link_world
 
 
+def load_foot_tip_in_link3_frame(json_path, link_world):
+    """Read Link2ToLink3Axis and Link3TipAxis from fusion_export.json
+    and return the foot tip position in link3-local frame, metres.
+
+    The JSON stores exactly ONE construction axis instance per name
+    (from the leg-assembly source occurrence), not four. Their
+    `origin_world_mm` reflects the CAD construction pose (all joint
+    angles zero in CAD), NOT the URDF rest pose (which applies
+    Convention A's per-leg shoulder offset on top). Inverting
+    `link3_world` from URDF rest against `origin_world_mm` gives the
+    wrong link3-local position because the two frames disagree by the
+    Convention A rotation.
+
+    Correct path: use `origin_mm` (in leg-assembly-source frame) and
+    take the foot-relative-to-knee delta. That delta lives in the
+    source frame, so apply the same R_la rotation the export script
+    pre-applies to joint axes (R_la = Rz(90°), derived by comparing
+    Link1ToLink2Axis source-frame `dir`=(1,0,0) to URDF FL hip axis
+    (0,1,0) and verifying the joint origin transforms match link1's
+    URDF rest frame).
+
+    Returns a `mathutils.Vector` (metres, link3-local frame) or None
+    if either axis is missing from the JSON."""
+    if not json_path or not Path(json_path).exists():
+        return None
+    try:
+        data = json.loads(Path(json_path).read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"[warn] could not read {json_path}: {e}")
+        return None
+
+    knee_source_mm = [None]
+    foot_source_mm = [None]
+
+    def _walk(node):
+        for axis in node.get("axes", []) or []:
+            name = axis.get("name")
+            xyz = axis.get("origin_mm")
+            if xyz and len(xyz) >= 3:
+                if name == "Link2ToLink3Axis" and knee_source_mm[0] is None:
+                    knee_source_mm[0] = Vector(xyz[:3])
+                elif name == "Link3TipAxis" and foot_source_mm[0] is None:
+                    foot_source_mm[0] = Vector(xyz[:3])
+        for child in node.get("children", []) or []:
+            if knee_source_mm[0] is not None and foot_source_mm[0] is not None:
+                return
+            _walk(child)
+
+    for occ in data.get("occurrences", []) or []:
+        _walk(occ)
+        if knee_source_mm[0] is not None and foot_source_mm[0] is not None:
+            break
+
+    if knee_source_mm[0] is None or foot_source_mm[0] is None:
+        return None
+
+    # Foot relative to knee in source frame (mm). Sibling axes share
+    # the same parent occurrence frame, so no per-axis transform.
+    delta_source_mm = foot_source_mm[0] - knee_source_mm[0]
+    # R_la = Rz(90°): X(source) → Y(link), Y(source) → -X(link), Z→Z.
+    # Same rotation the export script pre-applies to joint axes per
+    # ExportBodiesToURDF._extract_joint(...).
+    import math as _math
+
+    R_la = Matrix.Rotation(_math.pi / 2.0, 4, "Z")
+    delta_link3_mm = R_la @ delta_source_mm
+    return delta_link3_mm / M_TO_MM
+
+
 def matrix_m_to_mm(M):
     out = M.copy()
     out.translation = out.translation * M_TO_MM
@@ -305,8 +380,10 @@ def _bone_endpoints_world_mm(robot, link_world, link_name):
     if child_joint_origin_m is not None:
         tail_m = child_joint_origin_m
     elif link_name.endswith("_link3"):
-        # Foot tip in link3 frame → world.
-        tail_m = link_world[link_name] @ FOOT_TIP_IN_LINK3_FRAME_M
+        # Foot tip in link3 frame → world. Uses the fallback constant
+        # for bone-tail placement only (cosmetic; the foot target IK
+        # uses the Link3TipAxis world position from JSON when available).
+        tail_m = link_world[link_name] @ FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M
     else:
         # Fallback for base_link or any leaf link without a foot definition.
         # 50 mm bump in +Y world so the bone is visible.
@@ -415,7 +492,14 @@ def lock_ik_axes(robot, arm_obj):
     solver can bend bones around X/Y to reach the target — visually
     correct distance, physically nonsense for a 1-DOF revolute joint.
 
-    Set on the PoseBone (not the IK constraint): `lock_ik_x` / `_y`."""
+    Belt-and-suspenders: in addition to `lock_ik_x` / `_y` (which in
+    practice was observed to allow occasional sideways bending in the
+    viewport), also set `ik_stiffness_x` / `_y = 1.0` (maximally stiff
+    — solver treats the axis as effectively immovable). The two
+    mechanisms work together: locks remove the DOF from the solver's
+    iteration; stiffness biases the solver away from rotating that
+    axis even on residual numerical pushback. Z stays free
+    (lock=False, stiffness=0)."""
     bpy.context.view_layer.objects.active = arm_obj
     bpy.ops.object.mode_set(mode="POSE")
     n = 0
@@ -426,6 +510,9 @@ def lock_ik_axes(robot, arm_obj):
         pb.lock_ik_x = True
         pb.lock_ik_y = True
         pb.lock_ik_z = False
+        pb.ik_stiffness_x = 1.0
+        pb.ik_stiffness_y = 1.0
+        pb.ik_stiffness_z = 0.0
         n += 1
     bpy.ops.object.mode_set(mode="OBJECT")
     return n
@@ -500,10 +587,22 @@ def _add_empty(
     return obj
 
 
-def place_foot_targets_and_ik(robot, link_world, arm_obj, ik_chain, collection):
-    """Per leg, place a {leg}_foot_target Empty at the rest-pose foot tip
-    and add an IK constraint on the *_link3 pose bone targeting it.
-    chain_count = ik_chain (2 default = hip+knee solve).
+def place_foot_targets_and_ik(
+    robot, link_world, arm_obj, ik_chain, collection, foot_tip_in_link3_m
+):
+    """Per leg, place a {leg}_foot_target Empty at the rest-pose foot
+    tip and add an IK constraint on the *_link3 pose bone targeting it.
+
+    `foot_tip_in_link3_m` is a `mathutils.Vector` giving the foot tip
+    in link3-local frame (metres). It comes from
+    load_foot_tip_in_link3_frame(fusion_export.json) when available,
+    otherwise FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M.
+
+    The foot target is parented to the leg's link1 bone (parent_type=
+    'BONE') so the target rotates with the shoulder automatically — no
+    driver needed. World position is set AFTER parenting so Blender
+    back-computes matrix_parent_inverse and the visual placement is
+    preserved.
 
     No pole target: the per-bone IK axis locks (lock_ik_x = lock_ik_y =
     True, set in lock_ik_axes) leave only Z free per bone, so the IK
@@ -512,7 +611,16 @@ def place_foot_targets_and_ik(robot, link_world, arm_obj, ik_chain, collection):
 
     use_stretch = False because this is a rigid robot — bones must not
     stretch to reach the target (the IK should rotate to fit, or fall
-    short)."""
+    short).
+
+    chain_count = ik_chain (default 2 = hip+knee solve, shoulder stays
+    FK). Matches the physical workflow: animator rotates the shoulder
+    manually with FK to aim the leg; the foot target moves with the
+    shoulder via parenting; IK then solves only the hip+knee reach.
+    chain=3 (shoulder included in IK) is unstable in combination with
+    the parenting — IK rotates link1 → foot target moves with link1 →
+    solver chases a moving target. Use --ik-chain 3 only after dropping
+    the parenting (separate workflow)."""
     bpy.ops.object.mode_set(mode="OBJECT")
     n_targets = 0
     n_ik = 0
@@ -521,8 +629,8 @@ def place_foot_targets_and_ik(robot, link_world, arm_obj, ik_chain, collection):
         if link3 not in link_world:
             continue
 
-        foot_world_m = link_world[link3] @ FOOT_TIP_IN_LINK3_FRAME_M
-        foot_world_mm = foot_world_m * M_TO_MM
+        foot_world_mm = (link_world[link3] @ foot_tip_in_link3_m) * M_TO_MM
+
         foot_empty = _add_empty(
             FOOT_TARGET_FMT.format(leg=leg),
             foot_world_mm,
@@ -531,6 +639,17 @@ def place_foot_targets_and_ik(robot, link_world, arm_obj, ik_chain, collection):
             size_mm=8.0,
         )
         n_targets += 1
+
+        # Parent foot target to the leg's link1 bone so it rotates with
+        # the shoulder. Set matrix_world AFTER parenting so Blender
+        # back-computes matrix_parent_inverse to keep world position.
+        shoulder_bone = SHOULDER_BONE_FMT.format(leg=leg)
+        foot_empty.parent = arm_obj
+        foot_empty.parent_type = "BONE"
+        foot_empty.parent_bone = shoulder_bone
+        foot_empty.matrix_parent_inverse = Matrix.Identity(4)
+        bpy.context.view_layer.update()
+        foot_empty.matrix_world = Matrix.Translation(Vector(foot_world_mm))
 
         bpy.context.view_layer.objects.active = arm_obj
         bpy.ops.object.mode_set(mode="POSE")
@@ -650,10 +769,28 @@ def parse_args():
         / "generated"
         / "exported_meshes"
     )
+    default_json = (
+        _script_dir()
+        / ".."
+        / ".."
+        / "code"
+        / "simulation"
+        / "generated"
+        / "fusion_export.json"
+    )
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--urdf", type=Path, default=default_urdf.resolve())
     parser.add_argument("--meshes", type=Path, default=default_meshes.resolve())
+    parser.add_argument(
+        "--json",
+        type=Path,
+        default=default_json.resolve(),
+        help="fusion_export.json path. Used to read each leg's "
+        "Link3TipAxis origin for foot-target placement; falls back to "
+        "the URDF + a hardcoded link3-frame foot tip if the axis isn't "
+        "present in the export yet.",
+    )
     parser.add_argument("--save", type=Path, default=None)
     parser.add_argument(
         "--ik-chain",
@@ -661,8 +798,12 @@ def parse_args():
         choices=(2, 3),
         default=2,
         help="IK chain length per leg. 2 (default) = hip+knee solve, "
-        "shoulder stays FK. 3 = shoulder+hip+knee all solve "
-        "(experimental).",
+        "shoulder stays FK. Matches the physical workflow: animator "
+        "rotates the shoulder by hand to aim the leg, IK solves the "
+        "reach. The foot target is parented to link1 so it follows "
+        "the shoulder rotation automatically. 3 = shoulder+hip+knee "
+        "all solve, but unstable in combination with the foot target "
+        "parented to link1 (IK chases a moving target).",
     )
 
     argv = sys.argv
@@ -674,6 +815,7 @@ def main():
     args = parse_args()
     print(f"[urdf_to_blender_rigged] urdf      : {args.urdf}")
     print(f"[urdf_to_blender_rigged] meshes    : {args.meshes}")
+    print(f"[urdf_to_blender_rigged] json      : {args.json}")
     print(f"[urdf_to_blender_rigged] ik_chain  : {args.ik_chain}")
 
     if not args.urdf.exists():
@@ -685,6 +827,22 @@ def main():
         f"{len(robot['joints'])} joints, root={robot['root']}"
     )
     link_world = compute_link_world(robot)
+
+    foot_tip_in_link3_m = load_foot_tip_in_link3_frame(args.json, link_world)
+    if foot_tip_in_link3_m is not None:
+        print(
+            f"[urdf_to_blender_rigged] foot tip  : link3-local "
+            f"{tuple(round(v * M_TO_MM, 3) for v in foot_tip_in_link3_m)} mm "
+            f"(from Link3TipAxis in {args.json.name})"
+        )
+    else:
+        foot_tip_in_link3_m = FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M
+        print(
+            f"[urdf_to_blender_rigged] foot tip  : link3-local "
+            f"{tuple(round(v * M_TO_MM, 3) for v in foot_tip_in_link3_m)} mm "
+            "(hardcoded fallback — Link3TipAxis missing from JSON; "
+            "re-export Fusion to populate it)"
+        )
 
     clear_scene()
     collections = make_collections()
@@ -706,6 +864,7 @@ def main():
         arm_obj,
         args.ik_chain,
         collections[TARGETS_COLLECTION],
+        foot_tip_in_link3_m,
     )
     n_lim = add_limit_rotation_constraints(robot, arm_obj)
     n_locked = lock_ik_axes(robot, arm_obj)

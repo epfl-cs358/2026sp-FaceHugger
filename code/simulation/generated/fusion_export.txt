@@ -3,7 +3,7 @@ FaceHugger Fusion Export
 Document        : FullBodyAssembly
 Physics         : True
 Cpoint whitelist: LegMountPointFL, LegMountPointFR, LegMountPointBR, LegMountPointBL, BodyToLink1Point, Link1ToLink2Point, Link2ToLink3Point, LegMountFixedPoint, ServoMountPoint
-Caxis whitelist : BodyToLink1Axis, Link1ToLink2Axis, Link2ToLink3Axis
+Caxis whitelist : BodyToLink1Axis, Link1ToLink2Axis, Link2ToLink3Axis, Link3TipAxis
 Joint whitelist : Link1Revolute, Link2Revolute, Link3Revolute
 ============================================================
 
@@ -1654,6 +1654,7 @@ FaceHuggerLegAssembly:1 [xref]
   caxis: BodyToLink1Axis | local origin_mm: (11.97, -0.0, -0.2) dir: (0.0, 0.0, 1.0) | world origin_mm: (-57.901, 46.222, -5.0) dir: (0.0, -0.0, 1.0)
   caxis: Link1ToLink2Axis | local origin_mm: (34.565, 55.92, 10.246) dir: (1.0, 0.0, -0.0) | world origin_mm: (-113.821, 68.816, 5.446) dir: (0.0, 1.0, -0.0)
   caxis: Link2ToLink3Axis | local origin_mm: (34.57, 145.62, 10.246) dir: (1.0, 0.0, -0.0) | world origin_mm: (-203.521, 68.822, 5.446) dir: (0.0, 1.0, -0.0)
+  caxis: Link3TipAxis | local origin_mm: (19.07, 234.203, 10.246) dir: (0.0, 1.0, -0.0) | world origin_mm: (-292.103, 53.322, 5.446) dir: (-1.0, 0.0, -0.0)
   cpoint: BodyToLink1Point | local pos_mm: (11.97, -0.0, -4.2) | world pos_mm: (-57.901, 46.222, -9.0)
   cpoint: Link1ToLink2Point | local pos_mm: (34.565, 55.92, 10.246) | world pos_mm: (-113.821, 68.816, 5.446)
   cpoint: Link2ToLink3Point | local pos_mm: (34.57, 145.62, 10.246) | world pos_mm: (-203.521, 68.822, 5.446)
