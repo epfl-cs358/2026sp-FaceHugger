@@ -1651,14 +1651,10 @@ FlexibleSkeleton:1 [xref]
     mass: 0.064642 kg | com local: (0.0, -0.412, -9.731) | com world: (0.0, -0.412, -9.731)
 FaceHuggerLegAssembly:1 [xref]
   parent_origin_mm: (-57.901, 34.251, -4.8)  world_origin_mm: (-57.901, 34.251, -4.8)
-  caxis: BodyToLink1Axis | local origin_mm: (11.97, -0.0, -0.2) dir: (0.0, 0.0, 1.0) | world origin_mm: (-57.901, 46.222, -5.0) dir: (0.0, -0.0, 1.0)
-  caxis: Link1ToLink2Axis | local origin_mm: (34.565, 55.92, 10.246) dir: (1.0, 0.0, -0.0) | world origin_mm: (-113.821, 68.816, 5.446) dir: (0.0, 1.0, -0.0)
-  caxis: Link2ToLink3Axis | local origin_mm: (34.57, 145.62, 10.246) dir: (1.0, 0.0, -0.0) | world origin_mm: (-203.521, 68.822, 5.446) dir: (0.0, 1.0, -0.0)
-  caxis: Link3TipAxis | local origin_mm: (19.07, 234.203, 10.246) dir: (0.0, 1.0, -0.0) | world origin_mm: (-292.103, 53.322, 5.446) dir: (-1.0, 0.0, -0.0)
   cpoint: BodyToLink1Point | local pos_mm: (11.97, -0.0, -4.2) | world pos_mm: (-57.901, 46.222, -9.0)
   cpoint: Link1ToLink2Point | local pos_mm: (34.565, 55.92, 10.246) | world pos_mm: (-113.821, 68.816, 5.446)
   cpoint: Link2ToLink3Point | local pos_mm: (34.57, 145.62, 10.246) | world pos_mm: (-203.521, 68.822, 5.446)
-  mass: 2.813979 kg | com local: (-99.152, 35.202, 3.582) | com world: (-99.152, 35.202, 3.582)
+  mass: 2.813979 kg | com local: (-95.191, 61.208, 3.582) | com world: (-95.191, 61.208, 3.582)
   Servo_Mouser_Model:1 [xref]
     parent_origin_mm: (1.85, 0.0, 0.0)  world_origin_mm: (-57.901, 36.101, -4.8)
     body: ServoBase | bbox_center_mm: (6.068, 0.0, 20.922)
@@ -1701,15 +1697,19 @@ FaceHuggerLegAssembly:1 [xref]
   Link1L:1
     parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-57.901, 34.251, -4.8)
     body: Link1 | bbox_center_mm: (4.195, 23.06, 20.433)
+    caxis: BodyToLink1Axis | local origin_mm: (11.97, -0.0, -0.2) dir: (0.0, 0.0, 1.0) | world origin_mm: (-57.901, 46.222, -5.0) dir: (0.0, -0.0, 1.0)
     mass: 0.150899 kg | com local: (10.281, 36.729, 23.834) | com world: (-94.63, 44.533, 19.034)
   Link2L:1
     parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-57.901, 34.251, -4.8)
     body: Link2 | bbox_center_mm: (14.12, 100.77, 10.246)
     body: Link2Joint3 [hidden] | bbox_center_mm: (35.57, 134.232, 10.246)
+    caxis: Link1ToLink2Axis | local origin_mm: (34.565, 55.92, 10.246) dir: (1.0, 0.0, -0.0) | world origin_mm: (-113.821, 68.816, 5.446) dir: (0.0, 1.0, -0.0)
+    caxis: Link2ToLink3Axis | local origin_mm: (34.57, 145.62, 10.246) dir: (1.0, 0.0, -0.0) | world origin_mm: (-203.521, 68.822, 5.446) dir: (0.0, 1.0, -0.0)
     mass: 0.162564 kg | com local: (21.26, 102.83, 10.073) | com world: (-160.73, 55.511, 5.273)
   Link3L:1
     parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-57.901, 34.251, -4.8)
     body: Link3 | bbox_center_mm: (4.195, 180.671, 10.246)
+    caxis: Link3TipAxis | local origin_mm: (19.07, 234.203, 10.246) dir: (0.0, 1.0, -0.0) | world origin_mm: (-292.103, 53.322, 5.446) dir: (-1.0, 0.0, -0.0)
     mass: 0.111653 kg | com local: (8.288, 166.816, 10.246) | com world: (-224.716, 42.539, 5.446)
   MotorMount:1 [xref]
     parent_origin_mm: (1.749, -16.401, 14.8)  world_origin_mm: (-41.5, 36.0, 10.0)
@@ -1732,6 +1732,7 @@ FaceHuggerLegAssembly:1 [xref]
   Link1R:1 [hidden]
     parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-57.901, 34.251, -4.8)
     body: Link1R | bbox_center_mm: (4.195, 23.06, -20.433)
+    caxis: BodyToLink1Axis | local origin_mm: (11.97, -0.0, 0.2) dir: (0.0, 0.0, -1.0) | world origin_mm: (-57.901, 46.222, -5.0) dir: (0.0, -0.0, 1.0)
     mass: 0.150899 kg | com local: (10.281, -36.729, 23.834) | com world: (-21.171, 44.533, 19.034)
   MotorMountR:1 [hidden]
     parent_origin_mm: (1.749, 16.401, 14.8)  world_origin_mm: (-74.302, 36.0, 10.0)
