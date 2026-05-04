@@ -9,46 +9,46 @@
 #define PIN_SDA 21
 #define PIN_SCL 22
 
-//servos work with pulses not angles
+// servos work with pulses not angles
 #define MIN_PULSE 150
 #define MAX_PULSE 600
 
-//define PCA addresses for servos as well as default angles
+// define PCA addresses for servos as well as default angles
 
-//Front right leg (Leg 0 in spinal_cord.cpp)
-#define FRONT_RIGHT_LEG_HIP_PCA_CHANNEL 0
-#define FRONT_RIGHT_LEG_THIGH_PCA_CHANNEL 1
-#define FRONT_RIGHT_LEG_KNEE_PCA_CHANNEL 2
+// Front right leg (Leg 0 in spinal_cord.cpp)
+#define FRONT_RIGHT_LEG_HIP_PCA_CHANNEL 8
+#define FRONT_RIGHT_LEG_THIGH_PCA_CHANNEL 9
+#define FRONT_RIGHT_LEG_KNEE_PCA_CHANNEL 10
 
 #define FRONT_RIGHT_LEG_HIP_DEFAULT_ANGLE 90
-#define FRONT_RIGHT_LEG_THIGH_DEFAULT_ANGLE 90
-#define FRONT_RIGHT_LEG_KNEE_DEFAULT_ANGLE 90
+#define FRONT_RIGHT_LEG_THIGH_DEFAULT_ANGLE 65  // Updated for Absolute Math
+#define FRONT_RIGHT_LEG_KNEE_DEFAULT_ANGLE 35   // Updated for Absolute Math
 
-//Front left leg (Leg 1 in spinal_cord.cpp)
-#define FRONT_LEFT_LEG_HIP_PCA_CHANNEL 3
-#define FRONT_LEFT_LEG_THIGH_PCA_CHANNEL 4
-#define FRONT_LEFT_LEG_KNEE_PCA_CHANNEL 5
+// Front left leg (Leg 1 in spinal_cord.cpp)
+#define FRONT_LEFT_LEG_HIP_PCA_CHANNEL 12
+#define FRONT_LEFT_LEG_THIGH_PCA_CHANNEL 13
+#define FRONT_LEFT_LEG_KNEE_PCA_CHANNEL 14
 
 #define FRONT_LEFT_LEG_HIP_DEFAULT_ANGLE 90
-#define FRONT_LEFT_LEG_THIGH_DEFAULT_ANGLE 90
-#define FRONT_LEFT_LEG_KNEE_DEFAULT_ANGLE 90
+#define FRONT_LEFT_LEG_THIGH_DEFAULT_ANGLE 115  // Updated for Mirrored Absolute Math
+#define FRONT_LEFT_LEG_KNEE_DEFAULT_ANGLE 145   // Updated for Mirrored Absolute Math
 
-//Bottom right leg (Leg 2 in spinal_cord.cpp)
-#define BOTTOM_RIGHT_LEG_HIP_PCA_CHANNEL 6
-#define BOTTOM_RIGHT_LEG_THIGH_PCA_CHANNEL 7
-#define BOTTOM_RIGHT_LEG_KNEE_PCA_CHANNEL 8
+// Bottom right leg (Leg 2 in spinal_cord.cpp)
+#define BOTTOM_RIGHT_LEG_HIP_PCA_CHANNEL 0
+#define BOTTOM_RIGHT_LEG_THIGH_PCA_CHANNEL 1
+#define BOTTOM_RIGHT_LEG_KNEE_PCA_CHANNEL 2
 
 #define BOTTOM_RIGHT_LEG_HIP_DEFAULT_ANGLE 90
-#define BOTTOM_RIGHT_LEG_THIGH_DEFAULT_ANGLE 90
-#define BOTTOM_RIGHT_LEG_KNEE_DEFAULT_ANGLE 90
+#define BOTTOM_RIGHT_LEG_THIGH_DEFAULT_ANGLE 65  // Updated for Absolute Math
+#define BOTTOM_RIGHT_LEG_KNEE_DEFAULT_ANGLE 35   // Updated for Absolute Math
 
-//Bottom left leg (Leg 3 in spinal_cord.cpp)
-#define BOTTOM_LEFT_LEG_HIP_PCA_CHANNEL 9
-#define BOTTOM_LEFT_LEG_THIGH_PCA_CHANNEL 10
-#define BOTTOM_LEFT_LEG_KNEE_PCA_CHANNEL 11
+// Bottom left leg (Leg 3 in spinal_cord.cpp)
+#define BOTTOM_LEFT_LEG_HIP_PCA_CHANNEL 4
+#define BOTTOM_LEFT_LEG_THIGH_PCA_CHANNEL 5
+#define BOTTOM_LEFT_LEG_KNEE_PCA_CHANNEL 6
 
 #define BOTTOM_LEFT_LEG_HIP_DEFAULT_ANGLE 90
-#define BOTTOM_LEFT_LEG_THIGH_DEFAULT_ANGLE 90
-#define BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE 90
+#define BOTTOM_LEFT_LEG_THIGH_DEFAULT_ANGLE 115  // Updated for Mirrored Absolute Math
+#define BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE 145   // Updated for Mirrored Absolute Math
 
 #endif

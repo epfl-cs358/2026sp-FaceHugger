@@ -66,14 +66,8 @@ void SpinalCord::begin() {
     leg4.returnToDefaultAngles();
 }
 
-void SpinalCord::processCommand(String dir, int state) {
+void SpinalCord::processCommand(String dir) {
     lastCommandMs = millis();
-    isMovingRequested = (state == 1);
-
-    if (!isMovingRequested) {
-        targetX = 0.0f; targetY = 0.0f;
-        return;
-    }
 
     // Map discrete labels to Vectors
     if (dir == "FW")         { targetX = 0.0f;  targetY = 1.0f;  }
@@ -84,6 +78,7 @@ void SpinalCord::processCommand(String dir, int state) {
     else if (dir == "FW_L")  { targetX = -0.7f; targetY = 0.7f;  }
     else if (dir == "BW_R")  { targetX = 0.7f;  targetY = -0.7f; }
     else if (dir == "BW_L")  { targetX = -0.7f; targetY = -0.7f; }
+    else if (dir == "STOP")  { targetX = 0.0f; targetY = 0.0f;   }
 }
 
 void SpinalCord::walk(){ robotState = STATE_WALK; }

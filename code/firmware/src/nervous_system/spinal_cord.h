@@ -19,7 +19,7 @@ class SpinalCord{
         void applyCalibration(int channel, int angle);
         void setGait(GaitType g);
         GaitType currentGait() const;
-        void processCommand(String dir, int state);
+        void processCommand(String dir);
     private:
         volatile RobotState robotState;
         Adafruit_PWMServoDriver driver;
