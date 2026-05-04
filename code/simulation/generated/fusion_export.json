@@ -166,13 +166,13 @@
     "Link1ToLink2Point",
     "Link2ToLink3Point",
     "LegMountFixedPoint",
-    "ServoMountPoint"
+    "ServoMountPoint",
+    "Link3TipPoint"
   ],
   "construction_axes_whitelist": [
     "BodyToLink1Axis",
     "Link1ToLink2Axis",
-    "Link2ToLink3Axis",
-    "Link3TipAxis"
+    "Link2ToLink3Axis"
   ],
   "joints_whitelist": [
     "Link1Revolute",
@@ -18641,7 +18641,7 @@
               "visible": true,
               "bbox_center_mm": [
                 0.0,
-                -0.0,
+                0.0,
                 12.5
               ]
             }
@@ -18650,47 +18650,47 @@
           "points": [],
           "children": [],
           "physics": {
-            "mass_kg": 0.064642,
+            "mass_kg": 0.063394,
             "com_mm": [
-              0.0,
-              -0.412,
-              -9.731
+              0.72,
+              -0.177,
+              -9.981
             ],
             "com_world_mm": [
-              0.0,
-              -0.412,
-              -9.731
+              0.72,
+              -0.177,
+              -9.981
             ],
             "inertia_kg_m2": {
-              "ixx": 5.1782e-05,
-              "iyy": 3.4258e-05,
-              "izz": 6.7399e-05,
-              "ixy": 0.0,
-              "iyz": -2.27e-07,
-              "ixz": 0.0
+              "ixx": 5.2394e-05,
+              "iyy": 3.0045e-05,
+              "izz": 6.3748e-05,
+              "ixy": -1.758e-06,
+              "iyz": -9.6e-08,
+              "ixz": 3.88e-07
             }
           }
         }
       ],
       "physics": {
-        "mass_kg": 0.631194,
+        "mass_kg": 0.629946,
         "com_mm": [
-          0.241,
-          4.394,
-          8.479
+          0.314,
+          4.427,
+          8.49
         ],
         "com_world_mm": [
-          0.241,
-          4.394,
-          8.479
+          0.314,
+          4.427,
+          8.49
         ],
         "inertia_kg_m2": {
-          "ixx": 0.000956112,
-          "iyy": 0.000609163,
-          "izz": 0.001286905,
-          "ixy": 1.7235e-05,
-          "iyz": -4.9716e-05,
-          "ixz": -5.969e-06
+          "ixx": 0.000956723,
+          "iyy": 0.000604949,
+          "izz": 0.001283254,
+          "ixy": 1.5476e-05,
+          "iyz": -4.9585e-05,
+          "ixz": -5.58e-06
         }
       }
     },
@@ -18776,6 +18776,20 @@
           "pos_world_mm": [
             -203.521,
             68.822,
+            5.446
+          ]
+        },
+        {
+          "name": "Link3TipPoint",
+          "visible": true,
+          "pos_mm": [
+            19.07,
+            234.203,
+            10.246
+          ],
+          "pos_world_mm": [
+            -292.103,
+            53.322,
             5.446
           ]
         }
@@ -19679,32 +19693,7 @@
               ]
             }
           ],
-          "axes": [
-            {
-              "name": "Link3TipAxis",
-              "visible": true,
-              "origin_mm": [
-                19.07,
-                234.203,
-                10.246
-              ],
-              "dir": [
-                0.0,
-                1.0,
-                -0.0
-              ],
-              "origin_world_mm": [
-                -292.103,
-                53.322,
-                5.446
-              ],
-              "dir_world": [
-                -1.0,
-                0.0,
-                -0.0
-              ]
-            }
-          ],
+          "axes": [],
           "points": [],
           "children": [],
           "physics": {
@@ -20426,22 +20415,22 @@
       "physics": {
         "mass_kg": 2.813979,
         "com_mm": [
-          -95.191,
-          61.208,
-          3.582
+          -102.01,
+          42.81,
+          13.281
         ],
         "com_world_mm": [
-          -95.191,
-          61.208,
-          3.582
+          -102.01,
+          42.81,
+          13.281
         ],
         "inertia_kg_m2": {
-          "ixx": 0.015379927,
-          "iyy": 0.036058522,
-          "izz": 0.047373815,
-          "ixy": 0.020554086,
-          "iyz": 0.001005533,
-          "ixz": -0.002237851
+          "ixx": 0.006884881,
+          "iyy": 0.042123063,
+          "izz": 0.046820376,
+          "ixy": 0.012972574,
+          "iyz": -0.001581288,
+          "ixz": 0.003036231
         }
       }
     }

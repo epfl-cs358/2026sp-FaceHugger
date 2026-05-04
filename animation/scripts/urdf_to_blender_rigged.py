@@ -88,7 +88,7 @@ Usage (headless — smoke test):
 CLI flags (after the `--` separator per Blender convention):
     --urdf PATH      path to facehugger.urdf
     --meshes PATH    directory containing exported STLs
-    --json PATH      fusion_export.json (foot tip from `Link3TipAxis`)
+    --json PATH      fusion_export.json (foot tip from `Link3TipPoint`)
     --save PATH      write a .blend here after building the scene
 
 Targets Blender 5.x.
@@ -119,18 +119,20 @@ MESHES_COLLECTION = "Meshes"
 JOINTS_COLLECTION = "Joint Origins"
 AXES_COLLECTION = "Joint Axes"
 TARGETS_COLLECTION = "IK Targets"
+CONTROLS_COLLECTION = "Controls"
 
 COLOR_JOINT = (1.0, 0.0, 0.0, 1.0)  # red
 COLOR_AXIS = (1.0, 0.4, 0.0, 1.0)  # orange
 
 ARMATURE_NAME = "FaceHuggerRig"
 
-# Fallback foot tip in link3 frame (mm) — used if `Link3TipAxis` is
-# missing from `fusion_export.json`. Same value as the URDF metadata
-# comment block. The CAD defines the foot tip via a `Link3TipAxis`
-# construction axis (whitelisted in
-# ExportBodiesToURDF.CONSTRUCTION_AXES); the importer prefers that
-# JSON value when available.
+# Foot tip in link3 frame (mm) — leg_lower.stl max-+Y centroid, copied
+# from the URDF metadata comment block. This is the AUTHORITATIVE value
+# used to place each leg's foot_target Empty and the link3 bone tail
+# (after axis-parallel projection). The JSON `Link3TipPoint` is read
+# only as a cross-check: if it differs from this constant by > 5 mm,
+# main() prints a warning so the CAD construction point gets moved to
+# coincide with the mesh tip.
 FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M = Vector((-0.030946, -0.013000, 0.000024))
 
 # Naming patterns
@@ -275,17 +277,17 @@ def compute_link_world(robot):
 
 
 def load_foot_tip_in_link3_frame(json_path):
-    """Read `Link2ToLink3Axis` and `Link3TipAxis` from `fusion_export.json`
-    and return the foot tip position in link3-local frame (metres), or
-    `None` if either axis is missing.
+    """Read `Link2ToLink3Axis` (construction axis) and `Link3TipPoint`
+    (construction point) from `fusion_export.json` and return the foot
+    tip position in link3-local frame (metres), or `None` if either is
+    missing.
 
-    The JSON stores ONE construction axis instance per name (from the
-    leg-assembly source occurrence), so we use `origin_mm` (in
-    leg-assembly-source frame) rather than `origin_world_mm` (which
-    reflects the CAD construction pose, not the URDF rest pose). The
-    foot-relative-to-knee delta lives in the source frame; apply
-    `R_la = Rz(90°)` — the same rotation `ExportBodiesToURDF` pre-applies
-    to joint axes — to convert to link3-local.
+    `Link2ToLink3Axis` lives in each occurrence's `axes[]` (key
+    `origin_mm`); `Link3TipPoint` lives in `points[]` (key `pos_mm`).
+    Both are in leg-assembly-source frame; the foot-relative-to-knee
+    delta lives in that same frame, so apply `R_la = Rz(90°)` — the
+    same rotation `ExportBodiesToURDF` pre-applies to joint axes — to
+    convert to link3-local.
     """
     if not json_path or not Path(json_path).exists():
         return None
@@ -300,13 +302,23 @@ def load_foot_tip_in_link3_frame(json_path):
 
     def _walk(node):
         for axis in node.get("axes", []) or []:
-            name = axis.get("name")
             xyz = axis.get("origin_mm")
-            if xyz and len(xyz) >= 3:
-                if name == "Link2ToLink3Axis" and knee_source_mm[0] is None:
-                    knee_source_mm[0] = Vector(xyz[:3])
-                elif name == "Link3TipAxis" and foot_source_mm[0] is None:
-                    foot_source_mm[0] = Vector(xyz[:3])
+            if (
+                axis.get("name") == "Link2ToLink3Axis"
+                and knee_source_mm[0] is None
+                and xyz
+                and len(xyz) >= 3
+            ):
+                knee_source_mm[0] = Vector(xyz[:3])
+        for point in node.get("points", []) or []:
+            xyz = point.get("pos_mm")
+            if (
+                point.get("name") == "Link3TipPoint"
+                and foot_source_mm[0] is None
+                and xyz
+                and len(xyz) >= 3
+            ):
+                foot_source_mm[0] = Vector(xyz[:3])
         for child in node.get("children", []) or []:
             if knee_source_mm[0] is not None and foot_source_mm[0] is not None:
                 return
@@ -374,6 +386,7 @@ def make_collections():
         ARMATURE_COLLECTION,
         MESHES_COLLECTION,
         TARGETS_COLLECTION,
+        CONTROLS_COLLECTION,
         JOINTS_COLLECTION,
         AXES_COLLECTION,
     ):
@@ -425,7 +438,27 @@ def _bone_endpoints_world_mm(robot, link_world, link_name, foot_tip_in_link3_m):
             child_joint_origin_m = link_world[child_link].to_translation()
             break
 
-    if child_joint_origin_m is not None:
+    if link_name.endswith("_link1"):
+        # Aim link1 bone-Y at the foot tip (instead of at the hip pivot)
+        # so Damped Track on link1 is identity at the URDF rest pose.
+        # If bone-Y aimed at the hip (the natural child-joint origin),
+        # shoulder→hip and shoulder→foot would differ by ~19° in the
+        # horizontal plane (the leg has bends at hip and knee at rest),
+        # and Damped Track would yaw link1 by that angle when the
+        # dep-graph evaluates — visually "contorting" the rest pose by
+        # ~88 mm at the foot. With the foot-tip aim, Damped Track is
+        # zero at rest and only fires when the animator drags
+        # foot_target away from its rest position.
+        #
+        # Joint axis for link1 is world +Z, so the perpendicular-to-
+        # axis projection step below drops the Z component into the
+        # horizontal plane. bone-local Z stays = world +Z, alignment
+        # invariant unchanged. _foot_tip_for_leg applies the R-side
+        # X-flip so FR/BL legs aim correctly toward their own feet.
+        leg = link_name.split("_", 1)[0]
+        link3_name = KNEE_BONE_FMT.format(leg=leg)
+        tail_m = link_world[link3_name] @ _foot_tip_for_leg(leg, foot_tip_in_link3_m)
+    elif child_joint_origin_m is not None:
         tail_m = child_joint_origin_m
     elif link_name.endswith("_link3"):
         leg = link_name.split("_", 1)[0]
@@ -777,6 +810,177 @@ def place_ik_targets_and_constraints(
 
 
 # ---------------------------------------------------------------------------
+# Body control (single Empty drives the whole rig)
+# ---------------------------------------------------------------------------
+
+
+def add_body_control(arm_obj, controls_collection):
+    """Single `body_ctrl` Empty (CUBE, 80 mm) at world origin. Reparents
+    the armature OBJECT to body_ctrl so moving body_ctrl translates and
+    rotates the whole rig. Foot Empties are unparented (world space),
+    so as body_ctrl moves, IK on link3 + Damped Track on link1 keep the
+    legs reaching back to the planted feet.
+
+    The armature object is hidden afterward — animator's primary handle
+    becomes the visible cube. Bones still evaluate (hide_viewport on
+    the object hides display, not constraint evaluation), and the
+    armature can be unhidden temporarily for per-bone pose-mode work.
+
+    User spec wording was "parented to base_link bone"; in practice the
+    parenting is inverted (armature parent = body_ctrl) so that moving
+    body_ctrl drives the rig rather than following it. body_ctrl sits
+    at base_link's rest position (world origin), satisfying the spec's
+    intent of a chassis-anchored handle.
+    """
+    bpy.ops.object.empty_add(type="CUBE", radius=80.0, location=(0.0, 0.0, 0.0))
+    body_ctrl = bpy.context.object
+    body_ctrl.name = "body_ctrl"
+    for c in list(body_ctrl.users_collection):
+        c.objects.unlink(body_ctrl)
+    controls_collection.objects.link(body_ctrl)
+
+    arm_obj.parent = body_ctrl
+    arm_obj.parent_type = "OBJECT"
+    arm_obj.matrix_parent_inverse = Matrix.Identity(4)
+    arm_obj.hide_viewport = True
+    return body_ctrl
+
+
+def _diagnose_foot_target_placement(robot, link_world, arm_obj):
+    """Print, per leg, the actual mesh foot tip in world (max-+Y
+    centroid of `leg_lower` STL) versus `foot_target` Empty's world
+    position — both at rest pose.
+
+    Uses URDF rest matrices (`link_world[link3] @ visual_origin`) to
+    compute the rest-pose mesh world; Blender's `mesh_obj.matrix_world`
+    reflects the LIVE pose after Damped Track + IK fire on the
+    placeholder rest, which is misleading for placement diagnosis.
+
+    Expected: mesh tip and foot_target agree to within sub-mm. If they
+    don't, the JSON `Link3TipAxis` was placed at a different reference
+    in CAD than the mesh max-+Y centroid (which the URDF metadata
+    comment `FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M` captures). Fix is
+    either to move the construction axis in CAD, or switch the rigger
+    to use the fallback constant.
+
+    NOTE: this diagnostic does NOT measure the ~13 mm bone-tail-vs-
+    foot_target gap (projection that preserves align_roll exactness) —
+    that's rig-internal and documented in
+    `place_ik_targets_and_constraints`.
+    """
+    # Damped Track rest-identity check: per leg, compare each link1's
+    # bone-Y (in armature space, from matrix_local) to the direction
+    # from link1's head to foot_target. If they align at rest, Damped
+    # Track applies zero rotation at the URDF rest pose; only when the
+    # animator drags foot_target does it rotate link1 — preserving
+    # auto-yaw on movement while eliminating the 88 mm rest contortion.
+    print("[urdf_to_blender_rigged] Damped Track rest-identity check (link1):")
+    import math as _math2
+
+    for leg in LEG_IDS:
+        link1_name = SHOULDER_BONE_FMT.format(leg=leg)
+        target = bpy.data.objects.get(FOOT_TARGET_FMT.format(leg=leg))
+        bone = arm_obj.data.bones.get(link1_name)
+        if bone is None or target is None:
+            continue
+        ml = bone.matrix_local
+        bone_y = Vector(ml.col[1][:3]).normalized()
+        head_world = Vector(ml.col[3][:3])
+        target_world = target.matrix_world.translation
+        dir_to_target = (target_world - head_world).normalized()
+        # Full 3D angle includes elevation; LIMIT_ROTATION X/Y locks
+        # block elevation rotation, so it doesn't matter for rest pose.
+        cos_3d = max(-1.0, min(1.0, bone_y.dot(dir_to_target)))
+        angle_3d_deg = _math2.degrees(_math2.acos(cos_3d))
+        # Yaw-only angle (horizontal projection) IS what Damped Track
+        # can actually apply through the X/Y locks. ~0° at rest means
+        # no rest-pose contortion; auto-yaw still fires when the
+        # animator drags foot_target horizontally.
+        bone_y_h = Vector((bone_y.x, bone_y.y, 0.0))
+        target_h = Vector((dir_to_target.x, dir_to_target.y, 0.0))
+        if bone_y_h.length > 1e-9 and target_h.length > 1e-9:
+            cos_yaw = max(
+                -1.0,
+                min(1.0, bone_y_h.normalized().dot(target_h.normalized())),
+            )
+            angle_yaw_deg = _math2.degrees(_math2.acos(cos_yaw))
+        else:
+            angle_yaw_deg = float("nan")
+        print(
+            f"  [{leg}_link1] 3D={angle_3d_deg:6.3f}° "
+            f"yaw-only={angle_yaw_deg:6.3f}° "
+            f"(yaw-only is what passes through LIMIT_ROTATION's X/Y locks; "
+            f"~0° = no rest contortion)"
+        )
+
+    # Spot-check the FL Empties before iterating: parent (should be None),
+    # location vs matrix_world.translation (should match — foot_target is
+    # unparented and unmoved), COPY_LOCATION settings on foot_ik.
+    fl_target = bpy.data.objects.get(FOOT_TARGET_FMT.format(leg="fl"))
+    fl_ik = bpy.data.objects.get(FOOT_IK_FMT.format(leg="fl"))
+    if fl_target is not None:
+        loc = fl_target.location
+        mw = fl_target.matrix_world.translation
+        print(
+            f"[urdf_to_blender_rigged] foot_target_fl: "
+            f"location={tuple(round(v, 3) for v in loc)} mm, "
+            f"matrix_world.translation={tuple(round(v, 3) for v in mw)} mm, "
+            f"parent={fl_target.parent.name if fl_target.parent else None}"
+        )
+    if fl_ik is not None:
+        cop = next((c for c in fl_ik.constraints if c.type == "COPY_LOCATION"), None)
+        if cop is not None:
+            print(
+                f"[urdf_to_blender_rigged] foot_ik_fl: "
+                f"COPY_LOCATION target={cop.target.name if cop.target else None} "
+                f"target_space={cop.target_space} owner_space={cop.owner_space} "
+                f"use_offset={cop.use_offset}"
+            )
+
+    print("[urdf_to_blender_rigged] foot_target vs mesh tip (rest pose):")
+    for leg in LEG_IDS:
+        link3 = KNEE_BONE_FMT.format(leg=leg)
+        mesh_obj = bpy.data.objects.get(f"{leg}_link3__leg_lower")
+        target_obj = bpy.data.objects.get(FOOT_TARGET_FMT.format(leg=leg))
+        if mesh_obj is None or target_obj is None:
+            print(
+                f"  [{leg}] missing object — "
+                f"mesh={mesh_obj is not None}, target={target_obj is not None}"
+            )
+            continue
+        verts = mesh_obj.data.vertices
+        if not verts:
+            print(f"  [{leg}] empty mesh data")
+            continue
+        max_y = max(v.co.y for v in verts)
+        tol_y = 0.01  # mesh-local mm
+        tip_verts = [v.co for v in verts if v.co.y >= max_y - tol_y]
+        n = len(tip_verts)
+        centroid_local = sum(tip_verts, Vector((0.0, 0.0, 0.0))) / n
+
+        # Rest-pose mesh world matrix from URDF: link_world[link3] @
+        # visual_origin (for the leg_lower visual specifically).
+        visual_origin = Matrix.Identity(4)
+        for vis_origin, mesh_rel, _scale in robot["links"][link3]:
+            if Path(mesh_rel).stem == "leg_lower":
+                visual_origin = vis_origin
+                break
+        mesh_rest_world_m = link_world[link3] @ visual_origin
+        mesh_rest_world_mm = matrix_m_to_mm(mesh_rest_world_m)
+        centroid_world = mesh_rest_world_mm @ centroid_local
+
+        target_world = target_obj.matrix_world.translation
+        delta_mm = (target_world - centroid_world).length
+        print(
+            f"  [{leg}] mesh tip = "
+            f"({centroid_world.x:+8.2f}, {centroid_world.y:+8.2f}, {centroid_world.z:+7.2f}) mm "
+            f"({n} verts at max Y={max_y:.3f}); "
+            f"foot_target = ({target_world.x:+8.2f}, {target_world.y:+8.2f}, {target_world.z:+7.2f}) mm; "
+            f"|delta| = {delta_mm:6.3f} mm"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Joint markers (parented to bones; hidden by default)
 # ---------------------------------------------------------------------------
 
@@ -894,9 +1098,10 @@ def parse_args():
         "--json",
         type=Path,
         default=default_json.resolve(),
-        help="fusion_export.json path. Used to read each leg's "
-        "Link3TipAxis origin for foot-target placement; falls back to "
-        "FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M if missing.",
+        help="fusion_export.json path. Used to cross-check the foot tip "
+        "from the Link3TipPoint construction point against "
+        "FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M (URDF metadata, mesh-derived). "
+        "Warns if they disagree by more than 5 mm.",
     )
     parser.add_argument("--save", type=Path, default=None)
 
@@ -921,15 +1126,33 @@ def main():
     )
     link_world = compute_link_world(robot)
 
-    foot_tip_in_link3_m = load_foot_tip_in_link3_frame(args.json)
-    if foot_tip_in_link3_m is not None:
-        src = f"Link3TipAxis in {args.json.name}"
-    else:
-        foot_tip_in_link3_m = FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M
-        src = "hardcoded fallback (Link3TipAxis missing — re-export Fusion)"
+    # Prefer the URDF metadata (mesh max-+Y centroid) over the JSON
+    # Link3TipAxis. The JSON read remains available for diagnostic
+    # comparison: if the values disagree by more than the tolerance,
+    # warn — that means the CAD construction axis is misplaced
+    # relative to the leg_lower.stl tip.
+    foot_tip_in_link3_m = FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M
+    foot_tip_from_json = load_foot_tip_in_link3_frame(args.json)
+    if foot_tip_from_json is not None:
+        delta_mm = (foot_tip_in_link3_m - foot_tip_from_json).length * M_TO_MM
+        if delta_mm > 5.0:
+            print(
+                f"[urdf_to_blender_rigged] WARNING: JSON Link3TipPoint "
+                f"{tuple(round(v * M_TO_MM, 3) for v in foot_tip_from_json)} mm "
+                f"differs from FOOT_TIP_FALLBACK "
+                f"{tuple(round(v * M_TO_MM, 3) for v in foot_tip_in_link3_m)} mm "
+                f"by {delta_mm:.2f} mm — move the construction point in CAD to "
+                f"match the leg_lower.stl max-+Y centroid. Using FOOT_TIP_FALLBACK."
+            )
+        else:
+            print(
+                f"[urdf_to_blender_rigged] foot tip: JSON Link3TipPoint matches "
+                f"FOOT_TIP_FALLBACK to {delta_mm:.3f} mm — using metadata."
+            )
     print(
         f"[urdf_to_blender_rigged] foot tip: link3-local "
-        f"{tuple(round(v * M_TO_MM, 3) for v in foot_tip_in_link3_m)} mm ({src})"
+        f"{tuple(round(v * M_TO_MM, 3) for v in foot_tip_in_link3_m)} mm "
+        "(FOOT_TIP_FALLBACK = URDF metadata, mesh-derived)"
     )
 
     clear_scene()
@@ -967,6 +1190,10 @@ def main():
         collections[AXES_COLLECTION],
     )
 
+    _diagnose_foot_target_placement(robot, link_world, arm_obj)
+    _verify_auto_yaw(arm_obj)
+    body_ctrl = add_body_control(arm_obj, collections[CONTROLS_COLLECTION])
+
     max_err_deg = _check_bone_z_alignment(robot, link_world, arm_obj)
     print(
         f"[urdf_to_blender_rigged] armature: {n_bones} bones, "
@@ -977,6 +1204,11 @@ def main():
     print(
         f"[urdf_to_blender_rigged] targets : {n_targets} foot_target "
         f"+ {n_targets} foot_ik (hidden, COPY_LOCATION exact)"
+    )
+    print(
+        f"[urdf_to_blender_rigged] controls: {body_ctrl.name} "
+        f"({body_ctrl.empty_display_type}, armature parented to it, "
+        f"armature.hide_viewport=True)"
     )
     print(
         f"[urdf_to_blender_rigged] geometry: {n_meshes} visuals, "
@@ -994,6 +1226,42 @@ def main():
         print(f"[urdf_to_blender_rigged] saved: {args.save}")
 
 
+def _verify_auto_yaw(arm_obj):
+    """Dynamic check: translate foot_target_fl by +50 mm in world X,
+    eval dep graph, measure how much fl_link1's resolved bone-Y
+    direction rotated in the world XY plane (yaw). Constraint-resolved
+    pose lives in `pose_bone.matrix`, not `rotation_euler` (which is the
+    pre-constraint keyed value). A non-zero yaw delta confirms Damped
+    Track is firing on foot_target movement. Restores foot_target
+    afterward so the saved blend keeps the rest pose.
+    """
+    import math as _math3
+
+    target = bpy.data.objects.get(FOOT_TARGET_FMT.format(leg="fl"))
+    pb = arm_obj.pose.bones.get(SHOULDER_BONE_FMT.format(leg="fl"))
+    if target is None or pb is None:
+        return
+
+    def _yaw_from_matrix():
+        bpy.context.view_layer.update()
+        m = pb.matrix
+        return _math3.atan2(m.col[1].y, m.col[1].x)
+
+    saved = target.location.copy()
+    yaw_before = _yaw_from_matrix()
+    target.location = saved + Vector((50.0, 0.0, 0.0))
+    yaw_after = _yaw_from_matrix()
+    target.location = saved
+    bpy.context.view_layer.update()
+
+    delta_deg = _math3.degrees(yaw_after - yaw_before)
+    print(
+        f"[urdf_to_blender_rigged] auto-yaw : foot_target_fl +50 mm in X → "
+        f"fl_link1 yaw changed by {delta_deg:+.3f}° "
+        f"(non-zero = Damped Track firing through LIMIT_ROTATION X/Y locks)"
+    )
+
+
 def _check_bone_z_alignment(robot, link_world, arm_obj):
     """Return the worst-case angle (degrees) between each bone's local Z
     (armature-space, read from `bone.matrix_local`) and the URDF joint
@@ -1006,17 +1274,25 @@ def _check_bone_z_alignment(robot, link_world, arm_obj):
     import math as _math
 
     worst = 0.0
+    worst_bone = None
+    per_bone = []
     for child_link, j in robot["joints"].items():
         bone = arm_obj.data.bones.get(child_link)
         if bone is None:
             continue
         axis_world = (link_world[child_link].to_3x3() @ j["axis"]).normalized()
         ml = bone.matrix_local
-        y_world = Vector(ml.col[1][:3]).normalized()
         z_world = Vector(ml.col[2][:3]).normalized()
         cos_t = max(-1.0, min(1.0, abs(z_world.dot(axis_world))))
         err_deg = _math.degrees(_math.acos(cos_t))
-        worst = max(worst, err_deg)
+        per_bone.append((child_link, err_deg))
+        if err_deg > worst:
+            worst = err_deg
+            worst_bone = child_link
+    print(
+        "[urdf_to_blender_rigged] bone-Z alignment per bone: "
+        + ", ".join(f"{n}={e:.4f}°" for n, e in per_bone)
+    )
     return worst
 
 
