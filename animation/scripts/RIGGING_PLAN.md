@@ -98,20 +98,27 @@ Each visual mesh is parented to its bone with `parent_type='BONE'`
   the original author wrote ~500 lines of bone-construction code
   alone.
 
-### My recommendation
+### Decision (2026-05-04): Option B — Armature
 
-**Start with Option A (Empties)**. The `visualize_urdf.py` chain walk
-already produces correct world transforms for every link; promoting
-each link's "compute matrix_world" step to "create an Empty parented
-in the chain with matrix_local = joint.origin" is a ~20-line
-addition. The animation-export script then reads
-`empty.rotation_euler` per joint Empty per frame and dumps the 12
-angles as rows.
+**Implemented as [`urdf_to_blender_rigged.py`](urdf_to_blender_rigged.py)**.
+Option A was the safer first pass, but the animator workflow needs
+**inverse kinematics** (drag the foot, hip + knee solve), which is
+native to bone armatures and awkward to bolt onto plain Empties.
 
-If after using it the animator workflow feels awkward (rotating
-Empties one at a time vs. grabbing a bone), **migrate to Option B
-in a separate PR**. Don't try to land both at once — bone roll
-calibration is its own debugging week.
+The bone-roll calibration that this section originally flagged as
+"its own debugging week" turned out to be **one line per bone** thanks
+to `EditBone.align_roll(joint_axis_world)`: pass the URDF axis vector
+in world frame and Blender sets the roll so bone-local Z aligns with
+that axis. After `align_roll`, all 12 joints rotate uniformly on
+`rotation_euler[2]` — including the per-side ±Y sign flip on hip/knee
+(URDF `<axis>0 -1 0</axis>` for FR/BL), which gets absorbed into the
+bone roll automatically.
+
+The rest-pose regression test (29 meshes) passes within 0.5 mm of
+[`visualize_urdf.py`](visualize_urdf.py)'s placement-only baseline — max
+drift 0.0003 mm; the 0.5 mm tolerance is for accumulated floating-point
+noise across the 3-joint chain on link3 meshes, not a methodology
+loosening.
 
 ---
 
