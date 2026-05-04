@@ -45,10 +45,18 @@ The `.gait` file stores only inflection points (where motion changes direction),
 
 ### 2. All gaits share a neutral start/end pose
 
-Every gait cycle begins and ends at the same neutral stance (all servos at their mechanical zero, typically 135° = middle of 270° range). This means:
+Every gait cycle begins and ends at the same neutral stance: every Blender
+bone at `rotation_euler = 0` → URDF θ=0 → servo PWM at `offset_deg`
+(typically 135° = middle of 270° range). These are three views of the
+same physical state. This means:
 - No transition interpolation needed between gaits
 - The state machine just plays cycle → cycle with no blending
 - A "stop" command finishes the cycle and lands at neutral
+
+The "splayed at -45°/+45°/-135°/+135° per leg" appearance of the rest
+pose is encoded in the URDF joint origins (Convention A, see
+[`MERGE_AND_CONVENTION.md` §0/§3](../../code/simulation/docs/MERGE_AND_CONVENTION.md)),
+not in non-zero Blender rotation values.
 
 We considered alternatives:
 - **Runtime IK interpolation** between arbitrary poses — rejected (unnecessary ESP32 complexity for v1)
@@ -88,20 +96,27 @@ Standard servo calibration approach:
 
 ## Leg Architecture
 
-Each leg has 3 joints:
-- **Shoulder (yaw):** rotates the leg laterally. Z-axis. Usable range ~250° of 270°.
-- **Hip (pitch):** raises/lowers the upper leg. X-axis. Full 270° range.
-- **Knee (pitch):** extends/folds the lower leg. X-axis. Full 270° range.
+Each leg has 3 joints (per URDF):
+- **link1 (shoulder, yaw):** rotates the leg laterally. URDF axis = +Z.
+- **link2 (hip, pitch):** raises/lowers the upper leg. URDF axis = ±Y (per-side sign).
+- **link3 (knee, pitch):** extends/folds the lower leg. URDF axis = ±Y (per-side sign).
 
-Naming convention (12 bones):
+Naming convention (matches URDF link names, lowercase):
 ```
-FL_shoulder, FL_hip, FL_knee    (front-left)
-FR_shoulder, FR_hip, FR_knee    (front-right)
-BL_shoulder, BL_hip, BL_knee    (back-left)
-BR_shoulder, BR_hip, BR_knee    (back-right)
+fl_link1, fl_link2, fl_link3    (front-left)
+fr_link1, fr_link2, fr_link3    (front-right)
+bl_link1, bl_link2, bl_link3    (back-left)
+br_link1, br_link2, br_link3    (back-right)
 ```
 
-Link lengths: 80mm (shoulder→hip) / 80mm (hip→knee) / 60mm (knee→foot).
+Plus `base_link` for the chassis bone. After `EditBone.align_roll(joint.axis)`
+at rig-build time, every joint rotates uniformly on bone-local Z
+(`rotation_euler[2]`) — including the per-side ±Y sign flip on hip/knee,
+which is absorbed into the bone roll.
+
+Link lengths are read from the URDF (current values documented in
+[`MERGE_AND_CONVENTION.md` §6](../../code/simulation/docs/MERGE_AND_CONVENTION.md)).
+Don't hardcode them in spec or code — they drift whenever the CAD changes.
 
 ---
 
@@ -158,9 +173,20 @@ every 20ms (50 Hz):
 
 ## Open Questions (To Resolve During Implementation)
 
-1. **Bone naming** — are the Blender bones already named FL_shoulder etc., or do they need renaming?
-2. **Axis alignment** — does each bone's local rotation axis match the physical servo axis, or do we need custom axis mappings?
-3. **Rest pose alignment** — does the Blender rest pose match the physical neutral stance?
+1. ~~**Bone naming** — are the Blender bones already named FL_shoulder etc.?~~
+   **Resolved 2026-05-04**: bones are named after URDF link names (lowercase,
+   `fl_link1` / `fl_link2` / `fl_link3` per leg, plus `base_link`). See
+   [`MERGE_AND_CONVENTION.md` §0](../../code/simulation/docs/MERGE_AND_CONVENTION.md)
+   and [`blender-rig-and-export.md` §2](specs/blender-rig-and-export.md).
+2. ~~**Axis alignment** — does each bone's local rotation axis match the physical servo axis?~~
+   **Resolved 2026-05-04**: bone roll set via `EditBone.align_roll(joint.axis)`
+   at rig-build time, so bone-local Z is the joint axis for all 12 joints
+   uniformly. Export reads `rotation_euler[2]` for every servo.
+3. ~~**Rest pose alignment** — does the Blender rest pose match the physical neutral stance?~~
+   **Resolved 2026-05-04**: yes by construction — Blender bones at
+   `rotation_euler = 0` ↔ URDF θ=0 ↔ servos at `offset_deg`. The splayed
+   appearance is in URDF joint origins (Convention A), not in Blender
+   rotation values.
 4. **PWM refresh rate** — 50 Hz playback loop assumed; does the ESP32 servo library support this rate?
 5. **Calibration tooling** — do we need a "calibration mode" firmware that sweeps servos one at a time for offset measurement?
 6. **Gait versioning** — if the rig changes, how do we track which `.gait` files need re-export?
