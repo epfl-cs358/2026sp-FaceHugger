@@ -1,15 +1,81 @@
-# animation/scripts — Blender visualizers
+# animation/scripts — Blender importers
 
-Two debug scene builders that import the FaceHugger model into Blender 5.x.
-They share a scene convention (1 Blender unit = 1 mm, viewport clip
-0.1 → 10000) and the same red/orange marker palette, so you can open both
-.blend outputs and overlay them for cross-validation.
+Three Blender 5.x scripts that build a FaceHugger scene from the URDF or
+the Fusion export. They share the same scene convention (1 Blender unit =
+1 mm, viewport clip 0.1 → 10000) and the same red/orange marker palette,
+so you can open multiple `.blend` outputs and overlay them for
+cross-validation.
 
-| Script | Source of truth | What it answers |
-|---|---|---|
-| `visualize_urdf.py` | `code/simulation/generated/facehugger.urdf` | Does the URDF chain walk reproduce PyBullet's `loadURDF` rest pose? |
-| `visualize_fusion_export.py` | `code/simulation/generated/fusion_export.json` | Does the CAD's raw landmark/world data match the URDF generator's output? |
-| `urdf_to_blender.py` | (legacy — superseded by `visualize_urdf.py`) | — |
+| Script | Source of truth | Rig? | What it's for |
+|---|---|---|---|
+| `urdf_to_blender_rigged.py` | `facehugger.urdf` + `fusion_export.json` | armature + IK | **Animator-facing**. Pose-able rig: FK shoulder + IK on hip+knee, foot-target Empties. |
+| `visualize_urdf.py` | `code/simulation/generated/facehugger.urdf` | none | Cross-check: does the URDF chain walk reproduce PyBullet's `loadURDF` rest pose? |
+| `visualize_fusion_export.py` | `code/simulation/generated/fusion_export.json` | none | Cross-check: does the CAD's raw landmark/world data match the URDF generator's output? |
+| `urdf_to_blender.py` | (legacy — superseded by `visualize_urdf.py`) | — | — |
+
+## urdf_to_blender_rigged.py — animation rig
+
+Builds a real Blender Armature on top of the URDF: 13 bones (12 leg +
+`base_link`), one bone per URDF link, parented in chain. Each bone's
+roll is set by `EditBone.align_roll(joint.axis)` so bone-local Z is the
+URDF joint axis for every joint uniformly — including the per-side
+±Y sign on hip/knee. Visual STLs are parented to their bone via
+`parent_type='BONE'`, so the meshes follow pose-mode rotations.
+
+**Animation workflow** — built around the physical 3-servo layout:
+1. **FK shoulder**: rotate `{leg}_link1` in pose mode to aim the leg
+   laterally (servo 1, world Z yaw).
+2. **IK foot reach**: drag the `{leg}_foot_target` Empty. The IK
+   constraint solves hip + knee (servos 2 + 3) to bring the leg's
+   foot tip to the empty's position. Shoulder stays at its FK pose.
+3. The foot target is **parented to the link1 bone**, so when you
+   rotate the shoulder in step 1, the target follows automatically —
+   no driver / no driver-update step.
+
+**Constraints set up automatically:**
+- `LIMIT_ROTATION` on every joint bone, `use_limit_z=True`,
+  `min_z` / `max_z` from URDF `<limit lower upper>`. Pose-mode rotation
+  clamped to the URDF's per-joint range.
+- `IK` constraint on each `{leg}_link3` (knee) bone, `chain_count=2`
+  (hip + knee solve), `use_rotation=False`, `use_stretch=False`
+  (rigid bones), targeting `{leg}_foot_target`.
+- Per-bone IK locks: `lock_ik_x = lock_ik_y = True`,
+  `ik_stiffness_x = ik_stiffness_y = 1.0`. After `align_roll`, the
+  joint axis is bone-local Z; locks force the IK solver to rotate
+  only around Z (= the URDF joint axis), no lateral bending.
+
+**Foot tip source**: read from `Link3TipAxis` in `fusion_export.json`
+when present (CAD source-of-truth), with a hardcoded link3-frame
+fallback if the export hasn't been re-run with the axis added to
+the whitelist.
+
+**Run:**
+```bash
+python code/simulation/facehugger.py blender --rigged
+# or, headless + save:
+python code/simulation/facehugger.py blender --rigged --headless --save /tmp/fh_rigged.blend
+```
+
+CLI flags after `--`: `--urdf PATH`, `--meshes PATH`, `--json PATH`,
+`--save PATH`, `--ik-chain {2,3}` (default 2; 3 is unstable in
+combination with the parented foot target — see the script's
+docstring for the why).
+
+**Markers**: same red/orange spheres as the placement-only visualizer,
+but parented to their bone so they follow pose rotations. Hidden by
+default (`hide_viewport=True` on `Joint Origins/` and `Joint Axes/`
+collections); toggle the eye in the outliner to see them.
+
+**Regression vs visualize_urdf.py**: at all-zero pose, every visual
+mesh's world position matches the placement-only baseline within
+0.5 mm (0.001 rad rotation tolerance). Any deviation means the rig is
+composing transforms wrong and is worth investigating.
+
+See [code/simulation/docs/API_ANIMATION_SPEC.md](../../code/simulation/docs/API_ANIMATION_SPEC.md)
+for the full animator-facing API reference (baking, export to
+`.gait`, servo conversion).
+
+---
 
 ## visualize_urdf.py — current baseline
 
@@ -99,15 +165,16 @@ clip range and visually hard to interpret. Superseded by
 
 ## What's next
 
-1. **Build the rig on top of `visualize_urdf.py`.** Same chain walk, but
-   create one Empty per link parented per the joint chain, and parent each
-   visual mesh to its link Empty via `obj.parent + matrix_local =
-   visual_origin`. Keyframing `rotation_euler` on the 12 joint Empties
-   (around their respective `joint.axis`) animates the rig. Snapping all
-   joint angles to 0 should reproduce this baseline exactly.
-2. **Delete `urdf_to_blender.py`** once the rigging successor exists, and
-   remove the `--debug` flag from `facehugger.py` if it's only used by
-   that script. Avoids drift between three URDF importers.
+1. ~~**Build the rig on top of `visualize_urdf.py`.**~~ **Done
+   (2026-05-04):** see `urdf_to_blender_rigged.py` above. The
+   implementation went with an Armature (Option B from the original
+   `RIGGING_PLAN.md`) instead of Empties because the animator workflow
+   needs IK; bone roll calibration was solved by
+   `EditBone.align_roll(joint.axis)`. At all-zero pose the rigged
+   scene matches `visualize_urdf.py`'s baseline within 0.5 mm.
+2. **Delete `urdf_to_blender.py`** once the rigging successor is
+   battle-tested in animator workflows. Avoids drift between three
+   URDF importers.
 3. **Optional polish** for the visualizer:
    - Replace orange spheres with oriented arrows / line objects so axis
      direction is unambiguous (currently you have to read the orange-tip

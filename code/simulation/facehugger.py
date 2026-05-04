@@ -5,14 +5,17 @@ Subcommands:
   urdf      regenerate generated/facehugger.urdf from generated/fusion_export.json
   sim       run simulate.py (default: stand; --walk / --trot for gaits)
   view      open generated/facehugger.urdf in PyBullet's viewer (no physics)
-  blender   import the URDF into Blender (placement-only, no rig)
+  blender   import the URDF into Blender (placement-only, no rig by default;
+            --rigged builds an armature with IK + foot-target Empties for
+            animation work)
   all       urdf → sim (smoke shortcut)
 
 Examples:
   python facehugger.py urdf
   python facehugger.py sim --walk
   python facehugger.py view
-  python facehugger.py blender                                # default 5.1
+  python facehugger.py blender                                # default 5.1, placement-only
+  python facehugger.py blender --rigged                       # armature + IK rig
   python facehugger.py blender --blender-version 5.2          # specific version
   python facehugger.py blender --headless --save /tmp/scene.blend
   python facehugger.py all --headless
@@ -36,6 +39,7 @@ GENERATE_URDF = HERE / "generate_urdf.py"
 SIMULATE = HERE / "simulate.py"
 VIEW_URDF = HERE / "view_urdf.py"
 VISUALIZE = REPO_ROOT / "animation" / "scripts" / "visualize_urdf.py"
+VISUALIZE_RIGGED = REPO_ROOT / "animation" / "scripts" / "urdf_to_blender_rigged.py"
 
 BLENDER_DEFAULT_VERSION = "5.1"
 
@@ -135,7 +139,8 @@ def cmd_blender(args):
     cli = [blender]
     if args.headless:
         cli.append("--background")
-    cli += ["--python", str(VISUALIZE)]
+    script = VISUALIZE_RIGGED if args.rigged else VISUALIZE
+    cli += ["--python", str(script)]
     extra = []
     if args.save:
         extra += ["--save", args.save]
@@ -191,6 +196,14 @@ def main():
         "--headless", action="store_true", help="run Blender in --background mode"
     )
     pb.add_argument("--save", help="save the built scene to this .blend path")
+    pb.add_argument(
+        "--rigged",
+        action="store_true",
+        help="build a posable armature with IK + foot-target Empties "
+        "(animation rig). Default is placement-only via "
+        "visualize_urdf.py — useful for cross-checking the URDF rest "
+        "pose against PyBullet but not animateable.",
+    )
     pb.set_defaults(func=cmd_blender)
 
     pa = sub.add_parser("all", help="urdf → sim (smoke run)")
