@@ -1,6 +1,7 @@
 import { ReactNode, useState } from "react"
 import { Button, Pressable, ScrollView, StyleSheet, Text, View, Image } from "react-native"
 import { AppText } from "../text/AppText";
+import { ConnectionStatus } from "../connectionStatusComponent/ConnectionStatus";
 
 export interface PageInfo {
     pageName: string,
@@ -19,6 +20,9 @@ export default function Pager({defaultPage, pages}: PagerProps){
     return(<View style={styles.mainContainer}>
         <View style={styles.pageImageContainer}>
             <Image style={styles.pageImage} source={require('./../../assets/facehugger.png')}/>
+        </View>
+        <View style={styles.connectionStatusContainer}>
+            <ConnectionStatus/>
         </View>
         <View style={styles.pageContainer}>
             {page.pageComponent}
@@ -40,6 +44,9 @@ const styles = StyleSheet.create({
     mainContainer: {
         flex:1,
         justifyContent: 'center'
+    },
+    connectionStatusContainer: {
+        flex: 1
     },
     pageButtonsContainer: {
         flex: 2,

@@ -12,7 +12,15 @@ export enum DirectionVector {
     FL = 3,
     BR = 4,
     BL = 5,
-    STOP = 6
+    R = 6,
+    L = 7,
+    STOP = 8
+}
+
+export enum GaitMode {
+    TROT = 0,
+    CRAB = 1,
+    CRAWL = 2
 }
 
 export type PacketType = {
@@ -31,6 +39,10 @@ export type ServoCalibration = PacketType & {
     id: number //leg id to calibrate servo of
     servo_id: number //servo id to calibrate leg of
     a: number //angle to write in the servo (0-180 range)
+}
+
+export type GaitIntegration = PacketType & {
+    g: number
 }
 
 export type SystemStatus = PacketType & { //T10
