@@ -31,30 +31,27 @@ void Leg::setPose(float x, float y, float z) {
 
     // 2. Apply Physical Hardware Mapping (90 degrees = absolute horizontal)
     if (id == 1 || id == 3) {
-        // === LEFT SIDE (Mirrored Hardware) ===
-        // Thigh and Knee are mathematically identical to the right side,
-        // but the physical servo is mounted backward, so we SUBTRACT from 90.
-        servoThigh = 90.0 - targetThigh; 
+        // Front Left - Back Right Diagonal
+        servoThigh = 90.0 + targetThigh; 
         servoKnee  = 90.0 - targetKnee;
 
         // Shoulder uses the Global Polar offset
-        // Front-Left (1) Neutral is +135, Back-Left (3) Neutral is -135
+        // Front-Left (1) Neutral is +135, Back-Right (2) Neutral is -135
         double shoulderOffset = (id == 1) ? 135.0 : -135.0;
         servoShoulder = 90.0 - (targetShoulder - shoulderOffset);
     } 
     else {
-        // === RIGHT SIDE (Normal Hardware) ===
-        // Thigh and Knee physical servos rotate normally, so we ADD to 90.
-        servoThigh = 90.0 + targetThigh;
+        // Front Right - Back Left Diagonal
+        servoThigh = 90.0 - targetThigh;
         servoKnee  = 90.0 + targetKnee;
 
         // Shoulder uses the Global Polar offset
-        // Front-Right (0) Neutral is +45, Back-Right (2) Neutral is -45
+        // Front-Right (0) Neutral is +45, Back-Left (3) Neutral is -45
         double shoulderOffset = (id == 0) ? 45.0 : -45.0;
         servoShoulder = 90.0 + (targetShoulder - shoulderOffset);
     }
 
-    // Optional: Add safety clamping here so you never send an angle < 0 or > 180 to the PCA9685
+    // Add safety clamping here so you never send an angle < 0 or > 180 to the PCA9685
     servoShoulder = constrain(servoShoulder, 0.0, 180.0);
     servoThigh    = constrain(servoThigh, 0.0, 180.0);
     servoKnee     = constrain(servoKnee, 0.0, 180.0);

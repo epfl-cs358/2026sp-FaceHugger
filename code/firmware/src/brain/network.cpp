@@ -79,13 +79,11 @@ void handleParsedMessage(uint8_t * payload) {
             int angle = doc["a"] | 90; 
 
             spinalCord.applyCalibration(channel, angle);
-            // Optional: comment out the print if it spams your console during tests
-            // Serial.printf("Calibrating servo %d to %d\n", channel, angle);
             break;
         }
         
         case CMD_MOVE: {
-            // Extract the direction string and button state (1 = pressed, 0 = released)
+            // Extract the direction string 
             String dir = doc["dir"] | "";
             
             spinalCord.walk(); 

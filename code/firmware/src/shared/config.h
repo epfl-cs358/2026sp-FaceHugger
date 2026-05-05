@@ -21,8 +21,8 @@
 #define FRONT_RIGHT_LEG_KNEE_PCA_CHANNEL 10
 
 #define FRONT_RIGHT_LEG_HIP_DEFAULT_ANGLE 90
-#define FRONT_RIGHT_LEG_THIGH_DEFAULT_ANGLE 65  // Updated for Absolute Math
-#define FRONT_RIGHT_LEG_KNEE_DEFAULT_ANGLE 35   // Updated for Absolute Math
+#define FRONT_RIGHT_LEG_THIGH_DEFAULT_ANGLE 90  // Updated for Absolute Math
+#define FRONT_RIGHT_LEG_KNEE_DEFAULT_ANGLE 90   // Updated for Absolute Math
 
 // Front left leg (Leg 1 in spinal_cord.cpp)
 #define FRONT_LEFT_LEG_HIP_PCA_CHANNEL 12
@@ -30,8 +30,8 @@
 #define FRONT_LEFT_LEG_KNEE_PCA_CHANNEL 14
 
 #define FRONT_LEFT_LEG_HIP_DEFAULT_ANGLE 90
-#define FRONT_LEFT_LEG_THIGH_DEFAULT_ANGLE 115  // Updated for Mirrored Absolute Math
-#define FRONT_LEFT_LEG_KNEE_DEFAULT_ANGLE 145   // Updated for Mirrored Absolute Math
+#define FRONT_LEFT_LEG_THIGH_DEFAULT_ANGLE 90  // Updated for Mirrored Absolute Math
+#define FRONT_LEFT_LEG_KNEE_DEFAULT_ANGLE 90  // Updated for Mirrored Absolute Math
 
 // Bottom right leg (Leg 2 in spinal_cord.cpp)
 #define BOTTOM_RIGHT_LEG_HIP_PCA_CHANNEL 0
@@ -39,8 +39,8 @@
 #define BOTTOM_RIGHT_LEG_KNEE_PCA_CHANNEL 2
 
 #define BOTTOM_RIGHT_LEG_HIP_DEFAULT_ANGLE 90
-#define BOTTOM_RIGHT_LEG_THIGH_DEFAULT_ANGLE 65  // Updated for Absolute Math
-#define BOTTOM_RIGHT_LEG_KNEE_DEFAULT_ANGLE 35   // Updated for Absolute Math
+#define BOTTOM_RIGHT_LEG_THIGH_DEFAULT_ANGLE 90 // Updated for Absolute Math
+#define BOTTOM_RIGHT_LEG_KNEE_DEFAULT_ANGLE 90   // Updated for Absolute Math
 
 // Bottom left leg (Leg 3 in spinal_cord.cpp)
 #define BOTTOM_LEFT_LEG_HIP_PCA_CHANNEL 4
@@ -48,7 +48,7 @@
 #define BOTTOM_LEFT_LEG_KNEE_PCA_CHANNEL 6
 
 #define BOTTOM_LEFT_LEG_HIP_DEFAULT_ANGLE 90
-#define BOTTOM_LEFT_LEG_THIGH_DEFAULT_ANGLE 115  // Updated for Mirrored Absolute Math
-#define BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE 145   // Updated for Mirrored Absolute Math
+#define BOTTOM_LEFT_LEG_THIGH_DEFAULT_ANGLE 90  // Updated for Mirrored Absolute Math
+#define BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE 90   // Updated for Mirrored Absolute Math
 
 #endif
