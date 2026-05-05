@@ -393,9 +393,14 @@ def make_collections():
         c = bpy.data.collections.new(name)
         root.children.link(c)
         children[name] = c
-    # Joint markers off by default; toggle in outliner when debugging.
+    # Joint markers off in viewport AND render by default; toggle the
+    # eye / camera icon in the outliner when debugging. Without the
+    # render hide, the red/orange spheres show up as confusing dots in
+    # any rendered output.
     children[JOINTS_COLLECTION].hide_viewport = True
+    children[JOINTS_COLLECTION].hide_render = True
     children[AXES_COLLECTION].hide_viewport = True
+    children[AXES_COLLECTION].hide_render = True
     return children
 
 
@@ -761,7 +766,22 @@ def place_ik_targets_and_constraints(
         actual_foot_world_m = link_world[link3] @ foot_tip_per_leg
         actual_foot_world_mm = actual_foot_world_m * M_TO_MM
 
-        # Visible foot target at actual CAD foot tip.
+        # Projected foot tip in world (= link3 bone tail position) —
+        # drop the component of foot_tip_per_leg along link3's joint
+        # axis, then transform to world. This must match what
+        # _bone_endpoints_world_mm produces for the link3 tail so that
+        # foot_ik and bone tail coincide at rest (zero IK error).
+        joint_axis_link3 = robot["joints"][link3]["axis"]
+        projected_link3 = (
+            foot_tip_per_leg - foot_tip_per_leg.dot(joint_axis_link3) * joint_axis_link3
+        )
+        projected_foot_world_m = link_world[link3] @ projected_link3
+        offset_world_mm = (projected_foot_world_m - actual_foot_world_m) * M_TO_MM
+
+        # Visible foot target at actual CAD foot tip — animator drags this.
+        print(
+            f"[DEBUG] placing foot_target_{leg} at {tuple(round(v, 3) for v in actual_foot_world_mm)} mm"
+        )
         foot_target = _add_empty(
             FOOT_TARGET_FMT.format(leg=leg),
             actual_foot_world_mm,
@@ -771,10 +791,24 @@ def place_ik_targets_and_constraints(
         )
         n_targets += 1
 
-        # Hidden foot_ik that exactly tracks foot_target.
+        # Hidden foot_ik with COPY_LOCATION use_offset=True. Stored
+        # location is the constant world offset (projected - actual);
+        # the constraint reads foot_target's world location and adds
+        # this offset, so foot_ik visually sits at the projected bone
+        # tail. IK targets foot_ik with use_tail=True, so bone tail =
+        # foot_ik = projected at rest → zero IK error. As the animator
+        # drags foot_target, foot_ik tracks with the constant world
+        # offset (foot_ik moves by the same delta).
+        #
+        # Trade-off: the offset is static in world space, but the leg's
+        # joint axis rotates with link1 yaw — so under large leg poses
+        # the actual mesh foot tip can drift up to ~13 mm from
+        # foot_target. Acceptable for typical animation amplitude; for
+        # exact mesh-tip-on-target tracking, swap to a driver that
+        # recomputes the offset from the live link3 matrix.
         foot_ik = _add_empty(
             FOOT_IK_FMT.format(leg=leg),
-            actual_foot_world_mm,  # initial position; constraint will override
+            offset_world_mm,
             collection,
             kind="PLAIN_AXES",
             size_mm=4.0,
@@ -784,7 +818,7 @@ def place_ik_targets_and_constraints(
         cop.target = foot_target
         cop.target_space = "WORLD"
         cop.owner_space = "WORLD"
-        cop.use_offset = False
+        cop.use_offset = True
 
         # IK on link3, Damped Track on link1.
         bpy.context.view_layer.objects.active = arm_obj
@@ -1126,33 +1160,24 @@ def main():
     )
     link_world = compute_link_world(robot)
 
-    # Prefer the URDF metadata (mesh max-+Y centroid) over the JSON
-    # Link3TipAxis. The JSON read remains available for diagnostic
-    # comparison: if the values disagree by more than the tolerance,
-    # warn — that means the CAD construction axis is misplaced
-    # relative to the leg_lower.stl tip.
-    foot_tip_in_link3_m = FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M
+    # Foot tip source of truth: JSON `Link3TipPoint` is the CAD-side
+    # construction point the user explicitly places at the visible foot
+    # tip (the curved claw end of leg_lower.stl). The URDF metadata's
+    # `FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M` is the mesh's max-+Y
+    # centroid, which can sit on a different feature of the mesh
+    # entirely (the upper-section +Y face, not the claw tip). Prefer
+    # the JSON; fall back to the constant only when the JSON is
+    # missing.
     foot_tip_from_json = load_foot_tip_in_link3_frame(args.json)
     if foot_tip_from_json is not None:
-        delta_mm = (foot_tip_in_link3_m - foot_tip_from_json).length * M_TO_MM
-        if delta_mm > 5.0:
-            print(
-                f"[urdf_to_blender_rigged] WARNING: JSON Link3TipPoint "
-                f"{tuple(round(v * M_TO_MM, 3) for v in foot_tip_from_json)} mm "
-                f"differs from FOOT_TIP_FALLBACK "
-                f"{tuple(round(v * M_TO_MM, 3) for v in foot_tip_in_link3_m)} mm "
-                f"by {delta_mm:.2f} mm — move the construction point in CAD to "
-                f"match the leg_lower.stl max-+Y centroid. Using FOOT_TIP_FALLBACK."
-            )
-        else:
-            print(
-                f"[urdf_to_blender_rigged] foot tip: JSON Link3TipPoint matches "
-                f"FOOT_TIP_FALLBACK to {delta_mm:.3f} mm — using metadata."
-            )
+        foot_tip_in_link3_m = foot_tip_from_json
+        src = f"Link3TipPoint in {args.json.name}"
+    else:
+        foot_tip_in_link3_m = FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M
+        src = "FOOT_TIP_FALLBACK (URDF metadata fallback — Link3TipPoint missing from JSON)"
     print(
         f"[urdf_to_blender_rigged] foot tip: link3-local "
-        f"{tuple(round(v * M_TO_MM, 3) for v in foot_tip_in_link3_m)} mm "
-        "(FOOT_TIP_FALLBACK = URDF metadata, mesh-derived)"
+        f"{tuple(round(v * M_TO_MM, 3) for v in foot_tip_in_link3_m)} mm ({src})"
     )
 
     clear_scene()
@@ -1168,6 +1193,24 @@ def main():
     n_meshes = attach_visuals(
         robot, link_world, arm_obj, args.meshes, collections[MESHES_COLLECTION]
     )
+    # Diagnostic for FL leg foot_target placement: surfaces every
+    # variable that goes into the world position so the chain is
+    # visible end-to-end.
+    fl_link3_world_m = link_world["fl_link3"]
+    fl_foot_tip_link3_m = _foot_tip_for_leg("fl", foot_tip_in_link3_m)
+    fl_foot_world_m = fl_link3_world_m @ fl_foot_tip_link3_m
+    print(
+        f"[urdf_to_blender_rigged] FL chain:\n"
+        f"  link_world['fl_link3'].translation = "
+        f"{tuple(round(v * M_TO_MM, 3) for v in fl_link3_world_m.translation)} mm\n"
+        f"  _foot_tip_for_leg('fl', …)         = "
+        f"{tuple(round(v * M_TO_MM, 3) for v in fl_foot_tip_link3_m)} mm "
+        "(in link3 frame)\n"
+        f"  link3_world @ foot_tip_link3       = "
+        f"{tuple(round(v * M_TO_MM, 3) for v in fl_foot_world_m)} mm "
+        "(world, where foot_target_fl will be placed)"
+    )
+
     # Constraint stack order: IK / Damped Track first, LIMIT_ROTATION
     # last (so it clamps the IK-or-track-solved pose, not the other way).
     # New constraints append to the stack, so call order = stack order.
