@@ -8,6 +8,12 @@ build/
 *.gcode
 *.bgcode
 
+# Animation pipeline raw + intermediate research artifacts
+# (kept locally for reference; not committed — final synthesis docs
+#  live at doc/animation-pipeline/*.md)
+doc/animation-pipeline/llm-answers/
+doc/animation-pipeline/synthesis/
+
 # Created by https://www.toptal.com/developers/gitignore/api/c,c++,cmake,kicad,latex,linux,macos,direnv,dotenv,python,windows,virtualenv,jetbrains+all,jupyternotebooks,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=c,c++,cmake,kicad,latex,linux,macos,direnv,dotenv,python,windows,virtualenv,jetbrains+all,jupyternotebooks,visualstudiocode
 
