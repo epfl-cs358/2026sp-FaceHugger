@@ -135,6 +135,20 @@ def deg2rad(d):
     return round(math.radians(d), 6)
 
 
+def clean_axis(vec, tol=1e-10):
+    """Snap tiny components to 0.0 and renormalize to unit length.
+
+    Fusion-derived axis vectors carry FP dust on the should-be-zero columns
+    (e.g. [2.77e-17, -2.99e-17, 1.0000000000000002]). This produces a clean
+    [0.0, 0.0, 1.0] for the URDF <axis xyz=...> element.
+    """
+    cleaned = [0.0 if abs(c) < tol else c for c in vec]
+    norm = math.sqrt(sum(c * c for c in cleaned))
+    if norm == 0.0:
+        return cleaned
+    return [c / norm for c in cleaned]
+
+
 def fmt_xyz(mm_vec):
     """Format an mm vector as a URDF xyz string in meters."""
     return " ".join(f"{v * MM_TO_M:.6f}" for v in mm_vec)
@@ -351,7 +365,7 @@ class URDF:
     ):
         xyz = fmt_xyz(origin_mm)
         rpy = fmt_rpy(0, 0, rpy_z_deg)
-        ax = " ".join(str(v) for v in axis)
+        ax = " ".join(str(v) for v in clean_axis(axis))
         lo = deg2rad(lower_deg)
         hi = deg2rad(upper_deg)
         self.lines += [

@@ -81,21 +81,21 @@
     <parent link="base_link"/>
     <child link="fl_link1"/>
     <origin xyz="-0.057901 0.046222 -0.009000" rpy="0 0 -0.785398"/>
-    <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
+    <axis xyz="0.0 0.0 1.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="fl_link2_joint" type="revolute">
     <parent link="fl_link1"/>
     <child link="fl_link2"/>
     <origin xyz="-0.055920 0.022595 0.014446" rpy="0 0 0.0"/>
-    <axis xyz="1.1796119636642283e-16 1.000000000000004 2.428612866511427e-17"/>
+    <axis xyz="0.0 1.0 0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="fl_link3_joint" type="revolute">
     <parent link="fl_link2"/>
     <child link="fl_link3"/>
     <origin xyz="-0.089700 0.000005 0.000000" rpy="0 0 0.0"/>
-    <axis xyz="1.1796119636642283e-16 1.000000000000004 2.428612866511427e-17"/>
+    <axis xyz="0.0 1.0 0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <link name="fl_link1">
@@ -173,21 +173,21 @@
     <parent link="base_link"/>
     <child link="br_link1"/>
     <origin xyz="0.057901 -0.046222 -0.009000" rpy="0 0 2.356194"/>
-    <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
+    <axis xyz="0.0 0.0 1.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="br_link2_joint" type="revolute">
     <parent link="br_link1"/>
     <child link="br_link2"/>
     <origin xyz="-0.055920 0.022595 0.014446" rpy="0 0 0.0"/>
-    <axis xyz="1.1796119636642283e-16 1.000000000000004 2.428612866511427e-17"/>
+    <axis xyz="0.0 1.0 0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="br_link3_joint" type="revolute">
     <parent link="br_link2"/>
     <child link="br_link3"/>
     <origin xyz="-0.089700 0.000005 0.000000" rpy="0 0 0.0"/>
-    <axis xyz="1.1796119636642283e-16 1.000000000000004 2.428612866511427e-17"/>
+    <axis xyz="0.0 1.0 0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <link name="br_link1">
@@ -265,21 +265,21 @@
     <parent link="base_link"/>
     <child link="fr_link1"/>
     <origin xyz="0.057901 0.046222 -0.009000" rpy="0 0 0.785398"/>
-    <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
+    <axis xyz="0.0 0.0 1.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="fr_link2_joint" type="revolute">
     <parent link="fr_link1"/>
     <child link="fr_link2"/>
     <origin xyz="0.055920 0.022595 0.014446" rpy="0 0 0.0"/>
-    <axis xyz="-1.1796119636642283e-16 -1.000000000000004 -2.428612866511427e-17"/>
+    <axis xyz="0.0 -1.0 0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="fr_link3_joint" type="revolute">
     <parent link="fr_link2"/>
     <child link="fr_link3"/>
     <origin xyz="0.089700 0.000005 0.000000" rpy="0 0 0.0"/>
-    <axis xyz="-1.1796119636642283e-16 -1.000000000000004 -2.428612866511427e-17"/>
+    <axis xyz="0.0 -1.0 0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <link name="fr_link1">
@@ -357,21 +357,21 @@
     <parent link="base_link"/>
     <child link="bl_link1"/>
     <origin xyz="-0.057901 -0.046222 -0.009000" rpy="0 0 -2.356194"/>
-    <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
+    <axis xyz="0.0 0.0 1.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="bl_link2_joint" type="revolute">
     <parent link="bl_link1"/>
     <child link="bl_link2"/>
     <origin xyz="0.055920 0.022595 0.014446" rpy="0 0 0.0"/>
-    <axis xyz="-1.1796119636642283e-16 -1.000000000000004 -2.428612866511427e-17"/>
+    <axis xyz="0.0 -1.0 0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="bl_link3_joint" type="revolute">
     <parent link="bl_link2"/>
     <child link="bl_link3"/>
     <origin xyz="0.089700 0.000005 0.000000" rpy="0 0 0.0"/>
-    <axis xyz="-1.1796119636642283e-16 -1.000000000000004 -2.428612866511427e-17"/>
+    <axis xyz="0.0 -1.0 0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <link name="bl_link1">
