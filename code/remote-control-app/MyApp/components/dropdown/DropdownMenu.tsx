@@ -4,6 +4,7 @@ import {Ionicons} from "@expo/vector-icons";
 import { AppText } from "../text/AppText";
 
 export interface DropDownMenuElement{
+    key: string,
     elementTitle: string,
     onClick: () => void
 }
@@ -34,7 +35,7 @@ export function DropDownMenu({defaultElement, elements}: DropDownMenuProps){
 
         {dropdownOpen} 
         && <View style={styles.actualDropDownContainer}>
-            {elements.filter((e) => e.elementTitle != selectedElement).map((e) => <DropDownMenuElement elementTitle={e.elementTitle} onClick={() => {
+            {elements.filter((e) => e.elementTitle != selectedElement).map((e) => <DropDownMenuElement key={e.elementTitle} elementTitle={e.elementTitle} onClick={() => {
                 e.onClick();
                 setDropdownOpen(false);
                 }

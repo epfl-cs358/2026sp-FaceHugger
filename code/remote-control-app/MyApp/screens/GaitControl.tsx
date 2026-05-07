@@ -3,6 +3,8 @@ import Joystick, { JoystickAction, JoystickProps } from "../components/joystick/
 import { useRobotConnection } from "../hooks/useRobotConnection";
 import { BLMovementPacket, BRMovementPacket, BWMovementPacket, FLMovementPacket, FRMovementPacket, FWMovementPacket, LeftMovementPacket, RightMovementPacket } from "../api/api-messages";
 import { ConnectionStatus } from "../components/connectionStatusComponent/ConnectionStatus";
+import { GaitMode } from "../api/api-types";
+import { DropDownMenu, DropDownMenuElement, DropDownMenuProps } from "../components/dropdown/DropdownMenu";
 
 export default function GaitControl(){
     const { sendCommand } = useRobotConnection("192.168.1.1");
@@ -61,12 +63,23 @@ export default function GaitControl(){
 
     //Gait mode drop down elements
 
-    const 
+    const dropDownElements = Object.keys(GaitMode)
+    .filter(key => isNaN(Number(key)))
+    .map(key => ({
+        key: key,
+        elementTitle: key,
+        onClick: () => sendCommand(JSON.stringify({ T: 5, g: GaitMode[key as keyof typeof GaitMode] }))
+    } as DropDownMenuElement));
+
+    const dropdownMenuProps = {
+        defaultElement: dropDownElements[0],
+        elements: dropDownElements
+    } as DropDownMenuProps;
 
     return(
         <View style={styles.mainContainer}>
             <View style={styles.gaitModeSelectionContainer}>
-
+                <DropDownMenu {...dropdownMenuProps}/>
             </View>
             <View style={styles.joystickContainer}>
                 <Joystick {...gestureProps}/>
