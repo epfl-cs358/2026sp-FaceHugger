@@ -4,12 +4,14 @@ import { AppText } from "../text/AppText";
 import { ConnectionStatus } from "../connectionStatusComponent/ConnectionStatus";
 import { RobotStatus } from "../robotStatus/RobotStatus";
 import { useRobotStore } from "../../store/robotStore";
+import { FSMStatus } from "../../api/api-types";
 
 export interface PageInfo {
     pageName: string,
-    pageIcon: ReactNode, //IonIcon MaterialIcon etc
+    pageIcon: ReactNode,
     pageIconPressed: ReactNode,
-    pageComponent: ReactNode //The actual component of the page to render
+    pageComponent: ReactNode,
+    fsmState?: FSMStatus,
 }
 
 export interface PagerProps {
@@ -20,6 +22,7 @@ export interface PagerProps {
 export default function Pager({defaultPage, pages}: PagerProps){
     const [page, setPage] = useState(defaultPage);
     const robotState = useRobotStore();
+    const setChosenFsmState = useRobotStore((s) => s.setChosenFsmState);
     return(<View style={styles.mainContainer}>
         <View style={styles.pageImageContainer}>
             <Image style={styles.pageImage} source={require('./../../assets/facehugger.png')}/>
@@ -36,7 +39,7 @@ export default function Pager({defaultPage, pages}: PagerProps){
         <View style={styles.pageButtonsContainer}>
             {pages.map((pageInfo, index) => {
                 return(
-                    <Pressable style={styles.pageButton} key={pageInfo.pageName} onPress={() => setPage(pageInfo)}>
+                    <Pressable style={styles.pageButton} key={pageInfo.pageName} onPress={() => { setPage(pageInfo); if (pageInfo.fsmState !== undefined) setChosenFsmState(pageInfo.fsmState); }}>
                         {page.pageName === pageInfo.pageName ? pageInfo.pageIconPressed : pageInfo.pageIcon}
                         <AppText text={pageInfo.pageName} size={20}/>
                     </Pressable>

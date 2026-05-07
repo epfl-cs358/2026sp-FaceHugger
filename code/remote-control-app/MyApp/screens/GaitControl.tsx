@@ -3,11 +3,13 @@ import Joystick, { JoystickAction, JoystickProps } from "../components/joystick/
 import { useRobotConnection } from "../hooks/useRobotConnection";
 import { BLMovementPacket, BRMovementPacket, BWMovementPacket, FLMovementPacket, FRMovementPacket, FWMovementPacket, LeftMovementPacket, RightMovementPacket } from "../api/api-messages";
 import { ConnectionStatus } from "../components/connectionStatusComponent/ConnectionStatus";
-import { GaitIntegration, GaitMode } from "../api/api-types";
+import { GaitMode } from "../api/api-types";
 import { DropDownMenu, DropDownMenuElement, DropDownMenuProps } from "../components/dropdown/DropdownMenu";
+import { useRobotStore } from "../store/robotStore";
 
 export default function GaitControl(){
     const { sendCommand } = useRobotConnection("192.168.1.1");
+    const setChosenGaitMode = useRobotStore((s) => s.setChosenGaitMode);
 
     const actionRight = {
         minAngle: -15,
@@ -68,7 +70,7 @@ export default function GaitControl(){
     .map(key => ({
         key: key,
         elementTitle: key,
-        onClick: () => sendCommand(JSON.stringify({ T: 5, g: GaitMode[key as keyof typeof GaitMode] } as GaitIntegration))
+        onClick: () => setChosenGaitMode(GaitMode[key as keyof typeof GaitMode])
     } as DropDownMenuElement));
 
     const dropdownMenuProps = {

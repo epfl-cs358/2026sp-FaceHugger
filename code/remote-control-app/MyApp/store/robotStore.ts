@@ -4,6 +4,8 @@ import { FSMStatus, GaitMode } from '../api/api-types';
 type RobotStore = {
     fsmState: FSMStatus,
     setFsmState: (state: FSMStatus) => void,
+    chosenFsmState: FSMStatus,
+    setChosenFsmState: (state: FSMStatus) => void,
     tofDistances: number[], // [FL, FR, RL, RR, Center]
     setTofDistances: (distances: number[]) => void,
     speed: number,
@@ -11,6 +13,8 @@ type RobotStore = {
     setAMU: (amu: number[]) => void, // [Speed, Rotation X, Rotation Y, Rotation Z]
     gaitMode: GaitMode,
     setGaitMode: (gait: GaitMode) => void,
+    chosenGaitMode: GaitMode,
+    setChosenGaitMode: (gait: GaitMode) => void,
     movementProgress: number, // 0.0 - 1.0
     setMovementProgress: (pc: number) => void,
     errorMessage: string | null,
@@ -20,6 +24,8 @@ type RobotStore = {
 export const useRobotStore = create<RobotStore>((set) => ({
     fsmState: FSMStatus.STATE_IDLE,
     setFsmState: (fsmState) => set({fsmState}),
+    chosenFsmState: FSMStatus.STATE_IDLE,
+    setChosenFsmState: (chosenFsmState) => set({chosenFsmState}),
     tofDistances: [0, 0, 0],
     setTofDistances: (tofDistances) => set({tofDistances}),
     speed: 0,
@@ -27,6 +33,8 @@ export const useRobotStore = create<RobotStore>((set) => ({
     setAMU: ([speed, ...gyro]) => set({speed, gyroscope: gyro as [number, number, number]}),
     gaitMode: GaitMode.TROT,
     setGaitMode: (gaitMode) => set({gaitMode}),
+    chosenGaitMode: GaitMode.TROT,
+    setChosenGaitMode: (chosenGaitMode) => set({chosenGaitMode}),
     movementProgress: 0,
     setMovementProgress: (movementProgress) => set({movementProgress}),
     errorMessage: null,

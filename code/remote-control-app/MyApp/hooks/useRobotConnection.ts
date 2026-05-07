@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { connect, sendCommand, onMessage } from '../services/socket';
 import { useRobotStore } from '../store/robotStore';
-import { FSMStatus, GaitMode, SystemStatus } from '../api/api-types';
+import { FSMStateModification, FSMStatus, GaitIntegration, GaitMode, SystemStatus } from '../api/api-types';
+import { useSocketStatus } from './useSocketStatus';
 
 
 export const useRobotConnection = (ip: string) => {
@@ -11,6 +12,14 @@ export const useRobotConnection = (ip: string) => {
   const setGaitMode = useRobotStore((s) => s.setGaitMode);
   const setMovementProgress = useRobotStore((s) => s.setMovementProgress);
   const setErrorMessage = useRobotStore((s) => s.setErrorMessage);
+
+  const fsmState = useRobotStore((s) => s.fsmState);
+  const chosenFsmState = useRobotStore((s) => s.chosenFsmState);
+  const gaitMode = useRobotStore((s) => s.gaitMode);
+  const chosenGaitMode = useRobotStore((s) => s.chosenGaitMode);
+
+  const isConnected = useSocketStatus();
+
 
   useEffect(() => {
     connect(ip);
@@ -35,6 +44,26 @@ export const useRobotConnection = (ip: string) => {
 
     return () => { /* cleanup / disconnect */ };
   }, [ip]);
+
+  useEffect(() => {
+    if (chosenFsmState === fsmState) return;
+    const interval = setInterval(() => {
+      if(isConnected){
+        sendCommand(JSON.stringify({ T: 2, s: chosenFsmState } as FSMStateModification));
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [chosenFsmState, fsmState]);
+
+  useEffect(() => {
+    if (chosenGaitMode === gaitMode) return;
+    const interval = setInterval(() => {
+      if(isConnected){
+        sendCommand(JSON.stringify({ T: 5, g: chosenGaitMode } as GaitIntegration));
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [chosenGaitMode, gaitMode]);
 
   return { sendCommand };
 };

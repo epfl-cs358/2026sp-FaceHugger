@@ -10,27 +10,31 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import SimpleLineIcons from '@expo/vector-icons/SimpleLineIcons';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import { Actions } from './screens/Actions';
+import { FSMStatus } from './api/api-types';
 
 export default function App() {
   const remoteControlPage = {
     pageName: 'Remote control',
     pageIcon: <Ionicons name="game-controller-outline" size={40} color="white" />,
     pageIconPressed: <Ionicons name="game-controller" size={40} color={orangeColor} />,
-    pageComponent: <GaitControl/>
+    pageComponent: <GaitControl/>,
+    fsmState: FSMStatus.STATE_WALK,
   } as PageInfo;
 
   const individualControlPage = {
     pageName: 'Individual control',
     pageIcon: <MaterialCommunityIcons name="engine-outline" size={40} color="white" />,
     pageIconPressed: <MaterialCommunityIcons name="engine" size={40} color={orangeColor} />,
-    pageComponent: <LegControl/>
+    pageComponent: <LegControl/>,
+    fsmState: FSMStatus.STATE_IDLE,
   } as PageInfo;
 
   const actionsPage = {
     pageName: 'Actions',
     pageIcon: <SimpleLineIcons name="fire" size={40} color="white" />,
     pageIconPressed: <AntDesign name="fire" size={40} color={orangeColor} />,
-    pageComponent: <Actions/>
+    pageComponent: <Actions/>,
+    fsmState: FSMStatus.STATE_ACTION,
   } as PageInfo;
 
   const pages = [remoteControlPage, actionsPage, individualControlPage]
