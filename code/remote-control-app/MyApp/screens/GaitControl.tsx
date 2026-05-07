@@ -3,7 +3,7 @@ import Joystick, { JoystickAction, JoystickProps } from "../components/joystick/
 import { useRobotConnection } from "../hooks/useRobotConnection";
 import { BLMovementPacket, BRMovementPacket, BWMovementPacket, FLMovementPacket, FRMovementPacket, FWMovementPacket, LeftMovementPacket, RightMovementPacket } from "../api/api-messages";
 import { ConnectionStatus } from "../components/connectionStatusComponent/ConnectionStatus";
-import { GaitMode } from "../api/api-types";
+import { GaitIntegration, GaitMode } from "../api/api-types";
 import { DropDownMenu, DropDownMenuElement, DropDownMenuProps } from "../components/dropdown/DropdownMenu";
 
 export default function GaitControl(){
@@ -68,7 +68,7 @@ export default function GaitControl(){
     .map(key => ({
         key: key,
         elementTitle: key,
-        onClick: () => sendCommand(JSON.stringify({ T: 5, g: GaitMode[key as keyof typeof GaitMode] }))
+        onClick: () => sendCommand(JSON.stringify({ T: 5, g: GaitMode[key as keyof typeof GaitMode] } as GaitIntegration))
     } as DropDownMenuElement));
 
     const dropdownMenuProps = {
@@ -78,11 +78,11 @@ export default function GaitControl(){
 
     return(
         <View style={styles.mainContainer}>
-            <View style={styles.gaitModeSelectionContainer}>
-                <DropDownMenu {...dropdownMenuProps}/>
-            </View>
             <View style={styles.joystickContainer}>
                 <Joystick {...gestureProps}/>
+            </View>
+            <View style={styles.gaitModeSelectionContainer}>
+                <DropDownMenu {...dropdownMenuProps}/>
             </View>
         </View>
     );
@@ -95,10 +95,12 @@ const styles = StyleSheet.create({
         display: 'flex'
     },
     gaitModeSelectionContainer: {
-
+        flex: 1,
+        alignItems: 'flex-end',
+        justifyContent:'flex-end'
     },
     joystickContainer: {
-        height: '100%',
+        flex: 8,
         width: '100%',
         display: 'flex',
         alignItems: 'center',
