@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Pressable, View, Text, StyleSheet } from "react-native";
 import {Ionicons} from "@expo/vector-icons";
 import { AppText } from "../text/AppText";
-import { orangeColor } from "../../colors/colors";
+import { darkerOrangeColor, orangeColor } from "../../colors/colors";
 
 export interface DropDownMenuElement{
     key: string,
@@ -63,8 +63,8 @@ const styles = StyleSheet.create({
         position: 'relative'
     },
     dropdownSelectedButtonElement: {
-        margin:10,
-        backgroundColor: orangeColor,
+        marginRight: 10,
+        backgroundColor: darkerOrangeColor,
         borderRadius: 12,
         flexDirection: 'row',
         justifyContent:'center',
@@ -81,7 +81,8 @@ const styles = StyleSheet.create({
     },
     actualDropDownContainer: {
         position: 'absolute',
-        top: dropDownMenuButtonHeight + 10, // button height + its margin
+        top: dropDownMenuButtonHeight, // button height + its margin
+        right: 10,
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 999,

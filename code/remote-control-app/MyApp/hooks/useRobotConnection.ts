@@ -1,30 +1,34 @@
 import { useEffect } from 'react';
 import { connect, sendCommand, onMessage } from '../services/socket';
 import { useRobotStore } from '../store/robotStore';
-import { FSMStatus, SystemStatus } from '../api/api-types';
+import { FSMStatus, GaitMode, SystemStatus } from '../api/api-types';
 
 
 export const useRobotConnection = (ip: string) => {
-  const setFsmState = useRobotStore((s) => s.setState);
+  const setFsmState = useRobotStore((s) => s.setFsmState);
+  const setTofDistances = useRobotStore((s) => s.setTofDistances);
+  const setAMU = useRobotStore((s) => s.setAMU);
+  const setGaitMode = useRobotStore((s) => s.setGaitMode);
+  const setMovementProgress = useRobotStore((s) => s.setMovementProgress);
   const setErrorMessage = useRobotStore((s) => s.setErrorMessage);
-  const setTof = useRobotStore((s) => s.setTofDistance);
 
   useEffect(() => {
     connect(ip);
 
     onMessage((data) => {
-      if(data.T){
-        switch(data.T){
-            case 10: //for the time being that is the only message our robot sends us
-                const {T, ...rest} = data;
-                const robotStatus = rest as SystemStatus;
-                if(robotStatus.e){
-                    setErrorMessage(robotStatus.e);
-                }else{
-                    setFsmState(robotStatus.s as FSMStatus);
-                    setTof(robotStatus.d[0]);
-                }
-                break;
+      if (data.T) {
+        switch (data.T) {
+          case 10: {
+            const { T, ...rest } = data;
+            const status = rest as SystemStatus;
+            setFsmState(status.s as FSMStatus);
+            setTofDistances(status.d);
+            setAMU(status.a);
+            setGaitMode(status.g as GaitMode);
+            setMovementProgress(status.pc);
+            setErrorMessage(status.e ?? null);
+            break;
+          }
         }
       }
     });

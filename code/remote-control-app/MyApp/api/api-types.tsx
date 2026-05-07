@@ -47,7 +47,6 @@ export type GaitIntegration = PacketType & {
 
 export type SystemStatus = PacketType & { //T10
     s: number, // current fsm state
-    b: number, //battery voltage
     d: Array<number>, //tof distance readings
     a: Array<number>, //AMU array containing speed + gyroscope [Speed, Rotation X, Rotation Y, Rotation Z]
     g: number, //current gait mode of the robot

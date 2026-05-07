@@ -7,6 +7,9 @@ import GaitControl from './screens/GaitControl';
 import LegControl from './screens/LegControl';
 import { orangeColor } from './colors/colors';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import SimpleLineIcons from '@expo/vector-icons/SimpleLineIcons';
+import AntDesign from '@expo/vector-icons/AntDesign';
+import { Actions } from './screens/Actions';
 
 export default function App() {
   const remoteControlPage = {
@@ -23,12 +26,19 @@ export default function App() {
     pageComponent: <LegControl/>
   } as PageInfo;
 
+  const actionsPage = {
+    pageName: 'Actions',
+    pageIcon: <SimpleLineIcons name="fire" size={40} color="white" />,
+    pageIconPressed: <AntDesign name="fire" size={40} color={orangeColor} />,
+    pageComponent: <Actions/>
+  } as PageInfo;
+
+  const pages = [remoteControlPage, actionsPage, individualControlPage]
+
   const pagerProps = {
     defaultPage: remoteControlPage,
-    pages: [remoteControlPage, individualControlPage]
+    pages: pages
   } as PagerProps;
-
-  const pages = [remoteControlPage, individualControlPage]
 
   return (
     <GestureHandlerRootView>

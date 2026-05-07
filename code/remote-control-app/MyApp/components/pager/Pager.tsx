@@ -2,6 +2,8 @@ import { ReactNode, useState } from "react"
 import { Button, Pressable, ScrollView, StyleSheet, Text, View, Image } from "react-native"
 import { AppText } from "../text/AppText";
 import { ConnectionStatus } from "../connectionStatusComponent/ConnectionStatus";
+import { RobotStatus } from "../robotStatus/RobotStatus";
+import { useRobotStore } from "../../store/robotStore";
 
 export interface PageInfo {
     pageName: string,
@@ -17,12 +19,16 @@ export interface PagerProps {
 
 export default function Pager({defaultPage, pages}: PagerProps){
     const [page, setPage] = useState(defaultPage);
+    const robotState = useRobotStore();
     return(<View style={styles.mainContainer}>
         <View style={styles.pageImageContainer}>
             <Image style={styles.pageImage} source={require('./../../assets/facehugger.png')}/>
         </View>
         <View style={styles.connectionStatusContainer}>
             <ConnectionStatus/>
+        </View>
+        <View style={styles.robotStatusContainer}>
+            <RobotStatus/>
         </View>
         <View style={styles.pageContainer}>
             {page.pageComponent}
@@ -46,6 +52,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center'
     },
     connectionStatusContainer: {
+        flex: 1
+    },
+    robotStatusContainer: {
+        width: '100%',
         flex: 1
     },
     pageButtonsContainer: {
@@ -72,7 +82,7 @@ const styles = StyleSheet.create({
     pageContainer: {
         justifyContent: 'center',
         alignItems:'center',
-        flex: 8
+        flex: 10
     },
     pageButton: {
         justifyContent: 'center',
