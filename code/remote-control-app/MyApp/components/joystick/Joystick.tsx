@@ -1,7 +1,7 @@
-import { GestureHandlerRootView, GestureDetector, Gesture } from "react-native-gesture-handler";
-import { View, StyleSheet } from "react-native";
+import { GestureDetector, Gesture } from "react-native-gesture-handler";
+import { StyleSheet } from "react-native";
 import { orangeColor } from "../../colors/colors";
-import Animated, {useSharedValue, useAnimatedStyle, runOnJS} from 'react-native-reanimated'
+import Animated, {useSharedValue, useAnimatedStyle, runOnJS, withSpring} from 'react-native-reanimated'
 import { useEffect } from "react";
 
 export interface JoystickAction{
@@ -44,8 +44,11 @@ export default function Joystick({actions}: JoystickProps){
             translationX.value = clampedDistance*Math.cos(angle);
             translationY.value = clampedDistance*Math.sin(angle);
         }).onEnd(() => {
-            translationX.value = 0;
-            translationY.value = 0;
+            translationX.value = withSpring(0);
+            translationY.value = withSpring(0);
+        }).onFinalize(() => {
+            translationX.value = withSpring(0);
+            translationY.value = withSpring(0);
         });
 
     const animatedStyle = useAnimatedStyle(() => ({
@@ -56,13 +59,11 @@ export default function Joystick({actions}: JoystickProps){
     }));
 
     return (
-        <View style={joystickStyles.joystickBackgroundCircle}>
-            <GestureDetector gesture={pan}>
-                <Animated.View style={[joystickStyles.joystickMovingPartCircle, animatedStyle]}>
-                
-                </Animated.View>
-            </GestureDetector>
-        </View>
+        <GestureDetector gesture={pan}>
+            <Animated.View style={joystickStyles.joystickBackgroundCircle}>
+                <Animated.View style={[joystickStyles.joystickMovingPartCircle, animatedStyle]}/>
+            </Animated.View>
+        </GestureDetector>
     );
 
 }
