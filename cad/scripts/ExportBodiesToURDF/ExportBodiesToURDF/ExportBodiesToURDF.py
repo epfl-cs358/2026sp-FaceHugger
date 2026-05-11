@@ -126,7 +126,7 @@ CONSTRUCTION_POINTS = [
     # Servo seat (each Servo_Mouser_Model occurrence).
     "ServoMountPoint",
     # Link3 tip defined as a vertex
-    "Link3TipPoint"
+    "Link3TipPoint",
 ]
 
 CONSTRUCTION_AXES = [
@@ -186,11 +186,12 @@ JOINTS = [
 # knee servo (Servo_Mouser_Model:3) is rigid with link3 via
 # `Link3RigidGroup`.
 EXPORT_RULES = [
-    # Chassis: explicit body list. QuadrupedBody (main frame) + LipoCage
-    # only — electronics (PCBs, OLED, MPU6050, …) are intentionally
-    # excluded by NOT being in this list, regardless of CAD visibility.
-    # Brackets (MotorMount{,R}) live in the leg assembly and are exported
-    # separately as leg_mount_{L,R}.stl.
+    # Chassis: explicit body list. QuadrupedBody main frame + the two
+    # structural bridges (MiddleBridge, BehindBridge) that share the
+    # QuadrupedBody:1 occurrence + LipoCage. Electronics (PCBs, OLED,
+    # MPU6050, …) are intentionally excluded by NOT being in this list,
+    # regardless of CAD visibility. Brackets (MotorMount{,R}) live in
+    # the leg assembly and are exported separately as leg_mount_{L,R}.stl.
     {
         "type": "combined",
         "stl": "QuadrupedBody.stl",
@@ -198,6 +199,14 @@ EXPORT_RULES = [
             {
                 "occurrence": "FlexibleSkeleton:1/QuadrupedBody:1",
                 "body": "QuadrupedBody",
+            },
+            {
+                "occurrence": "FlexibleSkeleton:1/QuadrupedBody:1",
+                "body": "MiddleBridge",
+            },
+            {
+                "occurrence": "FlexibleSkeleton:1/QuadrupedBody:1",
+                "body": "BehindBridge",
             },
             {"occurrence": "FlexibleSkeleton:1/LipoCage:1", "body": "LipoCage"},
         ],

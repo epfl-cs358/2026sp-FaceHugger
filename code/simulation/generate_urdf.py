@@ -975,10 +975,28 @@ def generate(export: dict, cfg: dict, out_path: Path):
         shoulder_rest_rad = _shoulder_rest_for(leg_id, fl_rest_rad)
         shoulder_rest_deg = math.degrees(shoulder_rest_rad)
 
+        # R-side three-flip on the shoulder (matches hip/knee logic
+        # below). The bracket+Link1 are CAD-mirrored about the body's
+        # YZ plane for FR/BL, which reverses the servo-shaft direction
+        # in body frame. Keeping the same axis vector on every leg
+        # would make positive θ rotate FR/BL the wrong physical way
+        # and apply asymmetric limits on the wrong half of the sweep.
+        # Negating the axis and negate-swapping the limits restores
+        # "same θ → same physical motion" across all four legs and
+        # lets the FL Fusion limits be set arbitrarily-asymmetric
+        # without breaking the right side. The shoulder rpy_z (rest)
+        # does NOT change with the axis flip — it is a static rotation
+        # in body frame, independent of axis sign.
+        shoulder_axis = list(sj["axis_dir"])
+        sh_lo, sh_hi = shoulder_lower_deg, shoulder_upper_deg
+        if side == "R":
+            shoulder_axis = [-a for a in shoulder_axis]
+            sh_lo, sh_hi = -shoulder_upper_deg, -shoulder_lower_deg
+
         urdf.comment(
             f"LEG: {leg_id.upper()}  (side={side}, "
             f"shoulder_rest={shoulder_rest_deg:+.1f}°, "
-            f"limits=[{shoulder_lower_deg:+.1f}°, {shoulder_upper_deg:+.1f}°])"
+            f"limits=[{sh_lo:+.1f}°, {sh_hi:+.1f}°])"
         )
 
         # Shoulder joint: origin = world position of the rotation axis for
@@ -990,9 +1008,9 @@ def generate(export: dict, cfg: dict, out_path: Path):
             parent=base_cfg["name"],
             child=f"{leg_id}_link1",
             origin_mm=shoulder_origin_xyz,
-            axis=sj["axis_dir"],
-            lower_deg=shoulder_lower_deg,
-            upper_deg=shoulder_upper_deg,
+            axis=shoulder_axis,
+            lower_deg=sh_lo,
+            upper_deg=sh_hi,
             effort=effort,
             velocity=vel,
             rpy_z_deg=shoulder_rest_deg,
