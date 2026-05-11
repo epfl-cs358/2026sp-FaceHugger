@@ -40,14 +40,14 @@ body   LipoCage
 # --- Leg-assembly bodies (cad/leg/) ---
 leg    LegMountL    +X
 leg    LegMountR    +X
-leg    Link1        -X
+leg    Link1L        -X
 leg    Link1R       -X
 leg    Link2        +Z
 leg    Link3        -X
 
 # === EXPORT LOG (auto-managed below — do not edit) ===
 
-# Last export : 2026-05-11 12:11:04 CEST
+# Last export : 2026-05-11 13:44:22 CEST
 # Source doc  : FullBodyAssembly
 # Refinement  : MeshRefinementHigh (binary STL, design units)
 # Exported    : 10 body·ies
@@ -57,7 +57,7 @@ leg    Link3        -X
 #   ✓ body/LipoCage.stl    ← FlexibleSkeleton:1/LipoCage:1
 #   ✓ leg/LegMountL.stl    ← FaceHuggerLegAssembly:1/MotorMount:1  [up=+X]
 #   ✓ leg/LegMountR.stl    ← FaceHuggerLegAssembly:1/MotorMountR:1  [up=+X]
-#   ✓ leg/Link1.stl    ← FaceHuggerLegAssembly:1/Link1L:1  [up=-X]
+#   ✓ leg/Link1L.stl    ← FaceHuggerLegAssembly:1/Link1L:1  [up=-X]
 #   ✓ leg/Link1R.stl    ← FaceHuggerLegAssembly:1/Link1R:1  [up=-X]
 #   ✓ leg/Link2.stl    ← FaceHuggerLegAssembly:1/Link2L:1
 #   ✓ leg/Link3.stl    ← FaceHuggerLegAssembly:1/Link3L:1  [up=-X]

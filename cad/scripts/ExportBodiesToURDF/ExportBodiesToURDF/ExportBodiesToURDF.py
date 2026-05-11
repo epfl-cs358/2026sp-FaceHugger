@@ -149,7 +149,7 @@ JOINTS = [
 #     when you actually want everything in the subtree. Prefer `combined`
 #     when you need a precise body subset.
 #
-#   {"type": "body", "match": "Link1", "stl": "X.stl",
+#   {"type": "body", "match": "Link1L", "stl": "X.stl",
 #    "component": "Link1L",                 # optional, disambiguates same-named bodies
 #    "origin_landmark": "BodyToLink1Point"} # optional
 #     Export a single body by name. Without `component`, uses the FIRST
@@ -247,7 +247,7 @@ EXPORT_RULES = [
         "stl": "leg_shoulder_L.stl",
         "origin_landmark": "BodyToLink1Point",
         "parts": [
-            {"occurrence": "FaceHuggerLegAssembly:1/Link1L:1", "body": "Link1"},
+            {"occurrence": "FaceHuggerLegAssembly:1/Link1L:1", "body": "Link1L"},
         ],
     },
     {
@@ -1614,7 +1614,7 @@ _REQUIRED_FHLA_POINTS = (
     "Link2ToLink3Point",
 )
 _REQUIRED_FHLA_OCCS = {
-    "Link1L:1": {"body": "Link1"},
+    "Link1L:1": {"body": "Link1L"},
     "Link1R:1": {"body": "Link1R"},
     "Link2L:1": {"body": "Link2"},
     "Link3L:1": {"body": "Link3"},
