@@ -1,0 +1,11 @@
+{
+	"autodeskProduct":	"Fusion",
+	"type":	"script",
+	"author":	"Marcus Hamelink",
+	"description":	{
+		"":	"Export individual bodies as print-ready STLs at HIGH mesh refinement, driven by cad/print_export.txt"
+	},
+	"version":	"",
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true
+}

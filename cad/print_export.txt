@@ -1,0 +1,64 @@
+# FaceHugger — printable-STL export spec
+#
+# One body per line. The ExportPrintableSTLs Fusion script reads this file,
+# finds each body in the currently-open assembly, and writes a binary STL at
+# Fusion's HIGH mesh refinement to cad/<subfolder>/<body_name>.stl.
+#
+# Format:
+#     <subfolder>    <body_name>    [up_axis]    [hint]
+#
+# Required:
+#   - subfolder : "body" or "leg". The script creates cad/<subfolder>/ if missing.
+#   - body_name : name of the BRep body inside the assembly (case-sensitive).
+#
+# Optional (any order after body_name — classified by token shape):
+#   - up_axis   : one of {+X, -X, +Y, -Y, +Z, -Z}. The body's named local axis
+#                 is rotated to point along the slicer's +Z (up). Rotation is
+#                 baked into the STL so the part loads pre-oriented in the
+#                 slicer. Default = +Z (no rotation).
+#   - hint      : substring matched against the occurrence path. Only needed
+#                 when the same body name appears in multiple components.
+#                 Plain word, or write `hint=<value>` explicitly.
+#
+# Examples:
+#     body   QuadrupedBody
+#     body   QuadrupedBody    +Y                     # +Y body axis is print-up
+#     leg    Link2            -Z                     # upside down
+#     leg    Link2            hint=Link2L:1          # disambiguate
+#     leg    Link2            +Y  Link2L:1           # both axis and hint
+#
+# Lines starting with # are comments. Blank lines are ignored.
+# Run from Fusion via:  Shift+S → Scripts and Add-Ins → ExportPrintableSTLs → Run.
+# Open the full assembly (with chassis + legs as xrefs loaded) before running.
+
+# --- Chassis bodies (cad/body/) ---
+body   QuadrupedBody
+body   MiddleBridge
+body   BehindBridge
+body   LipoCage
+
+# --- Leg-assembly bodies (cad/leg/) ---
+leg    LegMountL    +X
+leg    LegMountR    +X
+leg    Link1        -X
+leg    Link1R       -X
+leg    Link2        +Z
+leg    Link3        -X
+
+# === EXPORT LOG (auto-managed below — do not edit) ===
+
+# Last export : 2026-05-11 12:11:04 CEST
+# Source doc  : FullBodyAssembly
+# Refinement  : MeshRefinementHigh (binary STL, design units)
+# Exported    : 10 body·ies
+#   ✓ body/QuadrupedBody.stl    ← FlexibleSkeleton:1/QuadrupedBody:1
+#   ✓ body/MiddleBridge.stl    ← FlexibleSkeleton:1/QuadrupedBody:1
+#   ✓ body/BehindBridge.stl    ← FlexibleSkeleton:1/QuadrupedBody:1
+#   ✓ body/LipoCage.stl    ← FlexibleSkeleton:1/LipoCage:1
+#   ✓ leg/LegMountL.stl    ← FaceHuggerLegAssembly:1/MotorMount:1  [up=+X]
+#   ✓ leg/LegMountR.stl    ← FaceHuggerLegAssembly:1/MotorMountR:1  [up=+X]
+#   ✓ leg/Link1.stl    ← FaceHuggerLegAssembly:1/Link1L:1  [up=-X]
+#   ✓ leg/Link1R.stl    ← FaceHuggerLegAssembly:1/Link1R:1  [up=-X]
+#   ✓ leg/Link2.stl    ← FaceHuggerLegAssembly:1/Link2L:1
+#   ✓ leg/Link3.stl    ← FaceHuggerLegAssembly:1/Link3L:1  [up=-X]
+# Failures    : 0
