@@ -350,6 +350,84 @@ def matrix_m_to_mm(M):
 # ---------------------------------------------------------------------------
 
 
+# stash_actions / restore_actions preserve Object-level animation data
+# across clear_scene(). The full-rebuild flow deletes every Object
+# datablock, which is the only "real user" of the body_ctrl and
+# foot_target_* Actions (no NLA strips, no bone-level F-curves in the
+# current rig). Without intervention, those Actions become orphaned
+# (users=0) and Blender garbage-collects them on the next save — losing
+# every keyframe the animator authored. Setting use_fake_user=True
+# before the wipe holds the Action alive across the rebuild; after the
+# new rig is built, restore_actions() rebinds each Action by Object name
+# AND by explicit slot identifier. Auto-slot assignment when setting
+# `anim_data.action = action` is heuristic and unreliable in Blender 5.x
+# (per the official ActionSlot docs); explicit
+# `anim_data.action_slot = action.slots[identifier]` is the canonical
+# pattern.
+def stash_actions():
+    """Capture every (object_name, action_name, slot_identifier) triple
+    currently in use; set use_fake_user=True on each Action so it
+    survives clear_scene(). Return the captured list."""
+    stash = []
+    for obj in bpy.data.objects:
+        ad = obj.animation_data
+        if ad is None or ad.action is None:
+            continue
+        action = ad.action
+        slot = ad.action_slot
+        if slot is None and action.slots:
+            slot = action.slots[0]
+        slot_identifier = slot.identifier if slot is not None else None
+        action.use_fake_user = True
+        stash.append((obj.name, action.name, slot_identifier))
+        print(
+            f"[urdf_to_blender_rigged] stash: {obj.name!r} -> "
+            f"action={action.name!r} slot={slot_identifier!r}"
+        )
+    return stash
+
+
+def restore_actions(stash):
+    """Rebind each stashed Action to its now-recreated Object by name,
+    explicitly setting `action_slot` from the stashed identifier (with
+    `action_suitable_slots[0]` as fallback). Drop use_fake_user after
+    binding — the assigned animation_data is now a real user."""
+    n_restored = 0
+    for obj_name, action_name, slot_identifier in stash:
+        obj = bpy.data.objects.get(obj_name)
+        if obj is None:
+            print(
+                f"[urdf_to_blender_rigged] restore: object {obj_name!r} "
+                f"not in rebuilt scene — skipping action {action_name!r}"
+            )
+            continue
+        action = bpy.data.actions.get(action_name)
+        if action is None:
+            print(
+                f"[urdf_to_blender_rigged] restore: action {action_name!r} "
+                "missing from bpy.data.actions (was it GC'd between "
+                "stash and rebuild?)"
+            )
+            continue
+        ad = obj.animation_data_create()
+        ad.action = action
+        slot = None
+        if slot_identifier:
+            slot = action.slots.get(slot_identifier)
+        if slot is None and ad.action_suitable_slots:
+            slot = ad.action_suitable_slots[0]
+        if slot is not None:
+            ad.action_slot = slot
+        action.use_fake_user = False
+        bound_id = slot.identifier if slot is not None else None
+        print(
+            f"[urdf_to_blender_rigged] restore: {obj_name!r} <- "
+            f"action={action_name!r} slot={bound_id!r}"
+        )
+        n_restored += 1
+    print(f"[urdf_to_blender_rigged] restored {n_restored}/{len(stash)} action(s)")
+
+
 def clear_scene():
     for obj in list(bpy.data.objects):
         bpy.data.objects.remove(obj, do_unlink=True)
@@ -1124,6 +1202,7 @@ def parse_args():
         / "generated"
         / "fusion_export.json"
     )
+    default_save = _script_dir() / ".." / ".." / "animation" / "fh_rigged_latest.blend"
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--urdf", type=Path, default=default_urdf.resolve())
@@ -1137,7 +1216,15 @@ def parse_args():
         "FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M (URDF metadata, mesh-derived). "
         "Warns if they disagree by more than 5 mm.",
     )
-    parser.add_argument("--save", type=Path, default=None)
+    parser.add_argument(
+        "--save",
+        type=Path,
+        default=default_save.resolve(),
+        help="Output .blend path. Defaults to animation/fh_rigged_latest.blend "
+        "so re-running the script always produces a refreshed file next to "
+        "the in-progress animation .blend files. Pass an explicit path to "
+        "override.",
+    )
 
     argv = sys.argv
     argv = argv[argv.index("--") + 1 :] if "--" in argv else []
@@ -1180,6 +1267,7 @@ def main():
         f"{tuple(round(v * M_TO_MM, 3) for v in foot_tip_in_link3_m)} mm ({src})"
     )
 
+    stash = stash_actions()
     clear_scene()
     collections = make_collections()
     mat_joint = make_material("JointPivotRed", COLOR_JOINT)
@@ -1236,6 +1324,7 @@ def main():
     _diagnose_foot_target_placement(robot, link_world, arm_obj)
     _verify_auto_yaw(arm_obj)
     body_ctrl = add_body_control(arm_obj, collections[CONTROLS_COLLECTION])
+    restore_actions(stash)
 
     max_err_deg = _check_bone_z_alignment(robot, link_world, arm_obj)
     print(
