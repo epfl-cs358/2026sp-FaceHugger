@@ -23,6 +23,19 @@ export enum GaitMode {
     CRAWL = 2
 }
 
+export enum Legs {
+    FRONT_RIGHT_LEG = 0,
+    FRONT_LEFT_LEG = 1,
+    BACK_RIGHT_LEG = 2,
+    BACK_LEFT_LEG = 3
+}
+
+export enum Servos {
+    HIP_SERVO = 0,
+    THIGH_SERVO = 1,
+    KNEE_SERVO = 2
+}
+
 export type PacketType = {
     T: number
 }

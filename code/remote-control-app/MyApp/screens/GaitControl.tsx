@@ -6,9 +6,10 @@ import { ConnectionStatus } from "../components/connectionStatusComponent/Connec
 import { GaitMode } from "../api/api-types";
 import { DropDownMenu, DropDownMenuElement, DropDownMenuProps } from "../components/dropdown/DropdownMenu";
 import { useRobotStore } from "../store/robotStore";
+import { webSocketIP } from "../config/config";
 
 export default function GaitControl(){
-    const { sendCommand } = useRobotConnection("192.168.1.1");
+    const { sendCommand } = useRobotConnection(webSocketIP);
     const setChosenGaitMode = useRobotStore((s) => s.setChosenGaitMode);
 
     const actionRight = {

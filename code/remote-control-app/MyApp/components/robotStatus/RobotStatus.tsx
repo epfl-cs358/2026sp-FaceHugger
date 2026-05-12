@@ -2,7 +2,6 @@ import { StyleSheet, Text, View } from "react-native"
 import { FSMStatus, GaitMode } from "../../api/api-types"
 import { AppText } from "../text/AppText";
 import { useRobotStore } from "../../store/robotStore";
-import { useRobotConnection } from "../../hooks/useRobotConnection";
 import { useSocketStatus } from "../../hooks/useSocketStatus";
 import { darkerOrangeColor } from "../../colors/colors";
 

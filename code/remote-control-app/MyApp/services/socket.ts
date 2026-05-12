@@ -1,7 +1,9 @@
 export let ws: WebSocket | null = null;
 
 export const connect = (ip: string) => {
-  ws = new WebSocket(`ws://${ip}:8080`);
+  if(ws === null || ws === undefined){
+    ws = new WebSocket(`ws://${ip}:8080`);
+  }
 };
 
 export const isConnected = () => ws?.readyState === WebSocket.OPEN;
