@@ -1,17 +1,19 @@
-# animation/scripts — Blender importers
+# animation/scripts — Blender tooling
 
-Three Blender 5.x scripts that build a FaceHugger scene from the URDF or
-the Fusion export. They share the same scene convention (1 Blender unit =
-1 mm, viewport clip 0.1 → 10000) and the same red/orange marker palette,
-so you can open multiple `.blend` outputs and overlay them for
-cross-validation.
+Blender 5.x scripts that build the FaceHugger scene from the URDF or
+Fusion export, plus animator-facing helpers (clip panel, one-shot
+migrations). The scene-building scripts share the same conventions
+(1 Blender unit = 1 mm, viewport clip 0.1 → 10000) and the same
+red/orange marker palette, so you can open multiple `.blend` outputs
+and overlay them for cross-validation.
 
-| Script | Source of truth | Rig? | What it's for |
+| File | Kind | Source of truth | What it's for |
 |---|---|---|---|
-| `urdf_to_blender_rigged.py` | `facehugger.urdf` + `fusion_export.json` | armature + IK | **Animator-facing**. Pose-able rig: FK shoulder + IK on hip+knee, foot-target Empties. |
-| `visualize_urdf.py` | `code/simulation/generated/facehugger.urdf` | none | Cross-check: does the URDF chain walk reproduce PyBullet's `loadURDF` rest pose? |
-| `visualize_fusion_export.py` | `code/simulation/generated/fusion_export.json` | none | Cross-check: does the CAD's raw landmark/world data match the URDF generator's output? |
-| `urdf_to_blender.py` | (legacy — superseded by `visualize_urdf.py`) | — | — |
+| `urdf_to_blender_rigged.py` | scene builder (`--python`) | `facehugger.urdf` + `fusion_export.json` | **Animator-facing**. Pose-able rig: FK shoulder + IK on hip+knee, foot-target Empties. |
+| `visualize_urdf.py` | scene builder (`--python`) | `code/simulation/generated/facehugger.urdf` | Cross-check: does the URDF chain walk reproduce PyBullet's `loadURDF` rest pose? |
+| `visualize_fusion_export.py` | scene builder (`--python`) | `code/simulation/generated/fusion_export.json` | Cross-check: does the CAD's raw landmark/world data match the URDF generator's output? |
+| `fh_clip_panel.py` | UI add-on (sidebar N-panel) | `bpy.data.actions` in the open .blend | Manage named clips (5-Action bundles) on the rig — apply / duplicate / rename via the layered Action API. |
+| `fh_rename_actions.py` | one-shot CLI (`--background`) | `animation/fh_rigged_latest.blend` | Migrate the legacy `body_ctrlAction` / `foot_target_*Action` names to the `base_anim__<target>` clip convention. |
 
 ## urdf_to_blender_rigged.py — animation rig
 
@@ -140,13 +142,97 @@ Useful for diagnosing CAD-side issues (missing landmarks, wrong
 URDF visualizer disagrees with this one, the disagreement points at the
 URDF generator (`code/simulation/generate_urdf.py`).
 
-## urdf_to_blender.py — legacy
+## fh_clip_panel.py — clip library add-on
 
-Earlier flat-placement attempt at the URDF→Blender import. Same chain-walk
-math as `visualize_urdf.py`, but used the Blender default m-scale scene,
-which makes the 0.2-m robot 0.2 BU wide — close to the default viewport
-clip range and visually hard to interpret. Superseded by
-`visualize_urdf.py`. Schedule for deletion.
+A Blender add-on (not a CLI script) that adds an **"FH Clips"** panel
+to the 3D viewport sidebar (press `N`, look for the "FaceHugger" tab).
+Manages **clips** — named groups of 5 Actions matching the convention:
+
+```
+<clip_name>__body_ctrl
+<clip_name>__foot_target_fl
+<clip_name>__foot_target_fr
+<clip_name>__foot_target_bl
+<clip_name>__foot_target_br
+```
+
+Built on the Blender 4.4+ **layered Action API**: each clip is applied
+by setting `obj.animation_data.action` + `obj.animation_data.action_slot`
+on the matching rig target. No NLA, no driver tricks — just direct
+per-object Action assignment.
+
+**Loading** (two ways):
+
+| Method | When to use |
+|---|---|
+| `Edit > Preferences > Add-ons > Install...` → pick this file → enable "FH Clip Panel" | Persists across sessions. Use for actual animation work. |
+| Open in Text Editor → press `Alt+P` (Run Script) | Dev iteration. The script unregisters before re-registering, so you can edit and re-run without restarting Blender. |
+
+**Panel UI:**
+
+- **Active**: header box showing which clip is currently assigned to
+  `body_ctrl` (the anchor object used for active-clip detection), or
+  `<none>` if no FH-pattern Action is on `body_ctrl`.
+- **Clips**: one button per discovered clip name. The active clip
+  renders depressed with a filled radio icon; others with an empty
+  radio. Clicking applies all 5 Actions of that clip.
+- **New clip name**: text field used by the two buttons below.
+- **Duplicate Active Clip**: `Action.copy()` ×5, renamed
+  `<new>__<target>`, then applied so the animator can immediately
+  start editing the new clip. Disabled when there's no active clip.
+- **Rename Active Clip**: renames all 5 Actions of the active clip in
+  one step. Pre-checks for name collisions before mutating.
+
+**Operator IDs** (callable from the Python console):
+
+```python
+bpy.ops.fh.apply_clip(clip_name="base_anim")
+bpy.ops.fh.duplicate_clip()   # reads scene.fh_new_clip_name
+bpy.ops.fh.rename_clip()      # reads scene.fh_new_clip_name
+```
+
+**No timer / polling** — the panel rescans `bpy.data.actions` on every
+redraw, and operators call `area.tag_redraw()` after mutating, so the
+list stays current. New Actions added through other tools appear on
+the next mouse-move into the panel.
+
+## fh_rename_actions.py — one-shot legacy-name migration
+
+One-shot CLI that renames the 5 legacy per-object Actions on the
+rig file to the clip convention `fh_clip_panel.py` expects. Idempotent
+(skips Actions already at the new name) and **saves the file in place** —
+make a backup branch first if you want the legacy names recoverable
+without `git checkout`.
+
+| Old name | New name |
+|---|---|
+| `body_ctrlAction` | `base_anim__body_ctrl` |
+| `foot_target_flAction` | `base_anim__foot_target_fl` |
+| `foot_target_frAction` | `base_anim__foot_target_fr` |
+| `foot_target_blAction` | `base_anim__foot_target_bl` |
+| `foot_target_brAction` | `base_anim__foot_target_br` |
+
+After renaming, the script verifies each object's currently-assigned
+`AnimData.action_slot.identifier` matches `OB<target>` (Blender's
+auto-prefix for OBJECT-type slots) and prints a per-object report.
+The panel's slot lookup (`action.slots.get(f"OB{target}")`) only works
+if these identifiers are correct — a `MISMATCH` line is worth
+investigating before relying on the panel.
+
+**Run:**
+
+```bash
+# default: animation/fh_rigged_latest.blend
+blender --background --python animation/scripts/fh_rename_actions.py
+
+# override target .blend:
+blender --background --python animation/scripts/fh_rename_actions.py -- \
+    --blend animation/some-other.blend
+```
+
+The script exits non-zero (no save) if the target .blend can't be
+found, and skips `wm.save_mainfile()` if no Actions were renamed —
+so a no-op re-run leaves the file's mtime untouched.
 
 ## Scene conventions (both visualizers)
 
@@ -165,25 +251,20 @@ clip range and visually hard to interpret. Superseded by
 
 ## What's next
 
-1. ~~**Build the rig on top of `visualize_urdf.py`.**~~ **Done
-   (2026-05-04):** see `urdf_to_blender_rigged.py` above. The
-   implementation went with an Armature (Option B from the original
-   `RIGGING_PLAN.md`) instead of Empties because the animator workflow
-   needs IK; bone roll calibration was solved by
-   `EditBone.align_roll(joint.axis)`. At all-zero pose the rigged
-   scene matches `visualize_urdf.py`'s baseline within 0.5 mm.
-2. **Delete `urdf_to_blender.py`** once the rigging successor is
-   battle-tested in animator workflows. Avoids drift between three
-   URDF importers.
-3. **Optional polish** for the visualizer:
+1. **Optional polish** for the visualizer:
    - Replace orange spheres with oriented arrows / line objects so axis
      direction is unambiguous (currently you have to read the orange-tip
      position relative to the red pivot).
    - Add a CLI flag to apply stance angles (shoulder=0°, hip=-40°,
      knee=-60°) as a static snapshot — useful for comparing against
      PyBullet's settled-stand image without running the simulator.
-4. **CAD-side cleanup** if you want symmetric leg meshes:
+2. **CAD-side cleanup** if you want symmetric leg meshes:
    currently the URDF generator emits `<visual><origin rpy="0 π 0"/>` on
    `fr_link2`/`fr_link3`/`bl_link2`/`bl_link3` to mirror the L mesh onto R
    legs. Exporting native R-pair STLs from Fusion drops that flip and
    makes any future rigging code one branch simpler.
+3. **Wire `fh_clip_panel.py` into a `.gait` / `.fhc` exporter.** The
+   addon currently manages clips in-place; once the on-board animation
+   format lands (see [doc/animation-pipeline/](../../doc/animation-pipeline/))
+   it should grow an "Export Active Clip" button that bakes the 5
+   Actions to the binary playback format.
