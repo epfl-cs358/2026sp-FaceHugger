@@ -68,6 +68,26 @@ but parented to their bone so they follow pose rotations. Hidden by
 default (`hide_viewport=True` on `Joint Origins/` and `Joint Axes/`
 collections); toggle the eye in the outliner to see them.
 
+**Object hierarchy** (top-down, post-build):
+
+```
+world_origin   (PLAIN_AXES Empty, world (0,0,0) — never animated)
+  ├── body_ctrl   (CUBE Empty — animator handle for chassis position + rotation)
+  │     └── FaceHuggerRig   (armature, hide_viewport=True; bones drive limbs)
+  └── foot_target_{fl,fr,bl,br}   (SPHERE Empties — animator handles)
+
+foot_ik_{fl,fr,bl,br}   (PLAIN_AXES, hidden, UNPARENTED;
+                          COPY_LOCATION pulls them to foot_target.world + static offset)
+```
+
+`world_origin` is a deterministic anchor for downstream exporters and
+is not intended to be animated. It sits at world identity, so each
+child's local transform equals its world transform. `foot_ik_*` are
+deliberately NOT parented: the COPY_LOCATION offset would double under
+world_origin motion if they were (target.world + owner.pre_constraint_world
+both shift by the same delta). foot_ik follows foot_target purely via
+the constraint, which is correct regardless of anchor motion.
+
 **Regression vs visualize_urdf.py**: at all-zero pose, every visual
 mesh's world position matches the placement-only baseline within
 0.5 mm (0.001 rad rotation tolerance). Any deviation means the rig is

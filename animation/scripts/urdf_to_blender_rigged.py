@@ -793,7 +793,7 @@ def _add_empty(name, location_mm, target_collection, kind="SPHERE", size_mm=8.0)
 
 
 def place_ik_targets_and_constraints(
-    robot, link_world, arm_obj, collection, foot_tip_in_link3_m
+    robot, link_world, arm_obj, collection, foot_tip_in_link3_m, world_origin
 ):
     """Per leg, set up the two-empty foot target + IK + Damped Track:
 
@@ -828,6 +828,17 @@ def place_ik_targets_and_constraints(
     link1's bone-Y after the tail projection points outward from the
     chassis (toward its own foot direction) at rest, regardless of
     L/R-side mesh mirroring.
+
+    foot_target is parented to `world_origin` with
+    matrix_parent_inverse=Identity, so it rides the anchor as a rigid
+    handle. foot_ik is intentionally UNPARENTED: its COPY_LOCATION
+    constraint computes
+    `final = foot_target.world + owner.pre_constraint_world`
+    (use_offset=True, owner_space=WORLD), and that owner pre-constraint
+    world must stay constant for the offset to remain the static
+    foot-tip → bone-tail delta. Parenting foot_ik to world_origin too
+    would make pre_constraint_world ride the anchor as well, doubling
+    the delta when world_origin moves and breaking IK.
     """
     bpy.ops.object.mode_set(mode="OBJECT")
     n_targets = 0
@@ -867,6 +878,9 @@ def place_ik_targets_and_constraints(
             kind="SPHERE",
             size_mm=8.0,
         )
+        foot_target.parent = world_origin
+        foot_target.parent_type = "OBJECT"
+        foot_target.matrix_parent_inverse = Matrix.Identity(4)
         n_targets += 1
 
         # Hidden foot_ik with COPY_LOCATION use_offset=True. Stored
@@ -956,6 +970,36 @@ def add_body_control(arm_obj, controls_collection):
     arm_obj.matrix_parent_inverse = Matrix.Identity(4)
     arm_obj.hide_viewport = True
     return body_ctrl
+
+
+def create_world_origin(controls_collection):
+    """Fixed `world_origin` Empty (PLAIN_AXES, 50 mm) at world (0, 0, 0).
+    Deterministic root that body_ctrl + foot Empties parent to:
+
+        world_origin   (anchor — never animated)
+          ├── body_ctrl   (chassis xform — animated)
+          │     └── FaceHuggerRig   (armature)
+          ├── foot_target_{leg}   (animator handle — animated)
+          └── foot_ik_{leg}   (hidden; COPY_LOCATION from foot_target)
+
+    Rationale: a future `.fhc` exporter walks the scene graph and needs a
+    deterministic root to express animated transforms against. Pinning
+    that root to world identity (rather than reading each object's
+    matrix_world directly) keeps every animated object's local
+    transform = its keyed value, independent of whatever
+    matrix_parent_inverse the import history left behind.
+
+    Caller is responsible for parenting body_ctrl (inline in main) and
+    the foot Empties (in place_ik_targets_and_constraints) to the
+    returned world_origin.
+    """
+    bpy.ops.object.empty_add(type="PLAIN_AXES", radius=50.0, location=(0.0, 0.0, 0.0))
+    world_origin = bpy.context.object
+    world_origin.name = "world_origin"
+    for c in list(world_origin.users_collection):
+        c.objects.unlink(world_origin)
+    controls_collection.objects.link(world_origin)
+    return world_origin
 
 
 def _diagnose_foot_target_placement(robot, link_world, arm_obj):
@@ -1273,6 +1317,11 @@ def main():
     mat_joint = make_material("JointPivotRed", COLOR_JOINT)
     mat_axis = make_material("JointAxisOrange", COLOR_AXIS)
 
+    # Created early so place_ik_targets_and_constraints and the
+    # body_ctrl reparenting downstream can both parent to it without
+    # a second pass.
+    world_origin = create_world_origin(collections[CONTROLS_COLLECTION])
+
     arm_obj = build_armature(
         robot, link_world, collections[ARMATURE_COLLECTION], foot_tip_in_link3_m
     )
@@ -1308,6 +1357,7 @@ def main():
         arm_obj,
         collections[TARGETS_COLLECTION],
         foot_tip_in_link3_m,
+        world_origin,
     )
     n_lim = add_limit_rotation_constraints(robot, arm_obj)
     n_locked = lock_ik_axes(robot, arm_obj)
@@ -1324,6 +1374,9 @@ def main():
     _diagnose_foot_target_placement(robot, link_world, arm_obj)
     _verify_auto_yaw(arm_obj)
     body_ctrl = add_body_control(arm_obj, collections[CONTROLS_COLLECTION])
+    body_ctrl.parent = world_origin
+    body_ctrl.parent_type = "OBJECT"
+    body_ctrl.matrix_parent_inverse = Matrix.Identity(4)
     restore_actions(stash)
 
     max_err_deg = _check_bone_z_alignment(robot, link_world, arm_obj)
@@ -1340,7 +1393,8 @@ def main():
     print(
         f"[urdf_to_blender_rigged] controls: {body_ctrl.name} "
         f"({body_ctrl.empty_display_type}, armature parented to it, "
-        f"armature.hide_viewport=True)"
+        f"armature.hide_viewport=True), "
+        f"parented to {world_origin.name} (PLAIN_AXES, world anchor)"
     )
     print(
         f"[urdf_to_blender_rigged] geometry: {n_meshes} visuals, "
