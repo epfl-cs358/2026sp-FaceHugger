@@ -1,24 +1,42 @@
 import {create} from 'zustand'
-import { FSMStatus } from '../api/api-types';
+import { FSMStatus, GaitMode } from '../api/api-types';
 
 type RobotStore = {
     fsmState: FSMStatus,
-    setState: (state: FSMStatus) => void
-    errorMessage: string | null,
-    setErrorMessage: (error: string) => void
-    tofDistance: number,
-    setTofDistance: (distance: number) => void,
+    setFsmState: (state: FSMStatus) => void,
+    chosenFsmState: FSMStatus,
+    setChosenFsmState: (state: FSMStatus) => void,
+    tofDistances: number[], // [FL, FR, RL, RR, Center]
+    setTofDistances: (distances: number[]) => void,
     speed: number,
-    setSpeed: (speed: number) => void
+    gyroscope: [number, number, number], // [Rotation X, Rotation Y, Rotation Z]
+    setAMU: (amu: number[]) => void, // [Speed, Rotation X, Rotation Y, Rotation Z]
+    gaitMode: GaitMode,
+    setGaitMode: (gait: GaitMode) => void,
+    chosenGaitMode: GaitMode,
+    setChosenGaitMode: (gait: GaitMode) => void,
+    movementProgress: number, // 0.0 - 1.0
+    setMovementProgress: (pc: number) => void,
+    errorMessage: string | null,
+    setErrorMessage: (error: string | null) => void,
 };
 
 export const useRobotStore = create<RobotStore>((set) => ({
     fsmState: FSMStatus.STATE_IDLE,
-    setState: (fsmState) => set({fsmState}),
+    setFsmState: (fsmState) => set({fsmState}),
+    chosenFsmState: FSMStatus.STATE_IDLE,
+    setChosenFsmState: (chosenFsmState) => set({chosenFsmState}),
+    tofDistances: [0, 0, 0],
+    setTofDistances: (tofDistances) => set({tofDistances}),
+    speed: 0,
+    gyroscope: [0, 0, 0],
+    setAMU: ([speed, ...gyro]) => set({speed, gyroscope: gyro as [number, number, number]}),
+    gaitMode: GaitMode.TROT,
+    setGaitMode: (gaitMode) => set({gaitMode}),
+    chosenGaitMode: GaitMode.TROT,
+    setChosenGaitMode: (chosenGaitMode) => set({chosenGaitMode}),
+    movementProgress: 0,
+    setMovementProgress: (movementProgress) => set({movementProgress}),
     errorMessage: null,
     setErrorMessage: (errorMessage) => set({errorMessage}),
-    tofDistance: Number.MAX_VALUE,
-    setTofDistance: (tofDistance) => set({tofDistance}),
-    speed: 0,
-    setSpeed: (speed) => set({speed})
 }));
