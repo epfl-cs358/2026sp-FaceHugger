@@ -71,18 +71,31 @@ void handleParsedMessage(uint8_t * payload) {
 
     switch (type) {
         case CMD_STATE:
-            Serial.printf("State Change Request: %d\n", (int)doc["s"]);
-            break;
+            if(doc.containsKey("s")){
+                int newState = doc["s"];
+                if(newState >= STATE_IDLE && newState <= STATE_FAILSAFE){
+                    switch(newState){
+                        case STATE_IDLE: spinalCord.rest();
+                        case STATE_WALK: spinalCord.walk();
+                        case STATE_ACTION: spinalCord.wallFlip();
+                        default: //do nothing
+                    }
+                }
+            }
         case CMD_CALIBRATE: { 
-            int channel = doc["id"] | 0;
-            int angle = doc["a"] | 90; 
-
-            spinalCord.applyCalibration(channel, angle);
-            Serial.printf("Calibrating servo %d to %d", channel, angle);
-            break;
+            if(doc.containsKey("id") && doc.containsKey("servo_id") && doc.containsKey("a")){
+                int id = doc["id"];
+                int servoId = doc["servo_id"];
+                int angle = doc["a"];
+                //create a mapping between the channels and leg servo id
+                uint8_t channel = LEG_SERVO_CHANNEL[id][servoId];
+                spinalCord.applyCalibration(channel, angle);
+                Serial.printf("Calibrating servo %d to %d", channel, angle);
+                break;
+            }
         }
         case CMD_MOVE: {
-            if (doc["g"].is<int>()) {
+            if (doc.containsKey("g") && doc["g"].is<int>()) {
                 int g = doc["g"];
                 if (g >= GAIT_NONE && g <= GAIT_CRAB) {
                     GaitType requested = (GaitType)g;
@@ -94,7 +107,7 @@ void handleParsedMessage(uint8_t * payload) {
             Serial.printf("Moving -> X:%.2f Y:%.2f\n", (float)doc["x"], (float)doc["y"]);
             break;
         }
-        case CMD_TELEMETRY:
+        case CMD_TELEMETRY: //this is the robot that sends it
             Serial.printf("FSM state: %d, Battery voltage: %lf, In stabilization mode: %s\n", 
                 (int)doc["s"], (float)doc["b"], (int)doc["a"] ? "true": "false");
 
