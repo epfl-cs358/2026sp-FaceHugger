@@ -124,8 +124,6 @@ void handleParsedMessage(uint8_t * payload) {
             break;
         }
         case CMD_TELEMETRY: //this is the robot that sends it
-        
-        case CMD_TELEMETRY:
             Serial.printf("FSM state: %d, Battery voltage: %lf, In stabilization mode: %s\n", 
                 (int)doc["s"], (float)doc["b"], (int)doc["a"] ? "true": "false");
 
