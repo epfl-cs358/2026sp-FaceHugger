@@ -53,7 +53,7 @@ export const useRobotConnection = (ip: string) => {
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [chosenFsmState, fsmState]);
+  }, [chosenFsmState, fsmState, isConnected]);
 
   useEffect(() => {
     if (chosenGaitMode === gaitMode) return;
@@ -63,7 +63,7 @@ export const useRobotConnection = (ip: string) => {
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [chosenGaitMode, gaitMode]);
+  }, [chosenGaitMode, gaitMode, isConnected]);
 
   return { sendCommand };
 };
