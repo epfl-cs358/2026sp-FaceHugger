@@ -7,8 +7,8 @@
 Servo::Servo(Adafruit_PWMServoDriver &pwm, uint8_t pcaChannel, uint16_t servoDefaultAngle)
     : pwm(pwm),
       pcaChannel(pcaChannel),
+      servoAngle(servoDefaultAngle),
       servoDefaultAngle(servoDefaultAngle){
-        setServoAngle(this->servoDefaultAngle);
     }
 
 void Servo::setServoAngle(double angle){

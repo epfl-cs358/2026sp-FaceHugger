@@ -15,9 +15,7 @@ Leg::Leg(Adafruit_PWMServoDriver &pwm,
       hipServo(hipServo),
       thighServo(thighServo),
       kneeServo(kneeServo)
-{
-    returnToDefaultAngles();
-}
+{}
 
 void Leg::setPose(float x, float y, float z) {
     const JointAngles a = legIK((LegId)id, x, y, z);
