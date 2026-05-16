@@ -23,6 +23,9 @@ void initNetwork() {
         Serial.print("SSID: FaceHugger_Net\nIP:   ");
         Serial.println(WiFi.softAPIP());
         Serial.println("======================================\n");
+    }else{
+        Serial.println("\n======================================");
+        Serial.println("Did not succeed to create the access point \n");
     }
 
     webSocket.begin();

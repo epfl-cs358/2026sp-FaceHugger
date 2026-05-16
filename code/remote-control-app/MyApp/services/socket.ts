@@ -4,7 +4,7 @@ export let ws: WebSocket | null = null;
 
 export const connect = (ip: string) => {
   if(ws === null || ws === undefined){
-    ws = new WebSocket(`ws://${ip}:8080`);
+    ws = new WebSocket(`ws://${ip}:81`);
   }
 };
 
