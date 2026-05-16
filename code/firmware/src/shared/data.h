@@ -7,6 +7,7 @@ enum CommandType {
     CMD_STATE = 2,
     CMD_POSE = 3,
     CMD_CALIBRATE = 4,
+    CMD_GAIT_MODE = 5,
     CMD_TELEMETRY = 10
 };
 

@@ -12,7 +12,7 @@ Servo::Servo(Adafruit_PWMServoDriver &pwm, uint8_t pcaChannel, uint16_t servoDef
     }
 
 void Servo::setServoAngle(double angle){
-    uint16_t pulse = map(angle, 0, 270, MIN_PULSE, MAX_PULSE);
+    uint16_t pulse = map(angle, 0, 180, MIN_PULSE, MAX_PULSE);
     pwm.setPWM(this->pcaChannel, 0, pulse);
     this->servoAngle = angle;
 }
