@@ -1,15 +1,12 @@
 import { StyleSheet, View } from "react-native";
 import Joystick, { JoystickAction, JoystickProps } from "../components/joystick/Joystick";
-import { useRobotConnection } from "../hooks/useRobotConnection";
 import { BLMovementPacket, BRMovementPacket, BWMovementPacket, FLMovementPacket, FRMovementPacket, FWMovementPacket, LeftMovementPacket, RightMovementPacket } from "../api/api-messages";
-import { ConnectionStatus } from "../components/connectionStatusComponent/ConnectionStatus";
 import { GaitMode } from "../api/api-types";
 import { DropDownMenu, DropDownMenuElement, DropDownMenuProps } from "../components/dropdown/DropdownMenu";
 import { useRobotStore } from "../store/robotStore";
-import { webSocketIP } from "../config/config";
+import { sendCommand } from "../services/socket";
 
 export default function GaitControl(){
-    const { sendCommand } = useRobotConnection(webSocketIP);
     const setChosenGaitMode = useRobotStore((s) => s.setChosenGaitMode);
 
     const actionRight = {

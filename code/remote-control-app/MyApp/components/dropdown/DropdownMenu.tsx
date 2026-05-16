@@ -21,8 +21,8 @@ export function DropDownMenu({defaultElement, elements}: DropDownMenuProps){
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [selectedElement, setSelectedElement] = useState(defaultElement.elementTitle);
     useEffect(() => {
-        defaultElement.onClick(); //Click the element just in case any side effects need to happen
-    });
+        defaultElement.onClick();
+    }, []);
 
     return (<View style={styles.mainContainer}>
         {dropdownOpen && <View style={styles.actualDropDownContainer}>

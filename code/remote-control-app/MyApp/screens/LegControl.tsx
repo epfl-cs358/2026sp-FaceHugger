@@ -9,16 +9,13 @@ import {
 import { AppTextInput } from "../components/textInput/AppTextInput";
 
 import { Legs, ServoCalibration, Servos } from "../api/api-types";
-import { useRobotConnection } from "../hooks/useRobotConnection";
-import { webSocketIP } from "../config/config";
+import { sendCommand } from "../services/socket";
 
 export default function LegControl() {
 
     const [selectedLeg, setSelectedLeg] = useState(Legs.FRONT_RIGHT_LEG);
     const [selectedServo, setSelectedServo] = useState(Servos.HIP_SERVO);
     const [selectedAngle, setSelectedAngle] = useState(90);
-
-    const { sendCommand } = useRobotConnection(webSocketIP);
 
     const legs: IndividualSelectionProps[] = [
         {
@@ -64,6 +61,7 @@ export default function LegControl() {
     const sendServoAngle = () => {
         sendCommand(
             JSON.stringify({
+                T: 4,
                 id: selectedLeg,
                 servo_id: selectedServo,
                 a: selectedAngle

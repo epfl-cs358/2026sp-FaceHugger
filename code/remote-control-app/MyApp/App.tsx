@@ -11,8 +11,11 @@ import SimpleLineIcons from '@expo/vector-icons/SimpleLineIcons';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import { Actions } from './screens/Actions';
 import { FSMStatus } from './api/api-types';
+import { useRobotConnection } from './hooks/useRobotConnection';
+import { webSocketIP } from './config/config';
 
 export default function App() {
+  useRobotConnection(webSocketIP);
   const remoteControlPage = {
     pageName: 'Remote control',
     pageIcon: <Ionicons name="game-controller-outline" size={40} color="white" />,
