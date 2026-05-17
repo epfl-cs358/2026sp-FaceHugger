@@ -123,7 +123,7 @@ CONSTRUCTION_POINTS = [
     "Link2ToLink3Point",
     # Bracket-side mating point (MotorMount + MotorMountR).
     "LegMountFixedPoint",
-    # Servo seat (each Servo_Mouser_Model occurrence).
+    # Servo seat (each LegBaseServoEnclosure occurrence).
     "ServoMountPoint",
     # Link3 tip defined as a vertex
     "Link3TipPoint",
@@ -181,9 +181,9 @@ JOINTS = [
 # produced and how to place each mesh — they don't hardcode these rules.
 #
 # Per docs/ASSEMBLY_HIERARCHY.md and docs/PIPELINE_SPEC.md: shoulder servo
-# (Servo_Mouser_Model:1) is chassis-fixed (bolted to the bracket); hip
-# servo (Servo_Mouser_Model:2) is rigid with link1 via `Link1RigidGroup`;
-# knee servo (Servo_Mouser_Model:3) is rigid with link3 via
+# (LegBaseServoEnclosure:1) is chassis-fixed (bolted to the bracket); hip
+# servo (LegBaseServoEnclosure:2) is rigid with link1 via `Link1RigidGroup`;
+# knee servo (LegBaseServoEnclosure:3) is rigid with link3 via
 # `Link3RigidGroup`.
 EXPORT_RULES = [
     # Chassis: explicit body list. QuadrupedBody main frame + the two
@@ -807,7 +807,7 @@ def export_stls(design, root, occurrences_json):
                 # Every occurrence whose component contains a body with this
                 # name. Used to populate `source_occurrences` so consumers
                 # know all the places this STL is instanced (e.g. 3
-                # Servo_Mouser_Model:N for one leg). With `component`
+                # LegBaseServoEnclosure:N for one leg). With `component`
                 # specified, restrict to occurrences whose immediate parent
                 # component name matches — needed when two bodies share a
                 # name across components (Link1 in Link1L vs Link1R in
@@ -989,7 +989,7 @@ def _migrate_stale_role_paths(preserved, servo_paths):
     the servo component is renamed in CAD.
 
     When the export rule's servo component is renamed (e.g.
-    `Servo_Mouser_Model` → `LegBaseServoEnclosure`), the preserved role
+    `LegBaseServoEnclosure` → `LegBaseServoEnclosure`), the preserved role
     paths still reference the old name and silently break URDF servo-visual
     placement. If every preserved role path's leaf component differs from
     the new export's leaf component AND shares a single old name, rewrite

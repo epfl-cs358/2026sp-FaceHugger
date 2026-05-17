@@ -47,7 +47,7 @@ leg    Link3        -X
 
 # === EXPORT LOG (auto-managed below — do not edit) ===
 
-# Last export : 2026-05-11 13:44:22 CEST
+# Last export : 2026-05-17 12:09:49 CEST
 # Source doc  : FullBodyAssembly
 # Refinement  : MeshRefinementHigh (binary STL, design units)
 # Exported    : 10 body·ies

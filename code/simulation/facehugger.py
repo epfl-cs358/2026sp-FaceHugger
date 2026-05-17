@@ -136,16 +136,20 @@ def cmd_view(_args):
 
 def cmd_blender(args):
     blender = _resolve_blender_bin(args.blender_version)
+
+    save_path = (
+        Path(args.save)
+        if args.save
+        else (REPO_ROOT / "animation" / "fh_rigged_latest.blend")
+    )
+
     cli = [blender]
+    if not args.reset and save_path.exists():
+        cli.append(str(save_path))
     if args.headless:
         cli.append("--background")
     script = VISUALIZE_RIGGED if args.rigged else VISUALIZE
-    cli += ["--python", str(script)]
-    extra = []
-    if args.save:
-        extra += ["--save", args.save]
-    if extra:
-        cli += ["--", *extra]
+    cli += ["--python", str(script), "--", "--save", str(save_path)]
     return _run(cli)
 
 
@@ -203,6 +207,11 @@ def main():
         "(animation rig). Default is placement-only via "
         "visualize_urdf.py — useful for cross-checking the URDF rest "
         "pose against PyBullet but not animateable.",
+    )
+    pb.add_argument(
+        "--reset",
+        action="store_true",
+        help="start from a blank scene, discarding any existing animations",
     )
     pb.set_defaults(func=cmd_blender)
 

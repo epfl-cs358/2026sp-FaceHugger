@@ -742,25 +742,25 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # is the world position where ServoMountPoint should land.
     #
     # Source-CAD shoulder-servo positions: each bracket has a nested
-    # `Servo_Mouser_Model:1` with its own ServoMountPoint. Its world
+    # `LegBaseServoEnclosure:1` with its own ServoMountPoint. Its world
     # position is the place where that bracket's shoulder servo sits in
     # the source-FL placement (L bracket) or the mirror (R bracket).
     shoulder_servo_L_world = find_point_world_at_occurrence(
         occs,
-        f"{LEG_ASSEMBLY}/MotorMount:1/Servo_Mouser_Model:1",
+        f"{LEG_ASSEMBLY}/MotorMount:1/LegBaseServoEnclosure:1",
         "ServoMountPoint",
     )
     shoulder_servo_R_world = find_point_world_at_occurrence(
         occs,
-        f"{LEG_ASSEMBLY}/MotorMountR:1/Servo_Mouser_Model(Mirror):1",
+        f"{LEG_ASSEMBLY}/MotorMountR:1/LegBaseServoEnclosure(Mirror):1",
         "ServoMountPoint",
     )
     # Top-level hip / knee servos: shared (no L/R variants in CAD).
     hip_servo_world = find_point_world_at_occurrence(
-        occs, f"{LEG_ASSEMBLY}/Servo_Mouser_Model:2", "ServoMountPoint"
+        occs, f"{LEG_ASSEMBLY}/LegBaseServoEnclosure:2", "ServoMountPoint"
     )
     knee_servo_world = find_point_world_at_occurrence(
-        occs, f"{LEG_ASSEMBLY}/Servo_Mouser_Model:3", "ServoMountPoint"
+        occs, f"{LEG_ASSEMBLY}/LegBaseServoEnclosure:3", "ServoMountPoint"
     )
 
     shoulder_servo_L_offset = (
@@ -777,9 +777,9 @@ def generate(export: dict, cfg: dict, out_path: Path):
     )
 
     # Per-role servo orientations. The shared `servo.stl` was exported
-    # via combined-rule from `Servo_Mouser_Model:1` (the shoulder
+    # via combined-rule from `LegBaseServoEnclosure:1` (the shoulder
     # servo), which bakes vertices in WORLD frame using
-    # `Servo_Mouser_Model:1`'s `world_transform_rm_cm`. So mesh-local
+    # `LegBaseServoEnclosure:1`'s `world_transform_rm_cm`. So mesh-local
     # axes equal world axes for the SHOULDER placement — shaft along
     # `+Z`. The hip and knee servos in CAD have different world
     # rotations (shaft along `+Y`), so reusing the same mesh on link1
@@ -791,9 +791,9 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # Computed from JSON, this gives:
     #     M_hip  = Rx(-π/2)            →  rpy = (-π/2, 0, 0)
     #     M_knee = Rz(-π/2)·Ry(-π/2)   →  rpy = (0, -π/2, -π/2)
-    R_servo1 = _find_occ_rot(occs, "Servo_Mouser_Model:1")  # shoulder
-    R_servo2 = _find_occ_rot(occs, "Servo_Mouser_Model:2")  # hip
-    R_servo3 = _find_occ_rot(occs, "Servo_Mouser_Model:3")  # knee
+    R_servo1 = _find_occ_rot(occs, "LegBaseServoEnclosure:1")  # shoulder
+    R_servo2 = _find_occ_rot(occs, "LegBaseServoEnclosure:2")  # hip
+    R_servo3 = _find_occ_rot(occs, "LegBaseServoEnclosure:3")  # knee
 
     def _relative_rpy(R_target):
         if R_target is None or R_servo1 is None:

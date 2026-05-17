@@ -1415,24 +1415,23 @@ def main():
     # & Load, or `blender --enable-autoexec`); otherwise Blender blocks it
     # with a security banner and the panel won't appear.
     #
-    # addon_path is absolute to the machine that ran this script. A
-    # teammate on a different checkout must either edit the path inside
-    # the `fh_startup.py` text block, or install fh_clip_panel.py via
-    # Edit > Preferences > Add-ons instead.
+    # The embedded text resolves fh_clip_panel.py *at load time* relative
+    # to the opened .blend (blend_dir/scripts), so it works on any machine
+    # or checkout with no absolute path baked in — fh_rigged_latest.blend
+    # lives in animation/ and the panel in animation/scripts/.
     # ------------------------------------------------------------------
-    addon_path = str(Path(__file__).resolve().parent)
-    if addon_path not in sys.path:
-        sys.path.insert(0, addon_path)
-
     text_name = "fh_startup.py"
     if text_name in bpy.data.texts:
         bpy.data.texts.remove(bpy.data.texts[text_name])
     startup_text = bpy.data.texts.new(text_name)
     startup_text.write(
-        f"import sys\n"
-        f"sys.path.insert(0, {repr(addon_path)})\n"
-        f"import fh_clip_panel\n"
-        f"fh_clip_panel.register()\n"
+        "import os, sys, bpy\n"
+        "blend_dir = os.path.dirname(bpy.data.filepath)\n"
+        'addon_path = os.path.join(blend_dir, "scripts")\n'
+        "if addon_path not in sys.path:\n"
+        "    sys.path.insert(0, addon_path)\n"
+        "import fh_clip_panel\n"
+        "fh_clip_panel.register()\n"
     )
     startup_text.use_module = True  # "Register" checkbox → runs on file load
     print(
