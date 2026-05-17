@@ -1406,6 +1406,40 @@ def main():
         f"(invariant should survive IK addition)"
     )
 
+    # ------------------------------------------------------------------
+    # Startup text block: auto-register the FH Clips panel on file open.
+    #
+    # `use_module = True` is the Text Editor "Register" checkbox — Blender
+    # runs the text as a module when the .blend loads. NOTE: this only
+    # fires if "Auto Run Python Scripts" is trusted/enabled (Prefs > Save
+    # & Load, or `blender --enable-autoexec`); otherwise Blender blocks it
+    # with a security banner and the panel won't appear.
+    #
+    # addon_path is absolute to the machine that ran this script. A
+    # teammate on a different checkout must either edit the path inside
+    # the `fh_startup.py` text block, or install fh_clip_panel.py via
+    # Edit > Preferences > Add-ons instead.
+    # ------------------------------------------------------------------
+    addon_path = str(Path(__file__).resolve().parent)
+    if addon_path not in sys.path:
+        sys.path.insert(0, addon_path)
+
+    text_name = "fh_startup.py"
+    if text_name in bpy.data.texts:
+        bpy.data.texts.remove(bpy.data.texts[text_name])
+    startup_text = bpy.data.texts.new(text_name)
+    startup_text.write(
+        f"import sys\n"
+        f"sys.path.insert(0, {repr(addon_path)})\n"
+        f"import fh_clip_panel\n"
+        f"fh_clip_panel.register()\n"
+    )
+    startup_text.use_module = True  # "Register" checkbox → runs on file load
+    print(
+        f"[urdf_to_blender_rigged] startup text: {text_name} "
+        f"(auto-registers FH Clips panel on open)"
+    )
+
     if args.save:
         args.save.parent.mkdir(parents=True, exist_ok=True)
         bpy.ops.wm.save_as_mainfile(filepath=str(args.save))
