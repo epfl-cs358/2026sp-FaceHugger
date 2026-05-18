@@ -70,15 +70,15 @@ void SpinalCord::processCommand(String dir) {
     lastCommandMs = millis();
     isMovingRequested = (dir != "STOP");
 
-    if      (dir == "FW")   { targetX = 0.0f; targetY =  1.0f; targetYaw =  0.0f; }
-    else if (dir == "BW")   { targetX = 0.0f; targetY = -1.0f; targetYaw =  0.0f; }
-    else if (dir == "L")    { targetX = 0.0f; targetY =  0.0f; targetYaw = -1.0f; }
-    else if (dir == "R")    { targetX = 0.0f; targetY =  0.0f; targetYaw =  1.0f; }
-    else if (dir == "FW_R") { targetX = 0.0f; targetY =  0.0f; targetYaw =  1.0f; }
-    else if (dir == "FW_L") { targetX = 0.0f; targetY =  0.0f; targetYaw = -1.0f; }
-    else if (dir == "BW_R") { targetX = 0.0f; targetY =  0.0f; targetYaw =  1.0f; }
-    else if (dir == "BW_L") { targetX = 0.0f; targetY =  0.0f; targetYaw = -1.0f; }
-    else if (dir == "STOP") { targetX = 0.0f; targetY =  0.0f; targetYaw =  0.0f; }
+    if      (dir == "FW")   { targetX =  0.0f; targetY =  1.0f; targetYaw =  0.0f; }
+    else if (dir == "BW")   { targetX =  0.0f; targetY = -1.0f; targetYaw =  0.0f; }
+    else if (dir == "L")    { targetX = -1.0f; targetY =  0.0f; targetYaw =  0.0f; }
+    else if (dir == "R")    { targetX =  1.0f; targetY =  0.0f; targetYaw =  0.0f; }
+    else if (dir == "FW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; }
+    else if (dir == "FW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; }
+    else if (dir == "BW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; }
+    else if (dir == "BW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; }
+    else if (dir == "STOP") { targetX =  0.0f; targetY =  0.0f; targetYaw =  0.0f; }
 }
 
 void SpinalCord::walk()     { robotState = STATE_WALK; }
@@ -181,13 +181,14 @@ void SpinalCord::tickGait() {
         float kn = NEUTRAL[i].kn;
 
         // Shoulder sweep — forward/back (Y) + yaw rotation.
+        // Crab suppresses forward (Y) but still allows yaw.
         // Front legs add the combined signal, rear legs subtract it.
         // Right side (FR, RR) adds yaw contribution; left side (FL, RL) subtracts it.
-        // This makes opposite shoulders sweep in opposite directions → body yaws.
-        if (!isCrab) {
-            const float fwdDir = (i == LEG_FR || i == LEG_FL) ? 1.0f : -1.0f;
-            const float yawDir = (i == LEG_FR || i == LEG_RR) ? 1.0f : -1.0f;
-            sh += fwdDir * sweep * (activeY + yawDir * activeYaw);
+        {
+            const float fwdDir     = (i == LEG_FR || i == LEG_FL) ? 1.0f : -1.0f;
+            const float yawDir     = (i == LEG_FR || i == LEG_RR) ? 1.0f : -1.0f;
+            const float fwdContrib = isCrab ? 0.0f : activeY;
+            sh += fwdDir * sweep * (fwdContrib + yawDir * activeYaw);
         }
 
         // Thigh sweep — lateral (X).
@@ -243,6 +244,7 @@ void SpinalCord::tickTrot() {
     constexpr float DUTY        = 0.50f;
     constexpr float PERIOD_S    = 1.5f;
     constexpr float SCALE       = 2.0f / 3.0f;
+    constexpr float YAW_GAIN    = 2.0f;
 
     // Phase offsets per leg index [FR, FL, RR, RL] — JS uses fr/bl=0.5, fl/br=0.0.
     static const float OFFSETS[LEG_COUNT] = { 0.5f, 0.0f, 0.0f, 0.5f };
@@ -295,7 +297,7 @@ void SpinalCord::tickTrot() {
             // RR (right side) adds yaw, RL (left side) subtracts it — negative effMag
             // naturally reverses the sweep direction, producing opposite motion on each side.
             const float yawSign = (i == LEG_RR) ? 1.0f : -1.0f;
-            const float effMag  = fmaxf(-1.0f, fminf(mag + yawSign * activeYaw, 1.0f));
+            const float effMag  = fmaxf(-1.0f, fminf(mag + yawSign * activeYaw * YAW_GAIN, 1.0f));
             float sweep, progress;
             if (legPhase < DUTY) {
                 progress = legPhase / DUTY;
