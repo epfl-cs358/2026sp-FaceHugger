@@ -400,6 +400,55 @@ def _exported_gaits_dir(clip_name):
 
 
 # ---------------------------------------------------------------------------
+# N-pose forward kinematics (hardware neutral standing pose)
+# ---------------------------------------------------------------------------
+
+# Simplified planar leg model used only to place the IK foot targets at the
+# hardware-neutral stance; the rig's IK then solves the real geometry.
+# Link lengths (mm) and shoulder-mount world positions are fixed rig
+# geometry (from the URDF) — NOT the per-robot N/SCALE/CHANNELS, which
+# stay in convention.json.
+_FK_L1 = 80.0  # shoulder -> hip
+_FK_L2 = 75.0  # hip -> knee
+_FK_L3 = 77.0  # knee -> foot tip
+_FK_MOUNT_MM = {
+    "fl": (-50.4, 43.2, 36.8),
+    "fr": (50.4, 43.2, 36.8),
+    "bl": (-50.4, -43.2, 36.8),
+    "br": (50.4, -43.2, 36.8),
+}
+# Shoulder rest yaw baked into the URDF joint origin (Convention A).
+_FK_YAW_OFFSET_DEG = {"fl": -45.0, "fr": 45.0, "bl": -135.0, "br": 135.0}
+
+
+def _n_pose_foot_targets(neutral_joint_deg):
+    """{leg: (x, y, z) mm} foot-tip world position at the hardware-neutral
+    pose, via the planar FK in the spec. `neutral_joint_deg[leg]` is
+    [shoulder, hip, knee] in degrees (from convention.json).
+
+    The spec gives hip_y / foot_x / foot_z explicitly; foot_y mirrors
+    foot_x with sin (same way hip_y mirrors hip_x) — a 3-D foot position
+    needs the in-plane component on both world axes."""
+    out = {}
+    for leg, (mx, my, mz) in _FK_MOUNT_MM.items():
+        shoulder, hip, knee = neutral_joint_deg[leg]
+        yaw = math.radians(_FK_YAW_OFFSET_DEG[leg] + shoulder)
+        hip_r = math.radians(hip)
+        knee_r = math.radians(knee)
+        hip_x = mx + _FK_L1 * math.cos(yaw)
+        hip_y = my + _FK_L1 * math.sin(yaw)
+        hip_z = mz
+        reach = _FK_L2 * math.cos(hip_r) + _FK_L3 * math.cos(hip_r + knee_r)
+        drop = _FK_L2 * math.sin(hip_r) + _FK_L3 * math.sin(hip_r + knee_r)
+        out[leg] = (
+            hip_x + math.cos(yaw) * reach,
+            hip_y + math.sin(yaw) * reach,
+            hip_z - drop,
+        )
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Operators — clip management
 # ---------------------------------------------------------------------------
 
@@ -581,6 +630,52 @@ class FH_OT_new_clip(bpy.types.Operator):
             )
         context.scene.fh_new_clip_name = ""
         _redraw_view3d(context)
+        return {"FINISHED"}
+
+
+class FH_OT_set_n_pose(bpy.types.Operator):
+    """Move the foot targets to the hardware-neutral (N) standing pose so
+    the IK solves to the robot's real starting position. Click before
+    authoring a clip so frame 1 matches hardware. N comes from
+    convention.json."""
+
+    bl_idname = "fh.set_n_pose"
+    bl_label = "Set N Pose"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        try:
+            convention = _load_convention()
+        except ValueError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+
+        targets = _n_pose_foot_targets(convention["neutral_joint_deg"])
+        moved = []
+        missing = []
+        for leg, (fx, fy, fz) in targets.items():
+            obj = bpy.data.objects.get(f"foot_target_{leg}")
+            if obj is None:
+                missing.append(f"foot_target_{leg}")
+                continue
+            # Set the WORLD position robustly whether or not the target is
+            # parented (rig parents it to world_origin): edit a copy of
+            # matrix_world and assign it back so Blender re-derives the
+            # local transform through the parent inverse.
+            mw = obj.matrix_world.copy()
+            mw.translation = (fx, fy, fz)
+            obj.matrix_world = mw
+            moved.append(leg)
+
+        context.view_layer.update()  # let the IK solve to the new targets
+        _redraw_view3d(context)
+        if missing:
+            self.report(
+                {"WARNING"},
+                f"Set N pose for {len(moved)}/4 legs — missing: {', '.join(missing)}",
+            )
+        else:
+            self.report({"INFO"}, "Rig set to N pose (hardware neutral)")
         return {"FINISHED"}
 
 
@@ -894,6 +989,7 @@ class FH_PT_clip_panel(bpy.types.Panel):
         # New Clip works with zero existing clips (always enabled);
         # Duplicate/Rename act on the active clip.
         layout.operator(FH_OT_new_clip.bl_idname, icon="ADD")
+        layout.operator(FH_OT_set_n_pose.bl_idname, icon="ARMATURE_DATA")
         row = layout.row(align=True)
         row.enabled = bool(active)
         row.operator(FH_OT_duplicate_clip.bl_idname, icon="DUPLICATE")
@@ -931,6 +1027,7 @@ class FH_PT_clip_panel(bpy.types.Panel):
 CLASSES = (
     FH_OT_apply_clip,
     FH_OT_new_clip,
+    FH_OT_set_n_pose,
     FH_OT_duplicate_clip,
     FH_OT_rename_clip,
     FH_OT_export_clip,
