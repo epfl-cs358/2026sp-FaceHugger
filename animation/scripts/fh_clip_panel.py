@@ -534,6 +534,104 @@ class FH_OT_duplicate_clip(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class FH_OT_save_as_clip(bpy.types.Operator):
+    """Snapshot the animation CURRENTLY bound to the 5 control objects
+    into a new clip and switch to it.
+
+    Reads each object's live `animation_data.action` (whatever its name)
+    and copies it to `<new_name>__<target>`, so it works even when no
+    clip name resolves (e.g. you started keyframing on a fresh rig, or
+    the bound action names drifted from the convention). The source
+    actions are left bound to nothing afterwards (the new copies are
+    applied); they are not deleted.
+
+    NOTE: editing while a clip is active mutates THAT clip's actions in
+    place — so if you animated on top of `base_anim`, this saves your
+    work to the new clip but `base_anim` already changed too. To branch
+    cleanly, Save/Duplicate BEFORE animating."""
+
+    bl_idname = "fh.save_as_clip"
+    bl_label = "Save Current → New Clip"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        new_name = context.scene.fh_new_clip_name.strip()
+        if not new_name:
+            self.report({"ERROR"}, "Enter a new clip name first")
+            return {"CANCELLED"}
+        if any(bpy.data.actions.get(f"{new_name}__{t}") for t in CLIP_TARGETS):
+            self.report({"ERROR"}, f"Clip '{new_name}' already exists")
+            return {"CANCELLED"}
+
+        # The clip that was active *before* we re-bind. Editing while a
+        # clip is active mutates ITS actions in place, so this source
+        # clip now also carries the edits — we cannot revert it (no
+        # pre-edit snapshot exists), so warn precisely instead.
+        src = active_clip()
+
+        copied = 0
+        no_anim = []
+        for target in CLIP_TARGETS:
+            obj = bpy.data.objects.get(target)
+            if obj is None:
+                no_anim.append(f"object:{target}")
+                continue
+            ad = obj.animation_data
+            src_action = ad.action if ad is not None else None
+            if src_action is None:
+                no_anim.append(f"no-action:{target}")
+                continue
+            dup = src_action.copy()
+            dup.name = f"{new_name}__{target}"
+            copied += 1
+
+        if copied == 0:
+            self.report(
+                {"ERROR"},
+                "Nothing to save — no actions are bound to the control "
+                f"objects ({', '.join(no_anim)})",
+            )
+            return {"CANCELLED"}
+
+        assigned, missing = assign_clip(new_name)
+
+        # If we snapshotted edits made on top of an existing clip, that
+        # clip was mutated in place. We can't revert it, so tell the
+        # animator exactly how to restore it.
+        dirtied = src if (src and src != new_name) else None
+        if dirtied:
+            print(
+                f"[fh_clip_panel] NOTE: '{dirtied}' was edited in place and "
+                f"now also contains these changes. To restore it: Apply "
+                f"'{dirtied}', go to frame 1, click Set N Pose, then re-key "
+                f"frame 1 (or re-import the rig). Tip: Save/Duplicate BEFORE "
+                f"animating to branch cleanly."
+            )
+
+        if no_anim or missing:
+            self.report(
+                {"WARNING"},
+                f"Saved {copied}/{len(CLIP_TARGETS)} to '{new_name}' "
+                f"(applied {assigned}/{len(CLIP_TARGETS)}, "
+                f"skipped {', '.join(no_anim) or 'none'})",
+            )
+        elif dirtied:
+            self.report(
+                {"WARNING"},
+                f"Saved → '{new_name}'. NOTE: '{dirtied}' was edited in "
+                f"place & now holds these changes too — re-key its frame 1 "
+                f"to N to restore (see console for steps).",
+            )
+        else:
+            self.report(
+                {"INFO"},
+                f"Saved current animation → clip '{new_name}' and applied",
+            )
+        context.scene.fh_new_clip_name = ""
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
 class FH_OT_rename_clip(bpy.types.Operator):
     """Rename all 5 Actions of the active clip in one step."""
 
@@ -1020,9 +1118,10 @@ class FH_PT_clip_panel(bpy.types.Panel):
         layout.separator()
         layout.label(text="New clip name:")
         layout.prop(context.scene, "fh_new_clip_name", text="")
-        # New Clip works with zero existing clips (always enabled);
-        # Duplicate/Rename act on the active clip.
+        # New Clip / Save Current work with zero existing clips (always
+        # enabled); Duplicate/Rename act on the active clip.
         layout.operator(FH_OT_new_clip.bl_idname, icon="ADD")
+        layout.operator(FH_OT_save_as_clip.bl_idname, icon="FILE_TICK")
         layout.operator(FH_OT_set_n_pose.bl_idname, icon="ARMATURE_DATA")
         row = layout.row(align=True)
         row.enabled = bool(active)
@@ -1061,6 +1160,7 @@ class FH_PT_clip_panel(bpy.types.Panel):
 CLASSES = (
     FH_OT_apply_clip,
     FH_OT_new_clip,
+    FH_OT_save_as_clip,
     FH_OT_set_n_pose,
     FH_OT_duplicate_clip,
     FH_OT_rename_clip,
