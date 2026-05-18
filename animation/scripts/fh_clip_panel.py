@@ -350,6 +350,77 @@ def assign_clip(clip):
     return assigned, missing
 
 
+def _autocomplete_clip(clip, context):
+    """Ensure `clip` defines all 5 target Actions before it is applied.
+
+    A clip that omits a target (e.g. legacy `base_anim`, which only has
+    body_ctrl + foot_target_fl) is NOT switch-safe: Apply leaves that
+    target bound to whatever the *previous* clip put there, so you get a
+    mixed pose. Here we create the missing `<clip>__<target>` Actions and
+    key them once at the NEUTRAL pose, so the target holds neutral across
+    the clip instead of inheriting the previous clip. This permanently
+    repairs the clip the first time it is applied.
+
+    Neutral = the N-pose foot positions (via _n_pose_foot_targets) for
+    foot targets; identity/home for body_ctrl. Returns the list of
+    targets that were auto-created."""
+    fixable = [
+        t
+        for t in CLIP_TARGETS
+        if bpy.data.objects.get(t) is not None and clip_action(clip, t) is None
+    ]
+    if not fixable:
+        return []
+
+    # N-pose foot positions (only needed/cost if a foot target is missing)
+    npos = None
+    if any(t.startswith("foot_target_") for t in fixable):
+        try:
+            arm = _find_arm_obj()
+            if arm is not None:
+                npos = _n_pose_foot_targets(
+                    arm, _load_convention()["neutral_joint_deg"]
+                )
+        except (ValueError, KeyError) as e:
+            print(
+                f"[fh_clip_panel] auto-complete: no N pose ({e}); "
+                "keying missing targets at their current transform"
+            )
+
+    body_act = clip_action(clip, "body_ctrl")
+    frame = int(body_act.frame_range[0]) if body_act else context.scene.frame_start
+
+    repaired = []
+    for target in fixable:
+        obj = bpy.data.objects[target]
+        action = bpy.data.actions.new(f"{clip}__{target}")
+        action.slots.new(id_type="OBJECT", name=target)
+        adt = obj.animation_data_create()
+        adt.action = action
+        slot = action.slots.get(f"OB{target}")
+        if slot is None and adt.action_suitable_slots:
+            slot = adt.action_suitable_slots[0]
+        if slot is not None:
+            adt.action_slot = slot
+
+        if target == "body_ctrl":
+            obj.location = (0.0, 0.0, 0.0)
+            obj.rotation_euler = (0.0, 0.0, 0.0)
+            obj.keyframe_insert("location", frame=frame)
+            obj.keyframe_insert("rotation_euler", frame=frame)
+        else:
+            leg = target.removeprefix("foot_target_")
+            if npos is not None and leg in npos:
+                mw = obj.matrix_world.copy()
+                mw.translation = npos[leg]
+                obj.matrix_world = mw
+            obj.keyframe_insert("location", frame=frame)
+        repaired.append(target)
+
+    context.view_layer.update()
+    return repaired
+
+
 def _redraw_view3d(context):
     for area in context.screen.areas:
         if area.type == "VIEW_3D":
@@ -477,11 +548,23 @@ class FH_OT_apply_clip(bpy.types.Operator):
         if not self.clip_name:
             self.report({"ERROR"}, "No clip name supplied")
             return {"CANCELLED"}
+        # Make the clip switch-safe: fill any target it doesn't define
+        # with a neutral-pose Action so it can't inherit the previous
+        # clip's motion on those targets.
+        repaired = _autocomplete_clip(self.clip_name, context)
         assigned, missing = assign_clip(self.clip_name)
         if missing:
             self.report(
                 {"WARNING"},
-                f"Applied {assigned}/{len(CLIP_TARGETS)} — missing: {', '.join(missing)}",
+                f"Applied {assigned}/{len(CLIP_TARGETS)} — missing: "
+                f"{', '.join(missing)}",
+            )
+        elif repaired:
+            self.report(
+                {"INFO"},
+                f"Applied clip '{self.clip_name}' — auto-completed "
+                f"{len(repaired)} missing target(s) at neutral: "
+                f"{', '.join(repaired)}",
             )
         else:
             self.report({"INFO"}, f"Applied clip '{self.clip_name}'")
