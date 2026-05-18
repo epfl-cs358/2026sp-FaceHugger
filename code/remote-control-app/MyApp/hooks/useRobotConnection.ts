@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { connect, sendCommand, onMessage } from '../services/socket';
 import { useRobotStore } from '../store/robotStore';
 import { FSMStateModification, FSMStatus, GaitIntegration, GaitMode, SystemStatus } from '../api/api-types';
@@ -19,6 +19,11 @@ export const useRobotConnection = (ip: string) => {
   const chosenGaitMode = useRobotStore((s) => s.chosenGaitMode);
 
   const isConnected = useSocketStatus();
+  const prevIsConnectedRef = useRef(false);
+  const chosenFsmStateRef = useRef(chosenFsmState);
+  const chosenGaitModeRef = useRef(chosenGaitMode);
+  useEffect(() => { chosenFsmStateRef.current = chosenFsmState; }, [chosenFsmState]);
+  useEffect(() => { chosenGaitModeRef.current = chosenGaitMode; }, [chosenGaitMode]);
 
 
   useEffect(() => {
@@ -44,6 +49,15 @@ export const useRobotConnection = (ip: string) => {
 
     return () => { /* cleanup / disconnect */ };
   }, [ip]);
+
+  // On reconnect, immediately push all chosen state to the robot
+  useEffect(() => {
+    if (isConnected && !prevIsConnectedRef.current) {
+      sendCommand(JSON.stringify({ T: 2, s: chosenFsmStateRef.current } as FSMStateModification));
+      sendCommand(JSON.stringify({ T: 5, g: chosenGaitModeRef.current } as GaitIntegration));
+    }
+    prevIsConnectedRef.current = isConnected;
+  }, [isConnected]);
 
   useEffect(() => {
     if (chosenFsmState === fsmState) return;

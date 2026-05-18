@@ -19,16 +19,16 @@ const styles = StyleSheet.create({
         width: '100%',
         height:'100%',
         justifyContent: 'center',
-        alignItems: 'center'
+        alignItems: 'center',
+        paddingHorizontal: 16,
     },
     connectionInfo: {
         justifyContent: 'center',
         alignItems:'center',
         display: 'flex',
-        width: 200,
-        height: 50,
-        margin: 5,
-        padding: 5,
+        paddingHorizontal: 24,
+        paddingVertical: 10,
+        margin: 8,
         borderRadius: 10
     },
     connectionInfoText: {
