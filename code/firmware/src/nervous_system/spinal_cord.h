@@ -14,6 +14,7 @@ class SpinalCord{
         void begin();
         void walk();
         void rest();
+        void relax();
         void wallFlip();
         void update();
         void applyCalibration(int channel, int angle);
@@ -40,7 +41,6 @@ class SpinalCord{
         uint32_t lastCommandMs;
 
         void tickGait();
-        float applyIMUCorrection(float rawZ, uint8_t legIdx); // To be implemented later
 };
 
 #endif

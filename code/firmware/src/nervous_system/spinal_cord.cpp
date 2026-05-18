@@ -8,46 +8,47 @@
 #include "movements.h"
 #include "../shared/config.h"
 
-// Ratios for the 4-phase swing (must sum to 1.0)
-static const float SWING_RATIO_LIFT  = 0.20f; 
-static const float SWING_RATIO_MOVE  = 0.60f; 
-static const float SWING_RATIO_LOWER = 0.20f; 
-
-static const GaitParams GAITS[] = {
-    { 0.0f,  0.000f, 0.000f, 0.0f,  { 0.00f, 0.00f, 0.00f, 0.00f }, 'y',
-      "None" },
-    { 1.20f, 0.050f, 0.025f, 0.25f, { 0.50f, 0.00f, 0.25f, 0.75f }, 'y',
-      "Static walk (FL -> RR -> FR -> RL)" },
-    { 0.50f, 0.065f, 0.025f, 0.50f, { 0.50f, 0.00f, 0.00f, 0.50f }, 'y',
-      "Trot (diagonal pairs: FL+RR | FR+RL)" },
-    { 0.55f, 0.070f, 0.028f, 0.55f, { 0.50f, 0.00f, 0.00f, 0.50f }, 'x',
-      "Crab walk (sideways, 45 deg splay)" },
+// Math-space neutral poses (shoulder, thigh, knee in degrees), indexed by LegId.
+// These are the JS N[] values that have been physically tested on hardware.
+static const struct { float sh, th, kn; } NEUTRAL[LEG_COUNT] = {
+    {  45.0f, -60.0f, -37.0f },  // LEG_FR (0)
+    {  75.0f, -60.0f, -40.0f },  // LEG_FL (1)
+    { -45.0f, -50.0f, -50.0f },  // LEG_RR / BR (2)
+    {-135.0f, -60.0f, -35.0f },  // LEG_RL / BL (3)
 };
 
-//Robot starts in idle state
+// Gait parameters (step values are in degrees, pre-scaled to 2/3 of raw JS values).
+// Offsets order: [LEG_FR, LEG_FL, LEG_RR, LEG_RL]
+static const GaitParams GAITS[] = {
+    { 0.0f, 0.0f,  0.0f,  0.0f,  { 0.0f,  0.0f,  0.0f,  0.0f  }, "None"        },
+    { 2.0f, 26.7f, 26.7f, 0.75f, { 0.5f,  0.0f,  0.25f, 0.75f }, "Static Walk" },
+    { 1.5f, 26.7f, 33.3f, 0.50f, { 0.5f,  0.0f,  0.0f,  0.5f  }, "Trot"        },
+    { 1.5f, 20.0f, 33.3f, 0.50f, { 0.5f,  0.0f,  0.0f,  0.5f  }, "Crab"        },
+};
+
 SpinalCord::SpinalCord(uint8_t pwm):
     robotState(STATE_IDLE),
     driver(Adafruit_PWMServoDriver(ADDR_SERVO_DRIVER)),
     leg1(Leg(driver, 0,
-        Servo(driver, FRONT_RIGHT_LEG_HIP_PCA_CHANNEL, FRONT_RIGHT_LEG_HIP_DEFAULT_ANGLE),
-        Servo(driver, FRONT_RIGHT_LEG_THIGH_PCA_CHANNEL, FRONT_RIGHT_LEG_THIGH_DEFAULT_ANGLE),
-        Servo(driver, FRONT_RIGHT_LEG_KNEE_PCA_CHANNEL, FRONT_RIGHT_LEG_KNEE_DEFAULT_ANGLE)
+        Servo(driver, FRONT_RIGHT_LEG_HIP_PCA_CHANNEL,    FRONT_RIGHT_LEG_HIP_DEFAULT_ANGLE),
+        Servo(driver, FRONT_RIGHT_LEG_THIGH_PCA_CHANNEL,  FRONT_RIGHT_LEG_THIGH_DEFAULT_ANGLE),
+        Servo(driver, FRONT_RIGHT_LEG_KNEE_PCA_CHANNEL,   FRONT_RIGHT_LEG_KNEE_DEFAULT_ANGLE)
     )),
     leg2(Leg(driver, 1,
-        Servo(driver, FRONT_LEFT_LEG_HIP_PCA_CHANNEL, FRONT_LEFT_LEG_HIP_DEFAULT_ANGLE),
-        Servo(driver, FRONT_LEFT_LEG_THIGH_PCA_CHANNEL, FRONT_LEFT_LEG_THIGH_DEFAULT_ANGLE),
-        Servo(driver, FRONT_LEFT_LEG_KNEE_PCA_CHANNEL, FRONT_LEFT_LEG_KNEE_DEFAULT_ANGLE)
-        )),
+        Servo(driver, FRONT_LEFT_LEG_HIP_PCA_CHANNEL,     FRONT_LEFT_LEG_HIP_DEFAULT_ANGLE),
+        Servo(driver, FRONT_LEFT_LEG_THIGH_PCA_CHANNEL,   FRONT_LEFT_LEG_THIGH_DEFAULT_ANGLE),
+        Servo(driver, FRONT_LEFT_LEG_KNEE_PCA_CHANNEL,    FRONT_LEFT_LEG_KNEE_DEFAULT_ANGLE)
+    )),
     leg3(Leg(driver, 2,
-        Servo(driver, BOTTOM_RIGHT_LEG_HIP_PCA_CHANNEL, BOTTOM_RIGHT_LEG_HIP_DEFAULT_ANGLE),
+        Servo(driver, BOTTOM_RIGHT_LEG_HIP_PCA_CHANNEL,   BOTTOM_RIGHT_LEG_HIP_DEFAULT_ANGLE),
         Servo(driver, BOTTOM_RIGHT_LEG_THIGH_PCA_CHANNEL, BOTTOM_RIGHT_LEG_THIGH_DEFAULT_ANGLE),
-        Servo(driver, BOTTOM_RIGHT_LEG_KNEE_PCA_CHANNEL, BOTTOM_RIGHT_LEG_KNEE_DEFAULT_ANGLE)
-        )),
+        Servo(driver, BOTTOM_RIGHT_LEG_KNEE_PCA_CHANNEL,  BOTTOM_RIGHT_LEG_KNEE_DEFAULT_ANGLE)
+    )),
     leg4(Leg(driver, 3,
-        Servo(driver, BOTTOM_LEFT_LEG_HIP_PCA_CHANNEL, BOTTOM_LEFT_LEG_HIP_DEFAULT_ANGLE),
-        Servo(driver, BOTTOM_LEFT_LEG_THIGH_PCA_CHANNEL, BOTTOM_LEFT_LEG_THIGH_DEFAULT_ANGLE),
-        Servo(driver, BOTTOM_LEFT_LEG_KNEE_PCA_CHANNEL, BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE)
-        )),
+        Servo(driver, BOTTOM_LEFT_LEG_HIP_PCA_CHANNEL,    BOTTOM_LEFT_LEG_HIP_DEFAULT_ANGLE),
+        Servo(driver, BOTTOM_LEFT_LEG_THIGH_PCA_CHANNEL,  BOTTOM_LEFT_LEG_THIGH_DEFAULT_ANGLE),
+        Servo(driver, BOTTOM_LEFT_LEG_KNEE_PCA_CHANNEL,   BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE)
+    )),
     currentGait_(GAIT_NONE),
     gaitPhaseStartMs_(0),
     targetX(0.0f), targetY(0.0f), activeX(0.0f), activeY(0.0f),
@@ -57,9 +58,7 @@ SpinalCord::SpinalCord(uint8_t pwm):
 
 void SpinalCord::begin() {
     driver.begin();
-    driver.setPWMFreq(60); // Standard for servos
-    
-    // Now that the driver is alive, set the initial pose
+    driver.setPWMFreq(60);
     leg1.returnToDefaultAngles();
     leg2.returnToDefaultAngles();
     leg3.returnToDefaultAngles();
@@ -68,22 +67,30 @@ void SpinalCord::begin() {
 
 void SpinalCord::processCommand(String dir) {
     lastCommandMs = millis();
+    isMovingRequested = (dir != "STOP");
 
-    // Map discrete labels to Vectors
-    if (dir == "FW")         { targetX = 0.0f;  targetY = 1.0f;  }
-    else if (dir == "BW")    { targetX = 0.0f;  targetY = -1.0f; }
-    else if (dir == "L")     { targetX = -1.0f; targetY = 0.0f;  }
-    else if (dir == "R")     { targetX = 1.0f;  targetY = 0.0f;  }
-    else if (dir == "FW_R")  { targetX = 0.7f;  targetY = 0.7f;  }
-    else if (dir == "FW_L")  { targetX = -0.7f; targetY = 0.7f;  }
-    else if (dir == "BW_R")  { targetX = 0.7f;  targetY = -0.7f; }
-    else if (dir == "BW_L")  { targetX = -0.7f; targetY = -0.7f; }
-    else if (dir == "STOP")  { targetX = 0.0f; targetY = 0.0f;   }
+    if      (dir == "FW")   { targetX =  0.0f; targetY =  1.0f; }
+    else if (dir == "BW")   { targetX =  0.0f; targetY = -1.0f; }
+    else if (dir == "L")    { targetX = -1.0f; targetY =  0.0f; }
+    else if (dir == "R")    { targetX =  1.0f; targetY =  0.0f; }
+    else if (dir == "FW_R") { targetX =  0.7f; targetY =  0.7f; }
+    else if (dir == "FW_L") { targetX = -0.7f; targetY =  0.7f; }
+    else if (dir == "BW_R") { targetX =  0.7f; targetY = -0.7f; }
+    else if (dir == "BW_L") { targetX = -0.7f; targetY = -0.7f; }
+    else if (dir == "STOP") { targetX =  0.0f; targetY =  0.0f; }
 }
 
-void SpinalCord::walk(){ robotState = STATE_WALK; }
-void SpinalCord::rest(){ robotState = STATE_IDLE; }
-void SpinalCord::wallFlip(){ robotState = STATE_ACTION; }
+void SpinalCord::walk()     { robotState = STATE_WALK; }
+void SpinalCord::rest()     { robotState = STATE_IDLE; }
+void SpinalCord::wallFlip() { robotState = STATE_ACTION; }
+
+void SpinalCord::relax() {
+    robotState = STATE_REST;
+    leg1.setJointAngles(90, 90, 90);
+    leg2.setJointAngles(90, 90, 90);
+    leg3.setJointAngles(90, 90, 90);
+    leg4.setJointAngles(90, 90, 90);
+}
 
 void SpinalCord::applyCalibration(int channel, int angle) {
     leg1.identifyAndMove(channel, (double)angle);
@@ -92,35 +99,36 @@ void SpinalCord::applyCalibration(int channel, int angle) {
     leg4.identifyAndMove(channel, (double)angle);
 }
 
-void SpinalCord::update(){
-    // 1. Safety Deadman's Switch (500ms timeout)
+void SpinalCord::update() {
+    // Deadman's switch: zero targets if no command for 500 ms
     if (millis() - lastCommandMs > 500) {
         isMovingRequested = false;
-        targetX = 0.0f; targetY = 0.0f;
+        targetX = 0.0f;
+        targetY = 0.0f;
     }
 
-    // 2. Input Smoothing
+    // Input smoothing
     activeX += (targetX - activeX) * 0.1f;
     activeY += (targetY - activeY) * 0.1f;
 
-    switch(robotState){
+    switch (robotState) {
         case STATE_WALK:
             if (currentGait_ != GAIT_NONE) tickGait();
             break;
-        case STATE_ACTION:
-            break;
         case STATE_IDLE:
+        case STATE_REST:
+        case STATE_ACTION:
             break;
         case STATE_FAILSAFE:
             leg1.returnToDefaultAngles();
             leg2.returnToDefaultAngles();
             leg3.returnToDefaultAngles();
             leg4.returnToDefaultAngles();
-            return;
+            break;
     }
 }
 
-void SpinalCord::setGait(GaitType g){
+void SpinalCord::setGait(GaitType g) {
     currentGait_ = g;
     gaitPhaseStartMs_ = millis();
     Serial.printf("[gait] %s\n", GAITS[g].label);
@@ -128,65 +136,91 @@ void SpinalCord::setGait(GaitType g){
 
 GaitType SpinalCord::currentGait() const { return currentGait_; }
 
-void SpinalCord::tickGait(){
+void SpinalCord::tickGait() {
     const GaitParams& cfg = GAITS[currentGait_];
-    const float t = (millis() - gaitPhaseStartMs_) / 1000.0f;
+    const float t           = (millis() - gaitPhaseStartMs_) / 1000.0f;
     const float globalPhase = fmodf(t / cfg.period_s, 1.0f);
 
-    // GRACEFUL STOP: Stop only when motion is near zero AND phase resets
-    if (!isMovingRequested && fabs(activeX) < 0.01f && fabs(activeY) < 0.01f && globalPhase < 0.05f) {
+    // Graceful stop: when movement requested is gone and active vector is near zero,
+    // wait for a clean phase boundary then return to standing pose.
+    if (!isMovingRequested && fabsf(activeX) < 0.01f && fabsf(activeY) < 0.01f && globalPhase < 0.05f) {
+        leg1.returnToDefaultAngles();
+        leg2.returnToDefaultAngles();
+        leg3.returnToDefaultAngles();
+        leg4.returnToDefaultAngles();
         robotState = STATE_IDLE;
         return;
     }
 
     Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+    const bool isCrab = (currentGait_ == GAIT_CRAB);
 
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
-        // Partner's original offset math
         const float legPhase = fmodf(globalPhase - cfg.offsets[i] + 1.0f, 1.0f);
 
-        float x = 0, y = 0, z = 0;
-        const float swingTime = 1.0f - cfg.duty;
-
+        float sweep, lift;
         if (legPhase < cfg.duty) {
-            // PHASE 4: STANCE (Ground contact)
-            float s = legPhase / cfg.duty; 
-            x = activeX * cfg.step_length_m * (0.5f - s);
-            y = activeY * cfg.step_length_m * (0.5f - s);
-            z = 0.0f;
+            // Stance: foot on ground, body sweeps over it
+            const float p = legPhase / cfg.duty;
+            sweep = cfg.step_length_deg * (0.5f - p);
+            lift  = 0.0f;
         } else {
-            // SWING PHASES (In the air)
-            float normalizedSwing = (legPhase - cfg.duty) / swingTime;
-
-            if (normalizedSwing < SWING_RATIO_LIFT) {
-                // PHASE 1: LIFT
-                float s = normalizedSwing / SWING_RATIO_LIFT;
-                x = activeX * cfg.step_length_m * (-0.5f);
-                y = activeY * cfg.step_length_m * (-0.5f);
-                z = cfg.step_height_m * s;
-            }
-            else if (normalizedSwing < (SWING_RATIO_LIFT + SWING_RATIO_MOVE)) {
-                // PHASE 2: MOVE (Horizontal Travel)
-                float s = (normalizedSwing - SWING_RATIO_LIFT) / SWING_RATIO_MOVE;
-                x = activeX * cfg.step_length_m * (-0.5f + s);
-                y = activeY * cfg.step_length_m * (-0.5f + s);
-                z = cfg.step_height_m;
-            }
-            else {
-                // PHASE 3: LOWER (Landing)
-                float s = (normalizedSwing - (SWING_RATIO_LIFT + SWING_RATIO_MOVE)) / SWING_RATIO_LOWER;
-                x = activeX * cfg.step_length_m * (0.5f);
-                y = activeY * cfg.step_length_m * (0.5f);
-                z = cfg.step_height_m * (1.0f - s);
-            }
+            // Swing: foot in the air returning to front
+            const float p = (legPhase - cfg.duty) / (1.0f - cfg.duty);
+            sweep = cfg.step_length_deg * (-0.5f + p);
+            lift  = sinf(p * (float)M_PI) * cfg.step_height_deg;
         }
 
-        z = applyIMUCorrection(z, i);
-        legs[i]->setPose(x, y, z);
-    }
-}
+        float sh = NEUTRAL[i].sh;
+        float th = NEUTRAL[i].th;
+        float kn = NEUTRAL[i].kn;
 
-float SpinalCord::applyIMUCorrection(float rawZ, uint8_t legIdx) {
-    // Return rawZ for now. MPU6050 logic will plug in here later.
-    return rawZ;
+        // Shoulder sweep — forward/back (Y), used by TROT and WALK only.
+        // FR(0) and FL(1): += sweep, RR(2) and RL(3): -= sweep
+        if (!isCrab) {
+            if (i == LEG_FR || i == LEG_FL) sh += sweep * activeY;
+            else                             sh -= sweep * activeY;
+        }
+
+        // Thigh sweep — lateral (X).
+        // Main axis for CRAB; provides turning arc in TROT/WALK.
+        // FL(1) and RL(3) are the left-side legs: -= sweep * activeX
+        // FR(0) and RR(2) are the right-side legs: += sweep * activeX
+        if (i == LEG_FL || i == LEG_RL) th -= sweep * activeX;
+        else                             th += sweep * activeX;
+
+        // Lift applied to thigh and knee during swing (same convention as JS)
+        th += lift;
+        kn -= lift;
+
+        // Translate math-space angles to servo angles (0–180°).
+        // Mirrors the JS translateToServo() function exactly.
+        double servoHip, servoThigh, servoKnee;
+        switch (i) {
+            case LEG_FR:
+                servoHip   = 90.0 + (sh - 45.0);
+                servoThigh = 90.0 - th;
+                servoKnee  = 90.0 + kn;
+                break;
+            case LEG_FL:
+                servoHip   = sh;
+                servoThigh = 90.0 + th;
+                servoKnee  = 90.0 - kn;
+                break;
+            case LEG_RR:
+                servoHip   = 90.0 - (sh + 45.0);
+                servoThigh = 90.0 + th;
+                servoKnee  = 90.0 - kn;
+                break;
+            case LEG_RL:
+                servoHip   = 90.0 + (sh + 135.0);
+                servoThigh = 90.0 - th;
+                servoKnee  = 90.0 + kn;
+                break;
+            default:
+                continue;
+        }
+
+        legs[i]->setJointAngles(servoHip, servoThigh, servoKnee);
+    }
 }

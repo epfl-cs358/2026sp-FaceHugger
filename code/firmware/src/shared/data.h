@@ -13,10 +13,11 @@ enum CommandType {
 
 // FSM States matching LaTeX documentation
 enum RobotState {
-    STATE_IDLE = 0,
-    STATE_WALK = 1,
-    STATE_ACTION = 2,
-    STATE_FAILSAFE = 3
+    STATE_IDLE     = 0,
+    STATE_WALK     = 1,
+    STATE_ACTION   = 2,
+    STATE_FAILSAFE = 3,
+    STATE_REST     = 4,  // All servos at 90° — safe to power off
 };
 
 #endif

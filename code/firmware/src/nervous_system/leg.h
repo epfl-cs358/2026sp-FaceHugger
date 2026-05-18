@@ -10,7 +10,8 @@
 class Leg {
   public:
     Leg(Adafruit_PWMServoDriver& pwm, int legID, Servo hipServo, Servo thighServo, Servo kneeServo); // Constructor
-    void setPose(float x, float y, float z); // Inverse Kinematics target
+    void setPose(float x, float y, float z);
+    void setJointAngles(double hip, double thigh, double knee);
     void returnToDefaultAngles();
     void identifyAndMove(uint8_t channel, double angle);
   private:
