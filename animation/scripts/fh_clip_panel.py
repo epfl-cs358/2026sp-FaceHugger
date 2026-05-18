@@ -82,24 +82,16 @@ JOINT_BONES = [
     "br_link3",
 ]
 
-# Per-bone rotation_euler index derived from URDF joint axes:
-#   link1 (shoulder/yaw): axis Z  → euler[2]
-#   link2 (hip):          axis Y  → euler[1]
-#   link3 (knee):         axis Y  → euler[1]
-JOINT_ROT_AXIS = {
-    "fl_link1": 2,
-    "fl_link2": 1,
-    "fl_link3": 1,
-    "fr_link1": 2,
-    "fr_link2": 1,
-    "fr_link3": 1,
-    "bl_link1": 2,
-    "bl_link2": 1,
-    "bl_link3": 1,
-    "br_link1": 2,
-    "br_link2": 1,
-    "br_link3": 1,
-}
+# Every joint's rotation axis is bone-local Z (euler index 2), uniformly
+# across all 12 bones. The rig builder calls EditBone.align_roll(joint_axis)
+# so bone-local Z == the URDF joint axis for ALL joints, including the
+# per-side ± sign — see urdf_to_blender_rigged.py and
+# code/simulation/docs/API_ANIMATION_SPEC.md §2 ("No per-joint axis
+# branching anywhere", "rotation_euler[2] == joint angle"). The URDF axis
+# being Y for link2/link3 is the *URDF-frame* axis, NOT the Blender
+# bone-local axis: do not branch per-bone here. (A prior per-bone
+# {link2/3: Y} map was wrong and silently exported zeros.)
+_JOINT_AXIS_EULER_IDX = 2  # bone-local Z, all 12 bones
 
 # Simultaneous-servo warning: flag frames where more than N servos move
 # by more than this threshold in a single frame step.
@@ -125,14 +117,45 @@ def _find_arm_obj():
 
 def _read_bone_angles(arm_eval):
     """Read the revolute-joint angle (deg) for each bone in JOINT_BONES
-    from an already-evaluated armature object."""
+    from an already-evaluated armature object.
+
+    The IK / Damped-Track / Limit-Rotation constraint stack writes the
+    solved pose into each pose bone's evaluated ``matrix`` (pose/armature
+    space) — NOT into ``rotation_euler`` or ``matrix_basis``, which keep
+    their pre-constraint keyed values (identity for the IK-driven hip/knee
+    bones). Reading ``rotation_euler`` therefore returns 0 for every
+    IK-driven joint, which is why the first export wrote all-zero CSVs.
+
+    Instead recover the *effective* basis: the ``matrix_basis`` the bone
+    would hold if its evaluated pose had been keyed directly rather than
+    constraint-solved. ``Bone.convert_local_to_pose(..., invert=True)`` is
+    Blender's official inverse of pose composition (it accounts for
+    inherit-scale / local-location). The joint angle is that basis'
+    bone-local Z rotation, uniform across all 12 joints because the rig
+    roll-aligns every joint axis onto bone-local Z (see
+    ``_JOINT_AXIS_EULER_IDX``). For an FK-keyed bone this reduces exactly
+    to its keyed ``rotation_euler[2]``, so FK shoulders are unaffected."""
     angles = {}
     for name in JOINT_BONES:
         pbone = arm_eval.pose.bones.get(name)
-        if pbone is not None:
-            angles[name] = math.degrees(pbone.rotation_euler[JOINT_ROT_AXIS[name]])
-        else:
+        if pbone is None:
             angles[name] = 0.0
+            continue
+        if pbone.parent is not None:
+            basis = pbone.bone.convert_local_to_pose(
+                pbone.matrix,
+                pbone.bone.matrix_local,
+                parent_matrix=pbone.parent.matrix,
+                parent_matrix_local=pbone.parent.bone.matrix_local,
+                invert=True,
+            )
+        else:
+            basis = pbone.bone.convert_local_to_pose(
+                pbone.matrix,
+                pbone.bone.matrix_local,
+                invert=True,
+            )
+        angles[name] = math.degrees(basis.to_euler("XYZ")[_JOINT_AXIS_EULER_IDX])
     return angles
 
 
