@@ -1,0 +1,128 @@
+# FaceHugger simulation pipeline
+
+End-to-end: from the Fusion 360 design, produce a URDF that's faithful to the
+CAD (re-origined meshes, per-leg quadrant-limited shoulder joints, servo
+visuals in the right orientation) and drive it in PyBullet.
+
+## Overview
+
+```
+Fusion 360 CAD
+   │   ExportBodiesToURDF add-in (cad/scripts/ExportBodiesToURDF/)
+   ▼
+fusion_export.json    (CAD tree + mesh_files manifest)
+fusion_export.txt     (human-readable tree)
+exported_meshes/*.stl (8 files: chassis + per-side L/R brackets + per-side L/R shoulder + shared upper/lower + servo)
+   │
+   └── generate_urdf.py ──► facehugger.urdf ──┬─► simulate.py  (PyBullet)
+                                              │
+                                              └─► visualize_urdf.py  (Blender 5.x)
+```
+
+## Prerequisites
+
+- Python env: `uv`, `pyyaml`, `pybullet`, `numpy`.
+- Fusion 360 with the ExportBodiesToURDF add-in installed (`cad/scripts/ExportBodiesToURDF/`).
+- Blender 5.0+ (optional — only needed for the URDF visualizer; 3.3 LTS no longer supported).
+
+## Step 1 — Run the Fusion exporter
+
+In Fusion 360, open your assembly and run the add-in from **Scripts and Add-Ins**. It writes to `code/simulation/generated/`:
+
+| File | Content |
+|---|---|
+| `fusion_export.json` | Full CAD tree + `mesh_files` manifest (source bodies, `origin_shift_mm`, servo role assignment, per-occurrence world transforms). |
+| `fusion_export.txt` | Same tree in a human-readable form. |
+| `exported_meshes/*.stl` | 8 STLs: `QuadrupedBody.stl` (chassis), `leg_mount_L.stl` / `leg_mount_R.stl` (bracket per side), `leg_shoulder_L.stl` / `leg_shoulder_R.stl` (link1 per side), `leg_upper.stl` (link2, shared), `leg_lower.stl` (link3, shared), `servo.stl`. Leg meshes are re-origined to their URDF joint landmarks; `servo.stl` is re-origined to `ServoMountPoint`. |
+
+Re-runs preserve user edits to `mesh_files._servo_role_assignment` in the JSON.
+
+## Driving the pipeline — `facehugger.py`
+
+[facehugger.py](facehugger.py) is the single CLI entry point. Each subcommand wraps one of the underlying scripts:
+
+```bash
+cd code/simulation
+
+python facehugger.py urdf                 # regenerate generated/facehugger.urdf
+python facehugger.py view                 # open URDF in PyBullet's viewer (no physics)
+python facehugger.py sim                  # GUI, standing pose
+python facehugger.py sim --walk           # walk gait
+python facehugger.py sim --trot           # trot gait
+python facehugger.py sim --headless       # no GUI — CI smoke-check
+python facehugger.py blender                          # URDF in Blender (default 5.1)
+python facehugger.py blender --blender-version 5.2    # specific Blender version
+python facehugger.py blender --headless --save /tmp/scene.blend
+python facehugger.py all                  # urdf → sim
+```
+
+The `blender` subcommand loads `generated/facehugger.urdf` directly via [animation/scripts/visualize_urdf.py](../../animation/scripts/visualize_urdf.py): walks the joint chain at rest pose (the same math PyBullet uses on `loadURDF`) and places each of the 29 STL visuals at `link_world @ visual_origin`. Placement-only — no rig, no Empties, no parenting. The URDF is the single source of truth. Requires **Blender 5.0+**.
+
+The CLI resolves the Blender executable in this order: `BLENDER_BIN` env var → macOS `/Applications` candidates for the requested `--blender-version` (`Blender-{V}-LTS.app`, `Blender {V}.app` with a space, `Blender-{V}.app`, `Blender{V}.app`) → `blender{V}` on `$PATH` → plain `blender` on `$PATH`. If nothing matches, the CLI prints what it tried and exits non-zero. Set `BLENDER_BIN=/path/to/blender` to bypass the search entirely.
+
+`view` mouse controls:
+
+| Action | How |
+| --- | --- |
+| Orbit | left-drag |
+| Pan | ctrl + left-drag |
+| Zoom | scroll |
+| Quit | close window or Ctrl+C |
+
+The viewer holds the body fixed with gravity off — nothing moves on its own.
+
+The `sim` simulator reads geometry from the URDF + `facehugger_config.yaml`; no hardcoded leg lengths or stances in Python.
+
+The URDF generator (`urdf` subcommand):
+
+- reads the `mesh_files` manifest in `generated/fusion_export.json` to place meshes with the right `origin_shift`;
+- emits per-leg shoulder joint limits from `facehugger_config.yaml`'s `shoulder_limits_deg`;
+- emits 12 servo `<visual>` elements (4 shoulder on `base_link`, 4 hip on each `link1`, 4 knee on each `link3`).
+
+## Config
+
+All semantic parameters live in [facehugger_config.yaml](facehugger_config.yaml):
+
+- `base_link.mesh` — chassis STL filename.
+- `leg_template.links.<role>.mesh` — per-link STL filename template (`{side}` substituted from `legs[].side`).
+- `legs[]` — per-leg `id`, `mount_point`, `side`. Shoulder rest, limits, and back-of-pair flip are no longer in yaml — they're derived from the Fusion JSON's `Link1Revolute.limits_rad` and from `leg_id` per [docs/MERGE_AND_CONVENTION.md](docs/MERGE_AND_CONVENTION.md).
+- `servo` — mass, effort, velocity, optional `visual_flip_rpy_deg`.
+
+Angles are in degrees in the yaml; `generate_urdf.py` converts to the URDF's radians.
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| Chassis STL has electronics/PCBs baked in | `EXPORT_RULES` `combined.parts` list in [../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py](../../cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/ExportBodiesToURDF.py) is out of date — add or remove the right occurrences. |
+| Servos misaligned in Blender / PyBullet | Either the CAD's `ServoMountPoint` is not on the shaft axis, or the URDF's per-role rpy is off — inspect in Blender. |
+| `simulate.py --walk` spawns through floor | Settling / body-height issue — see `--settle SECONDS` flag and the gait-aware `body_height` computation. |
+| `URDF is missing LEG ASSEMBLY METADATA` | Regenerate the URDF; the metadata comment block is emitted by `generate_urdf.py`. |
+
+## File map
+
+```
+code/simulation/
+  facehugger.py                 CLI entry point — wraps the scripts below
+  facehugger_config.yaml        semantic config (hand-edited)
+  generate_urdf.py              URDF generator
+  simulate.py                   PyBullet simulator (constants/helpers/kinematics/gaits)
+  view_urdf.py                  PyBullet URDF viewer (no physics)
+  README.md                     this file
+  docs/                         pipeline docs (PIPELINE_SPEC, ASSEMBLY_HIERARCHY, …)
+  generated/                    artifacts produced by the Fusion add-in / generator
+    fusion_export.json          CAD tree (do not edit)
+    fusion_export.txt           human-readable tree
+    exported_meshes/*.stl       generated STLs (do not edit)
+    facehugger.urdf             generated URDF (do not edit)
+
+../../animation/scripts/
+  visualize_urdf.py             Blender 5.x scene builder (URDF → placement + joint markers)
+  visualize_fusion_export.py    Blender 5.x scene builder (fusion_export.json → meshes + landmarks)
+```
+
+## Design notes
+
+- The `origin_shift_mm` field in `mesh_files` records the landmark each STL was re-origined against — the URDF generator consumes it so leg meshes sit at their joint origins with `<origin xyz="0 0 0"/>`.
+- Per-leg shoulder rest is derived from the FL Fusion-export rest via the formula in [docs/MERGE_AND_CONVENTION.md §4](docs/MERGE_AND_CONVENTION.md): `FR = -FL`, `BL = wrap_pi(FL + π)`, `BR = -wrap_pi(FL + π)`. With the current CAD's `FL = -π/4`, the four legs sit at `FL=-45°, FR=+45°, BL=+135°, BR=-135°` in world space. URDF limits are symmetric `[-90°, +90°]` about each leg's rest.
+- The geometric back-of-pair flip (chassis bracket positioning) is `0°` for front legs (`fl`, `fr`) and `180°` for back legs (`bl`, `br`), derived from `leg_id` rather than carried in yaml.

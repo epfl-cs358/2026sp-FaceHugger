@@ -1,198 +1,362 @@
-"""Leg kinematics: link lengths, IK, foot trajectory, gait joint targets."""
+"""LegGeom + RobotConfig dataclasses, FK/IK math, build_config from URDF/yaml.
+
+Chain (per leg, after factoring shoulder yaw + back-of-pair Rz(rpy_z)):
+  T = Rz(yaw_offset + theta_s) *
+      Ttrans(L1) *
+      Ry(s_h) * Ttrans(L2) *
+      Ry(s_k) * Ttrans(foot_L3)
+
+where
+  s_h = leg.hip_axis_sign  * theta_h
+  s_k = leg.knee_axis_sign * theta_k
+
+User-facing angles (theta_h, theta_k) follow Phase H's uniform convention:
+the same numerical value drops every leg into the same physical pose. The
+URDF-internal angles (s_h, s_k) include the per-leg axis sign so the FK
+matches what PyBullet applies when given the user-facing target.
+
+ASSUMPTIONS (flag if URDF ever violates them):
+  - shoulder joint axis is +Z (URDF has `0 0 1`)
+  - hip and knee axes are +Y for L pair, -Y for R pair (Phase H sign flip)
+  - shoulder yaw offset is a pure Z rotation (rpy = 0 0 q)
+  - no roll/pitch on hip/knee joint origins (`<origin rpy="0 0 0"/>`)
+  - foot tip in link3 frame for L pair = mesh-local FootTip from URDF metadata
+  - foot tip in link3 frame for R pair = (-x, y, -z) of the L-pair value
+    (link2/link3 visuals carry mesh_rpy=(0, π, 0) for R pair, which is an
+    Ry(π) rotation of the mesh; the kinematic foot tip in link3 frame
+    follows the rotation).
+"""
 
 import math
+import os
+from dataclasses import dataclass, field
+from typing import Callable, Dict, Tuple
 
-from constants import HIP_ANGLE, KNEE_ANGLE
-from helpers import _clamp, _wrap_pi
+import yaml
 
-# Leg link geometry (metres). Pulled from the URDF joint origins.
-L1 = 0.080   # shoulder arm:   shoulder origin -> hip joint
-L2 = 0.075   # upper leg:      hip joint       -> knee joint
-L3 = 0.077   # lower leg:      knee joint      -> foot tip (end of mesh)
-
-# Shoulder mount per leg, in body frame, plus the yaw offset baked into the
-# URDF origin rpy (left legs = 0, right legs = pi). arm_sign follows from the
-# yaw offset (left arm extends body -X, right arm extends body +X).
-LEG_INFO = {
-    "fl": {"mount": (-0.040,  0.050, 0.025), "yaw_offset": 0.0},
-    "fr": {"mount": ( 0.040,  0.050, 0.025), "yaw_offset": math.pi},
-    "rl": {"mount": (-0.040, -0.050, 0.025), "yaw_offset": 0.0},
-    "rr": {"mount": ( 0.040, -0.050, 0.025), "yaw_offset": math.pi},
-}
-
-# Neutral foot position (body frame) corresponding to the STANCE joint angles.
-# Derived analytically from forward kinematics, so leg_ik(neutral) == STANCE.
-NEUTRAL_FOOT = {
-    "fl": (-L1 - (L2 * math.sin(HIP_ANGLE) + L3 * math.sin(HIP_ANGLE + KNEE_ANGLE))
-           + LEG_INFO["fl"]["mount"][0],
-            LEG_INFO["fl"]["mount"][1],
-           -(L2 * math.cos(HIP_ANGLE) + L3 * math.cos(HIP_ANGLE + KNEE_ANGLE))
-           + LEG_INFO["fl"]["mount"][2]),
-    "fr": ( L1 + (L2 * math.sin(HIP_ANGLE) + L3 * math.sin(HIP_ANGLE + KNEE_ANGLE))
-           + LEG_INFO["fr"]["mount"][0],
-            LEG_INFO["fr"]["mount"][1],
-           -(L2 * math.cos(HIP_ANGLE) + L3 * math.cos(HIP_ANGLE + KNEE_ANGLE))
-           + LEG_INFO["fr"]["mount"][2]),
-    "rl": (-L1 - (L2 * math.sin(HIP_ANGLE) + L3 * math.sin(HIP_ANGLE + KNEE_ANGLE))
-           + LEG_INFO["rl"]["mount"][0],
-            LEG_INFO["rl"]["mount"][1],
-           -(L2 * math.cos(HIP_ANGLE) + L3 * math.cos(HIP_ANGLE + KNEE_ANGLE))
-           + LEG_INFO["rl"]["mount"][2]),
-    "rr": ( L1 + (L2 * math.sin(HIP_ANGLE) + L3 * math.sin(HIP_ANGLE + KNEE_ANGLE))
-           + LEG_INFO["rr"]["mount"][0],
-            LEG_INFO["rr"]["mount"][1],
-           -(L2 * math.cos(HIP_ANGLE) + L3 * math.cos(HIP_ANGLE + KNEE_ANGLE))
-           + LEG_INFO["rr"]["mount"][2]),
-}
-
-# Joint limits (mirrored from URDF) for clamping IK outputs
-_JOINT_LIMITS = {
-    "shoulder": (-2.356, 2.356),
-    "hip":      (-1.5708, 1.5708),
-    "knee":     (-2.356, 0.5),
-}
+from constants import CONFIG_YAML, FUSION_JSON, MESH_DIR, STANCE_DEG, URDF_PATH
+from helpers import (
+    _clamp,
+    _wrap_pi,
+    _foot_tip_from_fusion,
+    _load_urdf_joints,
+    _parse_leg_points_from_urdf,
+    _stl_foot_tip_m,
+)
 
 
-def leg_ik(foot_body, leg_id):
-    """Analytic inverse kinematics. foot_body in robot body frame -> joint angles."""
-    info = LEG_INFO[leg_id]
-    sx, sy, sz = info["mount"]
-    yaw_offset = info["yaw_offset"]
+@dataclass
+class LegGeom:
+    """Per-leg kinematic data. Values in metres / radians, body frame."""
 
-    dx = foot_body[0] - sx
-    dy = foot_body[1] - sy
-    dz = foot_body[2] - sz
-
-    r_xy = math.hypot(dx, dy)
-    # Shoulder yaw: rotate shoulder link so its -X axis points toward the foot
-    theta_total = math.atan2(-dy, -dx)
-    theta_s = _wrap_pi(theta_total - yaw_offset)
-
-    # Sagittal 2-link reach: a horizontal (from hip), b downward (from hip)
-    a = r_xy - L1
-    b = -dz
-
-    c = math.hypot(a, b)
-    c_max = L2 + L3 - 1e-4
-    if c > c_max:
-        c = c_max
-        # Rescale (a, b) so the triangle is reachable
-        scale = c_max / max(math.hypot(a, b), 1e-9)
-        a *= scale
-        b *= scale
-
-    cos_alpha = (L2 * L2 + L3 * L3 - c * c) / (2.0 * L2 * L3)
-    alpha = math.acos(_clamp(cos_alpha, -1.0, 1.0))
-    theta_k = alpha - math.pi
-
-    cos_beta = (L2 * L2 + c * c - L3 * L3) / (2.0 * L2 * c + 1e-12)
-    beta = math.acos(_clamp(cos_beta, -1.0, 1.0))
-    theta_h = math.atan2(a, b) + beta
-
-    theta_s = _clamp(theta_s, *_JOINT_LIMITS["shoulder"])
-    theta_h = _clamp(theta_h, *_JOINT_LIMITS["hip"])
-    theta_k = _clamp(theta_k, *_JOINT_LIMITS["knee"])
-    return theta_s, theta_h, theta_k
+    leg_id: str
+    mount: Tuple[float, float, float]  # shoulder joint origin in body frame
+    yaw_offset: float  # shoulder joint rpy around Z (0 or ±π)
+    L1_vec: Tuple[float, float, float]  # shoulder -> hip offset (in link1 frame)
+    L2_vec: Tuple[float, float, float]  # hip -> knee offset      (in link2 frame)
+    foot_L3: Tuple[float, float, float]  # knee -> foot tip        (in link3 frame)
+    hip_axis_sign: int  # +1 if URDF hip axis is +Y, -1 if -Y
+    knee_axis_sign: int  # +1 if URDF knee axis is +Y, -1 if -Y
+    joint_limits: Dict[str, Tuple[float, float]]  # per-leg, user-facing range
 
 
-def foot_target(leg_id, phase, step_length, step_height, duty, axis="y"):
-    """Body-frame foot target for a given leg at a given per-leg phase [0, 1).
-    axis="y": fore/aft gait (walk/trot/bound). axis="x": lateral gait (crab)."""
-    nx, ny, nz = NEUTRAL_FOOT[leg_id]
-    if phase < duty:
-        s = phase / duty
-        d = -step_length * 0.5 + s * step_length
-        dz = step_height * math.sin(math.pi * s)
+@dataclass
+class RobotConfig:
+    urdf_path: str
+    legs: Dict[str, LegGeom]  # insertion order = leg iteration order
+    servo_force: float
+    servo_velocity: float
+    stance_rad: Dict[
+        str, Dict[str, float]
+    ]  # leg_id -> {shoulder, hip, knee} in radians
+    leg_ik: Callable[
+        ["RobotConfig", Tuple[float, float, float], str], Tuple[float, float, float]
+    ]
+    leg_fk: Callable[
+        ["RobotConfig", str, float, float, float], Tuple[float, float, float]
+    ]
+    neutral_foot: Dict[str, Tuple[float, float, float]] = field(default_factory=dict)
+    body_height: float = 0.12  # spawn height; recomputed from neutral foot
+
+
+# --------------------------------------------------------------------------- #
+# Rotation helpers
+# --------------------------------------------------------------------------- #
+
+
+def _ry(v, c, s):
+    """Apply Ry(theta) to vector v, given c = cos(theta), s = sin(theta).
+    Right-hand-rule rotation around +Y; rotates (X, Z) plane clockwise as
+    seen from +Y for positive theta."""
+    x, y, z = v
+    return (x * c + z * s, y, -x * s + z * c)
+
+
+def _rz(v, c, s):
+    x, y, z = v
+    return (x * c - y * s, x * s + y * c, z)
+
+
+# --------------------------------------------------------------------------- #
+# Forward kinematics
+# --------------------------------------------------------------------------- #
+
+
+def fk_v2(cfg, leg_id, theta_s, theta_h, theta_k):
+    """User-facing (theta_s, theta_h, theta_k) -> foot position in body frame.
+
+    Phase H made theta_h, theta_k uniform across legs (same value -> same
+    physical pose). Internally we multiply by the URDF axis sign to get the
+    actual rotation matrix that PyBullet applies."""
+    leg = cfg.legs[leg_id]
+    s_h = leg.hip_axis_sign * theta_h
+    s_k = leg.knee_axis_sign * theta_k
+    ch, sh = math.cos(s_h), math.sin(s_h)
+    ck, sk = math.cos(s_k), math.sin(s_k)
+
+    # foot in link2 frame: Ry(s_k) * foot_L3 + L2
+    f_l2 = _ry(leg.foot_L3, ck, sk)
+    v_l2 = (leg.L2_vec[0] + f_l2[0], leg.L2_vec[1] + f_l2[1], leg.L2_vec[2] + f_l2[2])
+    # foot in link1 frame: Ry(s_h) * v_l2 + L1
+    v_l1 = _ry(v_l2, ch, sh)
+    w = (leg.L1_vec[0] + v_l1[0], leg.L1_vec[1] + v_l1[1], leg.L1_vec[2] + v_l1[2])
+    # foot in body frame: mount + Rz(yaw_offset + theta_s) * w
+    q = leg.yaw_offset + theta_s
+    cq, sq = math.cos(q), math.sin(q)
+    foot = _rz(w, cq, sq)
+    return (leg.mount[0] + foot[0], leg.mount[1] + foot[1], leg.mount[2] + foot[2])
+
+
+# --------------------------------------------------------------------------- #
+# Inverse kinematics
+# --------------------------------------------------------------------------- #
+
+
+def ik_v2(cfg, foot_body, leg_id):
+    """Foot position (body frame) -> user-facing (theta_s, theta_h, theta_k).
+
+    Strategy:
+      1. Y component of the link1-frame foot is invariant under Ry(s_h) and
+         Ry(s_k), so it's a per-leg constant. Use it + |delta_xy|^2 to
+         recover X (the chain-extension axis).
+      2. Shoulder yaw drops out via atan2.
+      3. 2-link planar solve in (X, Z) plane relative to L1 gives s_h, s_k.
+      4. Convert URDF-internal (s_h, s_k) to user-facing (theta_h, theta_k)
+         via the per-leg axis sign.
+      5. Per-leg limit clamping (limits differ between L and R pair).
+    """
+    leg = cfg.legs[leg_id]
+
+    dx = foot_body[0] - leg.mount[0]
+    dy = foot_body[1] - leg.mount[1]
+    dz = foot_body[2] - leg.mount[2]
+
+    # w_y is invariant under Ry — equals L1.y + L2.y + foot_L3.y.
+    w_y = leg.L1_vec[1] + leg.L2_vec[1] + leg.foot_L3[1]
+
+    # Rz preserves XY norm: |delta_xy|^2 == w_x^2 + w_y^2.
+    rxy2 = dx * dx + dy * dy
+    w_x2 = rxy2 - w_y * w_y
+    if w_x2 < 0.0:
+        w_x2 = 0.0  # target laterally closer than w_y alone can reach
+
+    # Sign of w_x: chain in link1 frame extends along -X for L pair,
+    # +X for R pair. Pick the sign that matches the per-leg geometry so
+    # FK/IK round-trip is stable.
+    chain_x_sign = (
+        1.0 if (leg.L1_vec[0] + leg.L2_vec[0] + leg.foot_L3[0]) >= 0 else -1.0
+    )
+    w_x = chain_x_sign * math.sqrt(w_x2)
+
+    # Rz preserves Z, so w_z == dz.
+    w_z = dz
+
+    # Shoulder yaw: q = atan2(dy, dx) - atan2(w_y, w_x); theta_s = q - yaw_offset.
+    q = math.atan2(dy, dx) - math.atan2(w_y, w_x)
+    theta_s = _wrap_pi(q - leg.yaw_offset)
+
+    # 2-link planar solve in (X, Z) plane, relative to L1.
+    u = w_x - leg.L1_vec[0]
+    v = w_z - leg.L1_vec[2]
+
+    # L2 and foot_L3 planar lengths in (X, Z); Y is folded into w_y above.
+    l2 = math.hypot(leg.L2_vec[0], leg.L2_vec[2])
+    l3 = math.hypot(leg.foot_L3[0], leg.foot_L3[2])
+    d = math.hypot(u, v)
+
+    d = min(d, l2 + l3 - 1e-6)  # keep triangle reachable
+    d = max(d, abs(l2 - l3) + 1e-6)
+
+    # Law of cosines on the bent chain. |V|^2 expands to
+    #   l2^2 + l3^2 + 2 l2 l3 cos(s_k - alpha_rel)
+    # where alpha_rel is the angle of foot_L3 in the X-Z plane MEASURED
+    # FROM L2's direction (not from +X).
+    cos_kprime = (d * d - l2 * l2 - l3 * l3) / (2.0 * l2 * l3)
+    kprime = math.acos(_clamp(cos_kprime, -1.0, 1.0))  # [0, pi]
+    alpha_rel = _wrap_pi(
+        math.atan2(leg.foot_L3[2], leg.foot_L3[0])
+        - math.atan2(leg.L2_vec[2], leg.L2_vec[0])
+    )
+    # Knee branch: fold the lower-leg so the foot supports the body. Ry
+    # rotates (X, Z) by -theta (opposite of Rx in the old +Y-chain code),
+    # so the supporting branch is s_k = +chain_x_sign * kprime — for L
+    # pair (chain at -X) that's s_k < 0, for R pair (chain at +X with
+    # axis flipped) it's s_k > 0. chain_x_sign picks the right branch so
+    # FK/IK round-trips.
+    s_k = chain_x_sign * kprime - alpha_rel
+
+    # Recover s_h: the "bent chain in (X, Z)" sits at angle phi_V; (u, v) sits
+    # at angle phi_uv. Ry(s_h) rotates (X, Z) by -s_h, so phi_uv = phi_V - s_h
+    # → s_h = phi_V - phi_uv.
+    ck, sk = math.cos(s_k), math.sin(s_k)
+    V_x = leg.L2_vec[0] + leg.foot_L3[0] * ck + leg.foot_L3[2] * sk
+    V_z = leg.L2_vec[2] - leg.foot_L3[0] * sk + leg.foot_L3[2] * ck
+    s_h = _wrap_pi(math.atan2(V_z, V_x) - math.atan2(v, u))
+
+    # Convert URDF-internal angles back to user-facing (Phase H).
+    theta_h = leg.hip_axis_sign * s_h
+    theta_k = leg.knee_axis_sign * s_k
+
+    lo_s, hi_s = leg.joint_limits["shoulder"]
+    lo_h, hi_h = leg.joint_limits["hip"]
+    lo_k, hi_k = leg.joint_limits["knee"]
+    return (
+        _clamp(theta_s, lo_s, hi_s),
+        _clamp(theta_h, lo_h, hi_h),
+        _clamp(theta_k, lo_k, hi_k),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Config builder
+# --------------------------------------------------------------------------- #
+
+
+def _stance_for(leg_id, legs_cfg):
+    """Resolve the per-leg standing stance {shoulder/hip/knee} dict.
+    Shoulder comes from the yaml's `shoulder_neutral_deg`; hip/knee are
+    shared across all legs via STANCE_DEG."""
+    entry = next(l for l in legs_cfg if l["id"] == leg_id)
+    shoulder_deg = entry.get("shoulder_neutral_deg", 0.0)
+    return {
+        "shoulder": shoulder_deg,
+        "hip": STANCE_DEG["hip"],
+        "knee": STANCE_DEG["knee"],
+    }
+
+
+def _axis_sign_y(axis_xyz):
+    """+1 if axis points along +Y, -1 if -Y. Tolerates the tiny float dust
+    the URDF carries (e.g. (1.18e-16, 1.0, 2.43e-17) or its negation)."""
+    return 1 if axis_xyz[1] >= 0.0 else -1
+
+
+def build_config():
+    if not os.path.exists(URDF_PATH):
+        raise FileNotFoundError(f"Missing URDF: {URDF_PATH}")
+    if not os.path.exists(CONFIG_YAML):
+        raise FileNotFoundError(f"Missing config yaml: {CONFIG_YAML}")
+    with open(CONFIG_YAML) as f:
+        yaml_cfg = yaml.safe_load(f)
+
+    joints = _load_urdf_joints(URDF_PATH)
+
+    # FootTip (in link3-mesh frame) from the LEG ASSEMBLY METADATA comment.
+    # Prefer an explicit FootTipPoint construction point if/when the user
+    # adds one to Fusion; else fall back to the metadata block; else fall
+    # back to the STL heuristic.
+    leg_pts = _parse_leg_points_from_urdf(URDF_PATH)
+    foot_tip_link3_mm = leg_pts["FootTip"]  # in link3 mesh frame
+    tip_assembly = _foot_tip_from_fusion(FUSION_JSON)
+    if tip_assembly is None:
+        # Sanity: keep the STL heuristic available for diagnostics; the
+        # foot_L3 the FK actually uses comes from the URDF comment block.
+        _ = _stl_foot_tip_m(os.path.join(MESH_DIR, "leg_lower.stl"))
+        print(
+            f"[sim] foot tip from URDF metadata (link3 frame, mm): "
+            f"{tuple(round(v, 3) for v in foot_tip_link3_mm)}"
+        )
     else:
-        s = (phase - duty) / (1.0 - duty)
-        d = step_length * 0.5 - s * step_length
-        dz = 0.0
-    if axis == "x":
-        return (nx + d, ny, nz + dz)
-    return (nx, ny + d, nz + dz)
+        print(
+            f"[sim] foot tip from FootTipPoint: "
+            f"{tuple(round(v, 4) for v in tip_assembly)} m"
+        )
 
+    # foot_L3 in link3 frame, per side.
+    # L pair: link3 visual rpy = identity, so link3 frame ≡ mesh frame.
+    # R pair: link3 visual rpy = (0, π, 0), so the mesh is rotated 180°
+    # around Y inside link3. The foot tip in link3 frame is then the
+    # mesh-local tip rotated by Ry(π) → (-x, y, -z).
+    foot_L3_L = tuple(v / 1000.0 for v in foot_tip_link3_mm)
+    foot_L3_R = (-foot_L3_L[0], foot_L3_L[1], -foot_L3_L[2])
 
-def leg_ik_fixed_yaw(foot_body, leg_id, theta_s):
-    """IK for a splayed leg: shoulder yaw is PINNED at theta_s, hip/knee solve
-    for the 2-link reach from the already-placed hip to the foot."""
-    info = LEG_INFO[leg_id]
-    sx, sy, sz = info["mount"]
-    yaw_offset = info["yaw_offset"]
-    theta_total = theta_s + yaw_offset
-    # Hip joint position in body frame (leg_ik places the arm so its -X_local
-    # axis points at angle theta_total in body XY plane; hip sits L1 along it).
-    hip_x = sx - L1 * math.cos(theta_total)
-    hip_y = sy - L1 * math.sin(theta_total)
-    hip_z = sz
-    # Displacement from hip to foot.
-    ux = foot_body[0] - hip_x
-    uy = foot_body[1] - hip_y
-    uz = foot_body[2] - hip_z
-    # Project horizontal component onto the arm direction (signed) to get `a`,
-    # the in-sagittal-plane forward reach. `b` is straight down from the hip.
-    # Arm direction (shoulder -> hip) in body XY: (-cos(theta_total), -sin(...))
-    # "a" axis (forward in sagittal plane, away from shoulder) is the same dir.
-    a = ux * (-math.cos(theta_total)) + uy * (-math.sin(theta_total))
-    b = -uz
-    c = math.hypot(a, b)
-    c_max = L2 + L3 - 1e-4
-    if c > c_max:
-        scale = c_max / max(c, 1e-9)
-        a *= scale
-        b *= scale
-        c = c_max
-    cos_alpha = (L2 * L2 + L3 * L3 - c * c) / (2.0 * L2 * L3)
-    alpha = math.acos(_clamp(cos_alpha, -1.0, 1.0))
-    theta_k = alpha - math.pi
-    cos_beta = (L2 * L2 + c * c - L3 * L3) / (2.0 * L2 * c + 1e-12)
-    beta = math.acos(_clamp(cos_beta, -1.0, 1.0))
-    theta_h = math.atan2(a, b) + beta
-    theta_s = _clamp(theta_s, *_JOINT_LIMITS["shoulder"])
-    theta_h = _clamp(theta_h, *_JOINT_LIMITS["hip"])
-    theta_k = _clamp(theta_k, *_JOINT_LIMITS["knee"])
-    return theta_s, theta_h, theta_k
+    servo = yaml_cfg.get("servo", {})
+    servo_force = float(servo.get("effort_nm", 2.94))
+    servo_velocity = float(servo.get("velocity_rad_s", 5.0))
 
+    # Per-leg stance: hip/knee shared via STANCE_DEG; shoulder from yaml's
+    # shoulder_neutral_deg.
+    stance_per_leg = {
+        leg["id"]: {
+            k: math.radians(v)
+            for k, v in _stance_for(leg["id"], yaml_cfg["legs"]).items()
+        }
+        for leg in yaml_cfg["legs"]
+    }
 
-def splayed_foot_ik(foot, leg_id, splay, splay_signs):
-    """IK for a leg under shoulder splay. Rotates the rest foot around the
-    shoulder mount by splay_signs[leg_id] * splay, then adds the body-frame
-    stride offset from `foot` (relative to NEUTRAL_FOOT[leg_id]). Regular
-    leg_ik resolves shoulder yaw so the splay is kinematically honoured."""
-    if splay == 0.0:
-        return leg_ik(foot, leg_id)
-    s_angle = splay_signs.get(leg_id, 0) * splay
-    nx, ny, nz = NEUTRAL_FOOT[leg_id]
-    sx, sy, _sz = LEG_INFO[leg_id]["mount"]
-    rest_dx = nx - sx
-    rest_dy = ny - sy
-    cos_a = math.cos(s_angle)
-    sin_a = math.sin(s_angle)
-    rest_x = sx + cos_a * rest_dx - sin_a * rest_dy
-    rest_y = sy + sin_a * rest_dx + cos_a * rest_dy
-    dx = foot[0] - nx
-    dy = foot[1] - ny
-    dz = foot[2] - nz
-    foot_ik = (rest_x + dx, rest_y + dy, nz + dz)
-    return leg_ik(foot_ik, leg_id)
+    cfg = RobotConfig(
+        urdf_path=URDF_PATH,
+        legs={},
+        servo_force=servo_force,
+        servo_velocity=servo_velocity,
+        stance_rad=stance_per_leg,
+        leg_ik=ik_v2,
+        leg_fk=fk_v2,
+    )
 
+    for leg in yaml_cfg["legs"]:
+        leg_id = leg["id"]
+        side = leg.get("side", "L")
+        sh_joint = joints[f"{leg_id}_link1_joint"]
+        hip_joint = joints[f"{leg_id}_link2_joint"]
+        knee_joint = joints[f"{leg_id}_link3_joint"]
 
-def gait_joint_targets(t, cfg):
-    """Return {joint_name: angle} for all 12 joints at elapsed time t."""
-    period = cfg["period"]
-    step_length = cfg["step_length"]
-    step_height = cfg["step_height"]
-    duty = cfg["duty"]
-    axis = cfg.get("axis", "y")
-    splay = cfg.get("shoulder_splay", 0.0)
-    splay_signs = cfg.get("splay_signs", {})
-    global_phase = (t / period) % 1.0
-    targets = {}
-    for leg_id, offset in cfg["offsets"].items():
-        phase = (global_phase - offset) % 1.0
-        foot = foot_target(leg_id, phase, step_length, step_height, duty, axis)
-        theta_s, theta_h, theta_k = splayed_foot_ik(foot, leg_id, splay,
-                                                    splay_signs)
-        targets[f"{leg_id}_shoulder_joint"] = theta_s
-        targets[f"{leg_id}_hip_joint"]      = theta_h
-        targets[f"{leg_id}_knee_joint"]     = theta_k
-    return targets
+        mount = sh_joint["xyz"]
+        yaw_offset = sh_joint["rpy"][2]
+        L1_vec = hip_joint["xyz"]
+        L2_vec = knee_joint["xyz"]
+        foot_L3 = foot_L3_R if side == "R" else foot_L3_L
+
+        # Convert URDF user-facing limits (already in the post-Phase-H frame)
+        # into our LegGeom. Each leg's URDF limits differ; per-leg storage.
+        joint_limits = {
+            "shoulder": sh_joint["limits"][:2],
+            "hip": hip_joint["limits"][:2],
+            "knee": knee_joint["limits"][:2],
+        }
+
+        cfg.legs[leg_id] = LegGeom(
+            leg_id=leg_id,
+            mount=mount,
+            yaw_offset=yaw_offset,
+            L1_vec=L1_vec,
+            L2_vec=L2_vec,
+            foot_L3=foot_L3,
+            hip_axis_sign=_axis_sign_y(hip_joint["axis"]),
+            knee_axis_sign=_axis_sign_y(knee_joint["axis"]),
+            joint_limits=joint_limits,
+        )
+
+    cfg.neutral_foot = {
+        leg_id: fk_v2(
+            cfg,
+            leg_id,
+            cfg.stance_rad[leg_id]["shoulder"],
+            cfg.stance_rad[leg_id]["hip"],
+            cfg.stance_rad[leg_id]["knee"],
+        )
+        for leg_id in cfg.legs
+    }
+    # Body spawn height = max foot depth below body origin.
+    cfg.body_height = max(1e-3, -min(f[2] for f in cfg.neutral_foot.values()))
+    return cfg
