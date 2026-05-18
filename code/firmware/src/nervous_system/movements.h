@@ -21,11 +21,10 @@ enum LegId : uint8_t {
 
 struct GaitParams {
     float       period_s;
-    float       step_length_m;
-    float       step_height_m;
+    float       step_length_deg;
+    float       step_height_deg;
     float       duty;
     float       offsets[LEG_COUNT];
-    char        axis;
     const char* label;
 };
 

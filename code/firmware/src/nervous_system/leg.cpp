@@ -18,14 +18,53 @@ Leg::Leg(Adafruit_PWMServoDriver &pwm,
 {}
 
 void Leg::setPose(float x, float y, float z) {
+    // 1. Get the raw IK output in radians
     const JointAngles a = legIK((LegId)id, x, y, z);
-    // Convert IK output (radians, joint zero = STANCE) to servo angles
-    // (degrees, neutral = 90). Per-servo sign / offset calibration TBD.
     const double RAD_TO_DEG_F = 57.29577951308232;
-    const double hipDeg   = 90.0 + a.shoulder * RAD_TO_DEG_F;
-    const double thighDeg = 90.0 + a.hip      * RAD_TO_DEG_F;
-    const double kneeDeg  = 90.0 + a.knee     * RAD_TO_DEG_F;
-    updateServos(hipDeg, thighDeg, kneeDeg);
+
+    // Convert raw IK radians to geometric degrees
+    double targetShoulder = a.shoulder * RAD_TO_DEG_F; 
+    double targetThigh    = a.hip      * RAD_TO_DEG_F;    
+    double targetKnee     = a.knee     * RAD_TO_DEG_F;     
+
+    double servoShoulder, servoThigh, servoKnee;
+
+    // 2. Apply Physical Hardware Mapping (90 degrees = absolute horizontal)
+    if (id == 1 || id == 3) {
+        // Front Left - Back Right Diagonal
+        servoThigh = 90.0 + targetThigh; 
+        servoKnee  = 90.0 - targetKnee;
+
+        // Shoulder uses the Global Polar offset
+        // Front-Left (1) Neutral is +135, Back-Right (2) Neutral is -135
+        double shoulderOffset = (id == 1) ? 135.0 : -135.0;
+        servoShoulder = 90.0 - (targetShoulder - shoulderOffset);
+    } 
+    else {
+        // Front Right - Back Left Diagonal
+        servoThigh = 90.0 - targetThigh;
+        servoKnee  = 90.0 + targetKnee;
+
+        // Shoulder uses the Global Polar offset
+        // Front-Right (0) Neutral is +45, Back-Left (3) Neutral is -45
+        double shoulderOffset = (id == 0) ? 45.0 : -45.0;
+        servoShoulder = 90.0 + (targetShoulder - shoulderOffset);
+    }
+
+    // Add safety clamping here so you never send an angle < 0 or > 180 to the PCA9685
+    servoShoulder = constrain(servoShoulder, 0.0, 180.0);
+    servoThigh    = constrain(servoThigh, 0.0, 180.0);
+    servoKnee     = constrain(servoKnee, 0.0, 180.0);
+
+    // 3. Send the final 0-180 degree angles to the PCA9685 driver
+    updateServos(servoShoulder, servoThigh, servoKnee);
+}
+
+void Leg::setJointAngles(double hip, double thigh, double knee) {
+    hip   = constrain(hip,   0.0, 180.0);
+    thigh = constrain(thigh, 0.0, 180.0);
+    knee  = constrain(knee,  0.0, 180.0);
+    updateServos(hip, thigh, knee);
 }
 
 void Leg::updateServos(double hipAngle, double thighAngle, double kneeAngle){
