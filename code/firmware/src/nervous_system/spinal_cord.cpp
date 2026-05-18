@@ -137,6 +137,8 @@ void SpinalCord::setGait(GaitType g) {
 GaitType SpinalCord::currentGait() const { return currentGait_; }
 
 void SpinalCord::tickGait() {
+    if (currentGait_ == GAIT_TROT) { tickTrot(); return; }
+
     const GaitParams& cfg = GAITS[currentGait_];
     const float t           = (millis() - gaitPhaseStartMs_) / 1000.0f;
     const float globalPhase = fmodf(t / cfg.period_s, 1.0f);
@@ -195,6 +197,117 @@ void SpinalCord::tickGait() {
 
         // Translate math-space angles to servo angles (0–180°).
         // Mirrors the JS translateToServo() function exactly.
+        double servoHip, servoThigh, servoKnee;
+        switch (i) {
+            case LEG_FR:
+                servoHip   = 90.0 + (sh - 45.0);
+                servoThigh = 90.0 - th;
+                servoKnee  = 90.0 + kn;
+                break;
+            case LEG_FL:
+                servoHip   = sh;
+                servoThigh = 90.0 + th;
+                servoKnee  = 90.0 - kn;
+                break;
+            case LEG_RR:
+                servoHip   = 90.0 - (sh + 45.0);
+                servoThigh = 90.0 + th;
+                servoKnee  = 90.0 - kn;
+                break;
+            case LEG_RL:
+                servoHip   = 90.0 + (sh + 135.0);
+                servoThigh = 90.0 - th;
+                servoKnee  = 90.0 + kn;
+                break;
+            default:
+                continue;
+        }
+
+        legs[i]->setJointAngles(servoHip, servoThigh, servoKnee);
+    }
+}
+
+// Port of the validated JS Trot script (v7.5 "strict 4-phase square motion").
+// Front legs use 4 discrete hip positions per cycle with constant lift during swing;
+// rear legs use a continuous hip sweep with sinusoidal lift during swing.
+// All joint deltas are scaled by 2/3 around neutral to match scalePose() in the JS.
+void SpinalCord::tickTrot() {
+    constexpr float STEP_LENGTH = 40.0f;
+    constexpr float STEP_HEIGHT = 50.0f;
+    constexpr float DUTY        = 0.50f;
+    constexpr float PERIOD_S    = 1.5f;
+    constexpr float SCALE       = 2.0f / 3.0f;
+
+    // Phase offsets per leg index [FR, FL, RR, RL] — JS uses fr/bl=0.5, fl/br=0.0.
+    static const float OFFSETS[LEG_COUNT] = { 0.5f, 0.0f, 0.0f, 0.5f };
+
+    // Front leg hip end-points (math degrees), JS values: [FR, FL].
+    static const float HIP_IN[2]  = { 65.0f,  75.0f };
+    static const float HIP_OUT[2] = { 25.0f, 110.0f };
+
+    // Magnitude of forward intent in [0, 1]; sign chooses direction.
+    const float dirY = activeY;
+    const float mag  = fminf(fabsf(dirY), 1.0f);
+
+    const float t           = (millis() - gaitPhaseStartMs_) / 1000.0f;
+    float globalPhase       = fmodf(t / PERIOD_S, 1.0f);
+    if (dirY < 0.0f) globalPhase = 1.0f - globalPhase;  // backward = run cycle in reverse
+
+    // Graceful stop on a clean phase boundary when the user released the stick.
+    if (!isMovingRequested && mag < 0.05f && globalPhase < 0.05f) {
+        leg1.returnToDefaultAngles();
+        leg2.returnToDefaultAngles();
+        leg3.returnToDefaultAngles();
+        leg4.returnToDefaultAngles();
+        robotState = STATE_IDLE;
+        return;
+    }
+
+    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+
+    for (uint8_t i = 0; i < LEG_COUNT; ++i) {
+        const float legPhase = fmodf(globalPhase - OFFSETS[i] + 1.0f, 1.0f);
+
+        float sh = NEUTRAL[i].sh;
+        float th = NEUTRAL[i].th;
+        float kn = NEUTRAL[i].kn;
+        float lift = 0.0f;
+
+        const bool isFront = (i == LEG_FR || i == LEG_FL);
+        if (isFront) {
+            const int idx = (i == LEG_FR) ? 0 : 1;
+            const float hi = HIP_IN[idx];
+            // Scale excursion by joystick magnitude, anchored at hip_in.
+            const float ho = hi + (HIP_OUT[idx] - hi) * mag;
+
+            if      (legPhase >= 0.50f && legPhase <  0.75f) { sh = ho; lift = STEP_HEIGHT * mag; }
+            else if (legPhase >= 0.75f && legPhase <= 1.00f) { sh = hi; lift = STEP_HEIGHT * mag; }
+            else if (legPhase >= 0.00f && legPhase <  0.25f) { sh = hi; lift = 0.0f; }
+            else                                              { sh = ho; lift = 0.0f; }
+        } else {
+            // Rear legs: continuous hip sweep (JS does currentMath[0] -= sweep for br and bl).
+            float sweep, progress;
+            if (legPhase < DUTY) {
+                progress = legPhase / DUTY;
+                sweep    = STEP_LENGTH * (0.5f - progress) * mag;
+            } else {
+                progress = (legPhase - DUTY) / (1.0f - DUTY);
+                sweep    = STEP_LENGTH * (-0.5f + progress) * mag;
+                lift     = sinf(progress * (float)M_PI) * STEP_HEIGHT * mag;
+            }
+            sh -= sweep;
+        }
+
+        // Lift applied to thigh (+) and knee (-), same convention as JS.
+        th += lift;
+        kn -= lift;
+
+        // scalePose: scale (value - neutral) by 2/3 around the neutral pose.
+        sh = NEUTRAL[i].sh + (sh - NEUTRAL[i].sh) * SCALE;
+        th = NEUTRAL[i].th + (th - NEUTRAL[i].th) * SCALE;
+        kn = NEUTRAL[i].kn + (kn - NEUTRAL[i].kn) * SCALE;
+
+        // Math → servo, identical to the JS translateToServo().
         double servoHip, servoThigh, servoKnee;
         switch (i) {
             case LEG_FR:

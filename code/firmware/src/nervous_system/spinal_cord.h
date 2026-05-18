@@ -41,6 +41,7 @@ class SpinalCord{
         uint32_t lastCommandMs;
 
         void tickGait();
+        void tickTrot();
 };
 
 #endif
