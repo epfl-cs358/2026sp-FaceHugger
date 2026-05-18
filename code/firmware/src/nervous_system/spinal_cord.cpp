@@ -51,7 +51,8 @@ SpinalCord::SpinalCord(uint8_t pwm):
     )),
     currentGait_(GAIT_NONE),
     gaitPhaseStartMs_(0),
-    targetX(0.0f), targetY(0.0f), activeX(0.0f), activeY(0.0f),
+    targetX(0.0f), targetY(0.0f), targetYaw(0.0f),
+    activeX(0.0f), activeY(0.0f), activeYaw(0.0f),
     isMovingRequested(false), lastCommandMs(0)
 {
 }
@@ -69,15 +70,15 @@ void SpinalCord::processCommand(String dir) {
     lastCommandMs = millis();
     isMovingRequested = (dir != "STOP");
 
-    if      (dir == "FW")   { targetX =  0.0f; targetY =  1.0f; }
-    else if (dir == "BW")   { targetX =  0.0f; targetY = -1.0f; }
-    else if (dir == "L")    { targetX = -1.0f; targetY =  0.0f; }
-    else if (dir == "R")    { targetX =  1.0f; targetY =  0.0f; }
-    else if (dir == "FW_R") { targetX =  0.7f; targetY =  0.7f; }
-    else if (dir == "FW_L") { targetX = -0.7f; targetY =  0.7f; }
-    else if (dir == "BW_R") { targetX =  0.7f; targetY = -0.7f; }
-    else if (dir == "BW_L") { targetX = -0.7f; targetY = -0.7f; }
-    else if (dir == "STOP") { targetX =  0.0f; targetY =  0.0f; }
+    if      (dir == "FW")   { targetX = 0.0f; targetY =  1.0f; targetYaw =  0.0f; }
+    else if (dir == "BW")   { targetX = 0.0f; targetY = -1.0f; targetYaw =  0.0f; }
+    else if (dir == "L")    { targetX = 0.0f; targetY =  0.0f; targetYaw = -1.0f; }
+    else if (dir == "R")    { targetX = 0.0f; targetY =  0.0f; targetYaw =  1.0f; }
+    else if (dir == "FW_R") { targetX = 0.0f; targetY =  0.0f; targetYaw =  1.0f; }
+    else if (dir == "FW_L") { targetX = 0.0f; targetY =  0.0f; targetYaw = -1.0f; }
+    else if (dir == "BW_R") { targetX = 0.0f; targetY =  0.0f; targetYaw =  1.0f; }
+    else if (dir == "BW_L") { targetX = 0.0f; targetY =  0.0f; targetYaw = -1.0f; }
+    else if (dir == "STOP") { targetX = 0.0f; targetY =  0.0f; targetYaw =  0.0f; }
 }
 
 void SpinalCord::walk()     { robotState = STATE_WALK; }
@@ -103,13 +104,15 @@ void SpinalCord::update() {
     // Deadman's switch: zero targets if no command for 500 ms
     if (millis() - lastCommandMs > 500) {
         isMovingRequested = false;
-        targetX = 0.0f;
-        targetY = 0.0f;
+        targetX   = 0.0f;
+        targetY   = 0.0f;
+        targetYaw = 0.0f;
     }
 
     // Input smoothing
-    activeX += (targetX - activeX) * 0.1f;
-    activeY += (targetY - activeY) * 0.1f;
+    activeX   += (targetX   - activeX)   * 0.1f;
+    activeY   += (targetY   - activeY)   * 0.1f;
+    activeYaw += (targetYaw - activeYaw) * 0.1f;
 
     switch (robotState) {
         case STATE_WALK:
@@ -145,7 +148,7 @@ void SpinalCord::tickGait() {
 
     // Graceful stop: when movement requested is gone and active vector is near zero,
     // wait for a clean phase boundary then return to standing pose.
-    if (!isMovingRequested && fabsf(activeX) < 0.01f && fabsf(activeY) < 0.01f && globalPhase < 0.05f) {
+    if (!isMovingRequested && fabsf(activeX) < 0.01f && fabsf(activeY) < 0.01f && fabsf(activeYaw) < 0.01f && globalPhase < 0.05f) {
         leg1.returnToDefaultAngles();
         leg2.returnToDefaultAngles();
         leg3.returnToDefaultAngles();
@@ -177,11 +180,14 @@ void SpinalCord::tickGait() {
         float th = NEUTRAL[i].th;
         float kn = NEUTRAL[i].kn;
 
-        // Shoulder sweep — forward/back (Y), used by TROT and WALK only.
-        // FR(0) and FL(1): += sweep, RR(2) and RL(3): -= sweep
+        // Shoulder sweep — forward/back (Y) + yaw rotation.
+        // Front legs add the combined signal, rear legs subtract it.
+        // Right side (FR, RR) adds yaw contribution; left side (FL, RL) subtracts it.
+        // This makes opposite shoulders sweep in opposite directions → body yaws.
         if (!isCrab) {
-            if (i == LEG_FR || i == LEG_FL) sh += sweep * activeY;
-            else                             sh -= sweep * activeY;
+            const float fwdDir = (i == LEG_FR || i == LEG_FL) ? 1.0f : -1.0f;
+            const float yawDir = (i == LEG_FR || i == LEG_RR) ? 1.0f : -1.0f;
+            sh += fwdDir * sweep * (activeY + yawDir * activeYaw);
         }
 
         // Thigh sweep — lateral (X).
@@ -254,7 +260,7 @@ void SpinalCord::tickTrot() {
     if (dirY < 0.0f) globalPhase = 1.0f - globalPhase;  // backward = run cycle in reverse
 
     // Graceful stop on a clean phase boundary when the user released the stick.
-    if (!isMovingRequested && mag < 0.05f && globalPhase < 0.05f) {
+    if (!isMovingRequested && mag < 0.05f && fabsf(activeYaw) < 0.05f && globalPhase < 0.05f) {
         leg1.returnToDefaultAngles();
         leg2.returnToDefaultAngles();
         leg3.returnToDefaultAngles();
@@ -285,15 +291,19 @@ void SpinalCord::tickTrot() {
             else if (legPhase >= 0.00f && legPhase <  0.25f) { sh = hi; lift = 0.0f; }
             else                                              { sh = ho; lift = 0.0f; }
         } else {
-            // Rear legs: continuous hip sweep (JS does currentMath[0] -= sweep for br and bl).
+            // Rear legs: continuous hip sweep scaled by effective magnitude.
+            // RR (right side) adds yaw, RL (left side) subtracts it — negative effMag
+            // naturally reverses the sweep direction, producing opposite motion on each side.
+            const float yawSign = (i == LEG_RR) ? 1.0f : -1.0f;
+            const float effMag  = fmaxf(-1.0f, fminf(mag + yawSign * activeYaw, 1.0f));
             float sweep, progress;
             if (legPhase < DUTY) {
                 progress = legPhase / DUTY;
-                sweep    = STEP_LENGTH * (0.5f - progress) * mag;
+                sweep    = STEP_LENGTH * (0.5f - progress) * effMag;
             } else {
                 progress = (legPhase - DUTY) / (1.0f - DUTY);
-                sweep    = STEP_LENGTH * (-0.5f + progress) * mag;
-                lift     = sinf(progress * (float)M_PI) * STEP_HEIGHT * mag;
+                sweep    = STEP_LENGTH * (-0.5f + progress) * effMag;
+                lift     = sinf(progress * (float)M_PI) * STEP_HEIGHT * fabsf(effMag);
             }
             sh -= sweep;
         }

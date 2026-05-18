@@ -35,8 +35,10 @@ class SpinalCord{
         // Vector timing and state
         float targetX;
         float targetY;
+        float targetYaw;
         float activeX;
         float activeY;
+        float activeYaw;
         bool isMovingRequested;
         uint32_t lastCommandMs;
 
