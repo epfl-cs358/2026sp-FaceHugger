@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     },
     actualDropDownContainer: {
         position: 'absolute',
-        top: dropDownMenuButtonHeight, // button height + its margin
+        bottom: dropDownMenuButtonHeight, // open upward; trigger sits at bottom of screen
         right: 10,
         justifyContent: 'center',
         alignItems: 'center',
