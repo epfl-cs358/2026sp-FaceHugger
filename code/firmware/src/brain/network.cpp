@@ -65,7 +65,10 @@ void handleParsedMessage(uint8_t * payload) {
     JsonDocument doc; // ArduinoJson 7 syntax
     DeserializationError error = deserializeJson(doc, payload);
 
-    if (error) return;
+    if (error) {
+        Serial.println("Failed to parse JSON");
+        return;
+    }
 
     int type = doc["T"];
 
@@ -73,15 +76,29 @@ void handleParsedMessage(uint8_t * payload) {
         case CMD_STATE:
             Serial.printf("State Change Request: %d\n", (int)doc["s"]);
             break;
+            
         case CMD_CALIBRATE: { 
             int channel = doc["id"] | 0;
             int angle = doc["a"] | 90; 
 
             spinalCord.applyCalibration(channel, angle);
-            Serial.printf("Calibrating servo %d to %d", channel, angle);
             break;
         }
+        
         case CMD_MOVE: {
+            // Extract the direction string 
+            String dir = doc["dir"] | "";
+            
+            spinalCord.walk(); 
+            
+            
+            // Send the intent to the 4-Phase Engine
+            spinalCord.processCommand(dir);
+            Serial.printf("Move -> Dir: %s", dir.c_str());
+            break;
+        }
+        
+        case CMD_GAIT_MODE: {
             if (doc["g"].is<int>()) {
                 int g = doc["g"];
                 if (g >= GAIT_NONE && g <= GAIT_CRAB) {
@@ -91,9 +108,9 @@ void handleParsedMessage(uint8_t * payload) {
                     }
                 }
             }
-            Serial.printf("Moving -> X:%.2f Y:%.2f\n", (float)doc["x"], (float)doc["y"]);
             break;
         }
+        
         case CMD_TELEMETRY:
             Serial.printf("FSM state: %d, Battery voltage: %lf, In stabilization mode: %s\n", 
                 (int)doc["s"], (float)doc["b"], (int)doc["a"] ? "true": "false");

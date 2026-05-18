@@ -1,7 +1,7 @@
 import { StyleSheet, View } from "react-native";
 import Joystick, { JoystickAction, JoystickProps } from "../components/joystick/Joystick";
-import { BLMovementPacket, BRMovementPacket, BWMovementPacket, FLMovementPacket, FRMovementPacket, FWMovementPacket, LeftMovementPacket, RightMovementPacket } from "../api/api-messages";
-import { GaitMode } from "../api/api-types";
+import { BLMovementPacket, BRMovementPacket, BWMovementPacket, CrabGaitPacket, FLMovementPacket, FRMovementPacket, FWMovementPacket, LeftMovementPacket, RightMovementPacket, TrotGaitPacket } from "../api/api-messages";
+import { GaitIntegration, GaitMode } from "../api/api-types";
 import { DropDownMenu, DropDownMenuElement, DropDownMenuProps } from "../components/dropdown/DropdownMenu";
 import { useRobotStore } from "../store/robotStore";
 import { sendCommand } from "../services/socket";
@@ -62,13 +62,21 @@ export default function GaitControl(){
     } as JoystickProps;
 
     //Gait mode drop down elements
+    const gaitPackets: Record<keyof typeof GaitMode, GaitIntegration> = {
+        TROT: TrotGaitPacket,
+        CRAB: CrabGaitPacket,
+    };
 
     const dropDownElements = Object.keys(GaitMode)
     .filter(key => isNaN(Number(key)))
     .map(key => ({
         key: key,
         elementTitle: key,
-        onClick: () => setChosenGaitMode(GaitMode[key as keyof typeof GaitMode])
+        onClick: () => {
+            const mode = GaitMode[key as keyof typeof GaitMode];
+            setChosenGaitMode(mode);
+            sendCommand(JSON.stringify(gaitPackets[key as keyof typeof GaitMode]));
+        }
     } as DropDownMenuElement));
 
     const dropdownMenuProps = {
