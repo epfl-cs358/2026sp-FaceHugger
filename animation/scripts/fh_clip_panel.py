@@ -400,51 +400,62 @@ def _exported_gaits_dir(clip_name):
 
 
 # ---------------------------------------------------------------------------
-# N-pose forward kinematics (hardware neutral standing pose)
+# N-pose: foot targets from the RIG's own kinematics (not a hand model)
 # ---------------------------------------------------------------------------
+#
+# An earlier version used a hand-rolled planar FK with guessed mount/yaw
+# constants. It was wrong by ~340 mm/leg (inverted Z, wrong quadrants:
+# legs folded up/in instead of crouching out/down) because its frame and
+# sign conventions did not match the rig.
+#
+# The rig (URDF) is the kinematic source of truth (CLAUDE.md). N in
+# convention.json is in the rig's joint-angle space: Convention A makes
+# every leg uniform on bone-local Z, and Part 2's `scaled = N+(raw-N)*s`
+# means raw == N at the neutral anchor (the per-leg translateToServo
+# offsets cancel there). So the correct foot target is simply "where the
+# IK chain tip ends up when the 12 joint bones are posed at N".
+#
+# The IK constraint on `*_link3` uses use_tail=True targeting
+# foot_ik (== foot_target), so the IK chain tip IS the link3 bone tail.
+# Pose the bones at N with the constraint stack muted (pure FK), read
+# each link3 tail in world, restore. Joints whose N exceeds the URDF
+# limit are clamped by LIMIT_ROTATION when the IK re-solves — accepted
+# as best-effort (the rig cannot represent a pose outside its own
+# limits; e.g. hip ±45° vs N≈-60°).
 
-# Simplified planar leg model used only to place the IK foot targets at the
-# hardware-neutral stance; the rig's IK then solves the real geometry.
-# Link lengths (mm) and shoulder-mount world positions are fixed rig
-# geometry (from the URDF) — NOT the per-robot N/SCALE/CHANNELS, which
-# stay in convention.json.
-_FK_L1 = 80.0  # shoulder -> hip
-_FK_L2 = 75.0  # hip -> knee
-_FK_L3 = 77.0  # knee -> foot tip
-_FK_MOUNT_MM = {
-    "fl": (-50.4, 43.2, 36.8),
-    "fr": (50.4, 43.2, 36.8),
-    "bl": (-50.4, -43.2, 36.8),
-    "br": (50.4, -43.2, 36.8),
-}
-# Shoulder rest yaw baked into the URDF joint origin (Convention A).
-_FK_YAW_OFFSET_DEG = {"fl": -45.0, "fr": 45.0, "bl": -135.0, "br": 135.0}
+_N_POSE_LINKS = ("link1", "link2", "link3")  # = [shoulder, hip, knee]
 
 
-def _n_pose_foot_targets(neutral_joint_deg):
-    """{leg: (x, y, z) mm} foot-tip world position at the hardware-neutral
-    pose, via the planar FK in the spec. `neutral_joint_deg[leg]` is
-    [shoulder, hip, knee] in degrees (from convention.json).
+def _n_pose_foot_targets(arm, neutral_joint_deg):
+    """{leg: (x, y, z) mm} world position of each leg's link3 bone tail
+    (the IK chain tip) when the 12 joint bones are posed at the N joint
+    angles via pure FK. Restores all bone rotations + constraint mute
+    states before returning, so it has no lasting effect on the rig."""
+    saved_rot = {}
+    saved_mute = []
+    for leg in ("fl", "fr", "bl", "br"):
+        for idx, link in enumerate(_N_POSE_LINKS):
+            pb = arm.pose.bones[f"{leg}_{link}"]
+            saved_rot[pb.name] = pb.rotation_euler.copy()
+            for c in pb.constraints:
+                saved_mute.append((c, c.mute))
+                c.mute = True
+            # joint axis == bone-local Z for every joint (see
+            # _JOINT_AXIS_EULER_IDX); N[leg][idx] is that angle in deg.
+            pb.rotation_euler = (0.0, 0.0, math.radians(neutral_joint_deg[leg][idx]))
+    bpy.context.view_layer.update()
 
-    The spec gives hip_y / foot_x / foot_z explicitly; foot_y mirrors
-    foot_x with sin (same way hip_y mirrors hip_x) — a 3-D foot position
-    needs the in-plane component on both world axes."""
     out = {}
-    for leg, (mx, my, mz) in _FK_MOUNT_MM.items():
-        shoulder, hip, knee = neutral_joint_deg[leg]
-        yaw = math.radians(_FK_YAW_OFFSET_DEG[leg] + shoulder)
-        hip_r = math.radians(hip)
-        knee_r = math.radians(knee)
-        hip_x = mx + _FK_L1 * math.cos(yaw)
-        hip_y = my + _FK_L1 * math.sin(yaw)
-        hip_z = mz
-        reach = _FK_L2 * math.cos(hip_r) + _FK_L3 * math.cos(hip_r + knee_r)
-        drop = _FK_L2 * math.sin(hip_r) + _FK_L3 * math.sin(hip_r + knee_r)
-        out[leg] = (
-            hip_x + math.cos(yaw) * reach,
-            hip_y + math.sin(yaw) * reach,
-            hip_z - drop,
-        )
+    for leg in ("fl", "fr", "bl", "br"):
+        pb = arm.pose.bones[f"{leg}_link3"]
+        w = arm.matrix_world @ pb.tail  # link3 tail in world (mm)
+        out[leg] = (w.x, w.y, w.z)
+
+    for c, mute in saved_mute:
+        c.mute = mute
+    for name, rot in saved_rot.items():
+        arm.pose.bones[name].rotation_euler = rot
+    bpy.context.view_layer.update()
     return out
 
 
@@ -650,7 +661,12 @@ class FH_OT_set_n_pose(bpy.types.Operator):
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
 
-        targets = _n_pose_foot_targets(convention["neutral_joint_deg"])
+        arm = _find_arm_obj()
+        if arm is None:
+            self.report({"ERROR"}, f"Armature '{_ARM_OBJ_NAME}' not found")
+            return {"CANCELLED"}
+
+        targets = _n_pose_foot_targets(arm, convention["neutral_joint_deg"])
         moved = []
         missing = []
         for leg, (fx, fy, fz) in targets.items():
@@ -669,10 +685,28 @@ class FH_OT_set_n_pose(bpy.types.Operator):
 
         context.view_layer.update()  # let the IK solve to the new targets
         _redraw_view3d(context)
+
+        # Report how far the live (clamped) pose lands from N so the
+        # animator sees the best-effort residual where N exceeds the
+        # URDF joint limits (hips ~±45° vs N≈-60°, bl shoulder, ...).
+        dg = context.evaluated_depsgraph_get()
+        ang = _read_bone_angles(arm.evaluated_get(dg))
+        n = convention["neutral_joint_deg"]
+        worst = 0.0
+        for leg in ("fl", "fr", "bl", "br"):
+            for idx, link in enumerate(_N_POSE_LINKS):
+                worst = max(worst, abs(ang[f"{leg}_{link}"] - n[leg][idx]))
+
         if missing:
             self.report(
                 {"WARNING"},
                 f"Set N pose for {len(moved)}/4 legs — missing: {', '.join(missing)}",
+            )
+        elif worst > 2.0:
+            self.report(
+                {"WARNING"},
+                f"Rig set to N pose (best-effort: up to {worst:.0f}° clamped "
+                "by URDF joint limits — see convention.json vs rig limits)",
             )
         else:
             self.report({"INFO"}, "Rig set to N pose (hardware neutral)")
