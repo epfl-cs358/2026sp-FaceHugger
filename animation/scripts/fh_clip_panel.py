@@ -101,8 +101,20 @@ _DELTA_THRESHOLD_DEG = 5.0
 _HEATMAP_MID_DEG = 5.0
 _HEATMAP_HIGH_DEG = 20.0
 
-# Module-level state for the heatmap handler.
+# The heatmap colours the per-joint *servo* meshes. Only link1 (shoulder)
+# and link3 (knee) export a discrete `<bone>__servo` mesh; link2 (the hip)
+# has NO servo mesh — that servo was merged into a parent body during the
+# CAD→URDF "combine parts" step. Consequence: the hip's activity is NOT
+# visualised (8 of 12 joints are shown). This target was chosen
+# deliberately over the joint bones (hidden armature) / leg-segment meshes.
+_SERVO_MESH_FMT = "{bone}__servo"
+_HEATMAP_NEUTRAL_COLOR = (1.0, 1.0, 1.0, 1.0)
+
+# Module-level state for the heatmap handler / lossless toggle-off.
 _heatmap_prev_angles: dict = {}
+_heatmap_saved_obj_color: dict = {}  # mesh name -> prior obj.color tuple
+_heatmap_saved_shading: list = []  # [(View3DShading, prior color_type)]
+_heatmap_hip_gap_warned = False
 
 
 # ---------------------------------------------------------------------------
@@ -159,17 +171,35 @@ def _read_bone_angles(arm_eval):
     return angles
 
 
-def _set_bone_color(pbone, rgb):
-    """Apply an RGB tuple to a pose bone via BoneColor.custom."""
-    r, g, b = rgb
-    pbone.color.palette = "CUSTOM"
-    pbone.color.custom.normal = (r, g, b)
-    pbone.color.custom.select = (
-        min(r + 0.2, 1.0),
-        min(g + 0.2, 1.0),
-        min(b + 0.2, 1.0),
-    )
-    pbone.color.custom.active = (1.0, 1.0, 1.0)
+def _servo_meshes():
+    """{bone_name: servo mesh object} for the joints that have a servo
+    mesh. link2 (hip) is intentionally absent — it has no `__servo` mesh."""
+    out = {}
+    for name in JOINT_BONES:
+        obj = bpy.data.objects.get(_SERVO_MESH_FMT.format(bone=name))
+        if obj is not None:
+            out[name] = obj
+    return out
+
+
+def _set_servo_color(obj, rgb):
+    """Apply an RGB tuple to a mesh object's viewport display colour."""
+    obj.color = (rgb[0], rgb[1], rgb[2], 1.0)
+
+
+def _iter_view3d_shadings():
+    """Yield every View3D space's shading block (none in --background)."""
+    for wm in bpy.data.window_managers:
+        for win in wm.windows:
+            screen = win.screen
+            if screen is None:
+                continue
+            for area in screen.areas:
+                if area.type != "VIEW_3D":
+                    continue
+                for space in area.spaces:
+                    if space.type == "VIEW_3D":
+                        yield space.shading
 
 
 def _delta_to_rgb(delta_deg):
@@ -182,15 +212,32 @@ def _delta_to_rgb(delta_deg):
     return (0.90, 0.15, 0.05)
 
 
-def _reset_bone_colors():
-    """Restore DEFAULT palette on all 12 joint bones."""
-    arm_obj = _find_arm_obj()
-    if arm_obj is None:
-        return
-    for name in JOINT_BONES:
-        pbone = arm_obj.pose.bones.get(name)
-        if pbone is not None:
-            pbone.color.palette = "DEFAULT"
+def _enter_servo_heatmap():
+    """Snapshot prior servo colours + View3D solid-shading colour mode,
+    then switch viewports to per-Object colour so obj.color shows."""
+    _heatmap_saved_obj_color.clear()
+    for name, obj in _servo_meshes().items():
+        _heatmap_saved_obj_color[obj.name] = tuple(obj.color)
+    _heatmap_saved_shading.clear()
+    for shading in _iter_view3d_shadings():
+        _heatmap_saved_shading.append((shading, shading.color_type))
+        shading.color_type = "OBJECT"
+
+
+def _reset_servo_heatmap():
+    """Lossless toggle-off: restore servo colours and the prior
+    View3D shading colour mode captured by _enter_servo_heatmap."""
+    for name, prev in _heatmap_saved_obj_color.items():
+        obj = bpy.data.objects.get(name)
+        if obj is not None:
+            obj.color = prev
+    _heatmap_saved_obj_color.clear()
+    for shading, prev in _heatmap_saved_shading:
+        try:
+            shading.color_type = prev
+        except (ReferenceError, AttributeError):
+            pass  # space/area was closed while the heatmap was active
+    _heatmap_saved_shading.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -204,24 +251,37 @@ def _heatmap_handler(scene, depsgraph):
         return
     arm_eval = arm_obj.evaluated_get(depsgraph)
     current = _read_bone_angles(arm_eval)
+    servos = _servo_meshes()
     for name, angle in current.items():
+        mesh = servos.get(name)  # link2 (hip) has no servo mesh -> skipped
+        if mesh is None:
+            continue
         delta = abs(angle - _heatmap_prev_angles.get(name, angle))
-        pbone = arm_obj.pose.bones.get(name)
-        if pbone is not None:
-            _set_bone_color(pbone, _delta_to_rgb(delta))
+        _set_servo_color(mesh, _delta_to_rgb(delta))
     _heatmap_prev_angles.update(current)
 
 
 def _toggle_heatmap(self, context):
-    """BoolProperty update callback — registers or removes _heatmap_handler."""
+    """BoolProperty update callback — registers or removes _heatmap_handler
+    and manages the servo-mesh colouring lifecycle."""
+    global _heatmap_hip_gap_warned
     handlers = bpy.app.handlers.frame_change_post
     if self.fh_heatmap_active:
+        _enter_servo_heatmap()
         if _heatmap_handler not in handlers:
             handlers.append(_heatmap_handler)
+        if not _heatmap_hip_gap_warned:
+            _heatmap_hip_gap_warned = True
+            hip = [b for b in JOINT_BONES if b.endswith("_link2")]
+            print(
+                "[fh_clip_panel] Activity Heatmap: link2/hip joints "
+                f"({', '.join(hip)}) have no `__servo` mesh and are NOT "
+                "shown — only the 8 shoulder/knee servos are coloured."
+            )
     else:
         if _heatmap_handler in handlers:
             handlers.remove(_heatmap_handler)
-        _reset_bone_colors()
+        _reset_servo_heatmap()
         _heatmap_prev_angles.clear()
 
 
@@ -408,6 +468,77 @@ class FH_OT_rename_clip(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class FH_OT_new_clip(bpy.types.Operator):
+    """Create a brand-new clip from scratch: 5 fresh Actions (one per
+    control object) keyed at the current pose, then apply them. The only
+    authoring entry point that does NOT need an existing active clip —
+    Duplicate and Rename both do, so this breaks the zero-clips
+    chicken-and-egg."""
+
+    bl_idname = "fh.new_clip"
+    bl_label = "New Clip"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        new_name = context.scene.fh_new_clip_name.strip()
+        if not new_name:
+            self.report({"ERROR"}, "Enter a new clip name first")
+            return {"CANCELLED"}
+        if any(bpy.data.actions.get(f"{new_name}__{t}") for t in CLIP_TARGETS):
+            self.report({"ERROR"}, f"Clip '{new_name}' already exists")
+            return {"CANCELLED"}
+        missing_objs = [t for t in CLIP_TARGETS if bpy.data.objects.get(t) is None]
+        if missing_objs:
+            self.report(
+                {"ERROR"},
+                f"Cannot create clip — missing rig objects: {', '.join(missing_objs)}",
+            )
+            return {"CANCELLED"}
+
+        # One fresh Action + OBJECT slot per control object. The slot
+        # identifier auto-becomes `OB<target>` — exactly what assign_clip()
+        # looks up, so the wiring is identical to every other clip.
+        for target in CLIP_TARGETS:
+            action = bpy.data.actions.new(f"{new_name}__{target}")
+            action.slots.new(id_type="OBJECT", name=target)
+
+        assigned, missing = assign_clip(new_name)
+
+        # Key the current pose so the clip is non-empty and starts at the
+        # pose the animator is looking at (rest pose by convention — see
+        # API_ANIMATION_SPEC.md §4). Keys land in the just-assigned
+        # action/slot of each object.
+        frame = context.scene.frame_current
+        keyed = 0
+        for target in CLIP_TARGETS:
+            obj = bpy.data.objects.get(target)
+            if obj is None:
+                continue
+            obj.keyframe_insert("location", frame=frame)
+            if obj.rotation_mode == "QUATERNION":
+                obj.keyframe_insert("rotation_quaternion", frame=frame)
+            elif obj.rotation_mode == "AXIS_ANGLE":
+                obj.keyframe_insert("rotation_axis_angle", frame=frame)
+            else:
+                obj.keyframe_insert("rotation_euler", frame=frame)
+            keyed += 1
+
+        if missing:
+            self.report(
+                {"WARNING"},
+                f"Created '{new_name}' ({assigned}/{len(CLIP_TARGETS)} "
+                f"applied, {keyed} keyed) — missing: {', '.join(missing)}",
+            )
+        else:
+            self.report(
+                {"INFO"},
+                f"Created clip '{new_name}' — {keyed} objects keyed at frame {frame}",
+            )
+        context.scene.fh_new_clip_name = ""
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
 # ---------------------------------------------------------------------------
 # Operator — export active clip
 # ---------------------------------------------------------------------------
@@ -567,6 +698,9 @@ class FH_PT_clip_panel(bpy.types.Panel):
         layout.separator()
         layout.label(text="New clip name:")
         layout.prop(context.scene, "fh_new_clip_name", text="")
+        # New Clip works with zero existing clips (always enabled);
+        # Duplicate/Rename act on the active clip.
+        layout.operator(FH_OT_new_clip.bl_idname, icon="ADD")
         row = layout.row(align=True)
         row.enabled = bool(active)
         row.operator(FH_OT_duplicate_clip.bl_idname, icon="DUPLICATE")
@@ -599,6 +733,7 @@ class FH_PT_clip_panel(bpy.types.Panel):
 
 CLASSES = (
     FH_OT_apply_clip,
+    FH_OT_new_clip,
     FH_OT_duplicate_clip,
     FH_OT_rename_clip,
     FH_OT_export_clip,
@@ -611,7 +746,7 @@ def register():
         bpy.utils.register_class(cls)
     bpy.types.Scene.fh_new_clip_name = bpy.props.StringProperty(
         name="New Clip Name",
-        description="Used by Duplicate Clip and Rename Active Clip",
+        description="Used by New Clip, Duplicate Clip and Rename Active Clip",
         default="",
     )
     bpy.types.Scene.fh_max_simultaneous_servos = bpy.props.IntProperty(
@@ -623,7 +758,12 @@ def register():
     )
     bpy.types.Scene.fh_heatmap_active = bpy.props.BoolProperty(
         name="Activity Heatmap",
-        description="Color joint bones by per-frame angle delta: green=low, orange=mid, red=high",
+        description=(
+            "Color the per-joint servo meshes by per-frame angle delta "
+            "(green=low, orange=mid, red=high). Note: link2/hip has no "
+            "servo mesh, so 8 of 12 joints are shown. Switches viewports "
+            "to Object colour while active; restored on toggle-off"
+        ),
         default=False,
         update=_toggle_heatmap,
     )
@@ -634,7 +774,7 @@ def unregister():
     handlers = bpy.app.handlers.frame_change_post
     if _heatmap_handler in handlers:
         handlers.remove(_heatmap_handler)
-    _reset_bone_colors()
+    _reset_servo_heatmap()
     _heatmap_prev_angles.clear()
 
     for cls in reversed(CLASSES):
