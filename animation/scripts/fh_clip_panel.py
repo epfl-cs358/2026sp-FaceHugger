@@ -47,6 +47,8 @@ bl_info = {
 }
 
 import csv
+import datetime
+import json
 import math
 import os
 
@@ -355,6 +357,49 @@ def _redraw_view3d(context):
 
 
 # ---------------------------------------------------------------------------
+# Paths + hardware convention (single source of truth: convention.json)
+# ---------------------------------------------------------------------------
+
+
+def _animation_dir():
+    """The repo's animation/ directory. Prefer the saved .blend's folder
+    (fh_rigged_latest.blend lives in animation/); fall back to this
+    script's grandparent (animation/scripts/ -> animation/)."""
+    if bpy.data.filepath:
+        return os.path.dirname(bpy.path.abspath(bpy.data.filepath))
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _convention_path():
+    return os.path.join(_animation_dir(), "convention.json")
+
+
+def _load_convention():
+    """Load animation/convention.json. Raises ValueError on missing/bad
+    file so callers can report it. N, SCALE and CHANNELS are NEVER
+    hardcoded in Python — this is their only source."""
+    path = _convention_path()
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+    except FileNotFoundError as e:
+        raise ValueError(f"convention.json not found at {path}") from e
+    except json.JSONDecodeError as e:
+        raise ValueError(f"convention.json is not valid JSON: {e}") from e
+    for key in ("neutral_joint_deg", "scale", "channels"):
+        if key not in data:
+            raise ValueError(f"convention.json missing required key '{key}'")
+    return data
+
+
+def _exported_gaits_dir(clip_name):
+    """animation/exported_gaits/<clip_name>/, created if absent."""
+    out = os.path.join(_animation_dir(), "exported_gaits", clip_name)
+    os.makedirs(out, exist_ok=True)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Operators — clip management
 # ---------------------------------------------------------------------------
 
@@ -540,12 +585,197 @@ class FH_OT_new_clip(bpy.types.Operator):
 
 
 # ---------------------------------------------------------------------------
+# LAYER 1 — pure Blender data extraction (no hardware knowledge)
+# ---------------------------------------------------------------------------
+
+
+def bake_clip(clip_name, context):
+    """Step through every frame of `clip_name`, evaluate the depsgraph and
+    read the IK-solved joint angles. Returns a list of row dicts:
+
+        [{"frame": 1, "time_ms": 0, "fl_link1": 0.0, "fl_link2": 0.0, ...},
+         ...]
+
+    Pure data extraction — knows nothing about servos, scaling or
+    channels. Raises ValueError if the rig/clip is not exportable."""
+    scene = context.scene
+    arm_obj = _find_arm_obj()
+    if arm_obj is None:
+        raise ValueError(f"Armature '{_ARM_OBJ_NAME}' not found in scene")
+    action = clip_action(clip_name, "body_ctrl")
+    if action is None:
+        raise ValueError(f"No body_ctrl action for clip '{clip_name}'")
+
+    frame_start = int(action.frame_range[0])
+    frame_end = int(action.frame_range[1])
+    fps = scene.render.fps / scene.render.fps_base
+
+    original_frame = scene.frame_current
+    rows = []
+    for frame in range(frame_start, frame_end + 1):
+        scene.frame_set(frame)
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        arm_eval = arm_obj.evaluated_get(depsgraph)
+        angles = _read_bone_angles(arm_eval)
+        time_ms = round((frame - frame_start) / fps * 1000)
+        rows.append({"frame": frame, "time_ms": time_ms, **angles})
+    scene.frame_set(original_frame)
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# LAYER 2 — converters: baked rows -> animation/exported_gaits/<clip>/
+# ---------------------------------------------------------------------------
+
+_LEGS = ("fr", "fl", "br", "bl")  # JS playback / channel order
+
+
+def to_csv(frames, clip_name):
+    """Raw bone angles, one row per frame (unchanged legacy format)."""
+    path = os.path.join(_exported_gaits_dir(clip_name), f"{clip_name}.csv")
+    fieldnames = ["frame", "time_ms"] + JOINT_BONES
+    with open(path, "w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in frames:
+            writer.writerow(
+                {
+                    k: (f"{row[k]:.4f}" if k in JOINT_BONES else row[k])
+                    for k in fieldnames
+                }
+            )
+    return path
+
+
+def to_c_header(frames, clip_name, convention):
+    """Static C array of RAW bone angles (unchanged legacy format). The
+    `convention` argument is accepted for a uniform converter signature;
+    the firmware header intentionally stays raw — hardware conversion is
+    the JS layer's job, not the C array's."""
+    del convention  # intentionally unused — header stays raw
+    path = os.path.join(_exported_gaits_dir(clip_name), f"{clip_name}.h")
+    safe = clip_name.upper().replace("-", "_").replace(" ", "_")
+    guard = f"FH_CLIP_{safe}_H"
+    c_sym = f"fh_clip_{clip_name.lower().replace('-', '_').replace(' ', '_')}"
+    frame_count = len(frames)
+    bone_count = len(JOINT_BONES)
+    fr0 = frames[0]["frame"] if frames else 0
+    fr1 = frames[-1]["frame"] if frames else 0
+
+    h_lines = [
+        f"#ifndef {guard}",
+        f"#define {guard}",
+        "/* Auto-generated by FH Clip Panel — do not edit */",
+        f"/* clip: {clip_name} | frames: {fr0}..{fr1} */",
+        f"/* bone order: {', '.join(JOINT_BONES)} */",
+        "",
+        f"#define FH_CLIP_{safe}_FRAMES {frame_count}",
+        f"#define FH_CLIP_{safe}_BONES  {bone_count}",
+        "",
+        f"static const float {c_sym}[{frame_count}][{bone_count}] = {{",
+    ]
+    for row in frames:
+        vals = ", ".join(f"{row[b]:8.4f}f" for b in JOINT_BONES)
+        h_lines.append(f"    {{{vals}}},  /* f{row['frame']}, t={row['time_ms']}ms */")
+    h_lines += ["};", "", f"#endif /* {guard} */", ""]
+    with open(path, "w") as fh:
+        fh.write("\n".join(h_lines))
+    return path
+
+
+def _frame_to_servo(row, convention):
+    """One baked row -> {leg: [servo0, servo1, servo2] ints} applying:
+    (1) scale-from-neutral, (2) translateToServo, (3) round."""
+    neutral = convention["neutral_joint_deg"]
+    scale = convention["scale"]
+    out = {}
+    for leg in _LEGS:
+        n = neutral[leg]  # [shoulder, hip, knee] deg at hardware neutral
+        raw = [row[f"{leg}_link1"], row[f"{leg}_link2"], row[f"{leg}_link3"]]
+        # 1. compress movement toward N
+        sh, th, kn = (n[j] + (raw[j] - n[j]) * scale for j in range(3))
+        # 2. translateToServo (mirror/offset per leg side)
+        if leg == "fl":
+            servo = [sh, 90 + th, 90 - kn]
+        elif leg == "fr":
+            servo = [90 + (sh - 45), 90 - th, 90 + kn]
+        elif leg == "bl":
+            servo = [90 + (sh + 135), 90 - th, 90 + kn]
+        else:  # br
+            servo = [90 - (sh + 45), 90 + th, 90 - kn]
+        # 3. integer servo degrees
+        out[leg] = [round(v) for v in servo]
+    return out
+
+
+def to_js(frames, clip_name, convention):
+    """Self-contained browser-console JS that plays the clip live over
+    WebSocket. Applies the full hardware conversion (scale-from-neutral,
+    translateToServo, round). N/SCALE/CHANNELS come from convention.json."""
+    path = os.path.join(_exported_gaits_dir(clip_name), f"{clip_name}.js")
+    ch = convention["channels"]
+    today = datetime.date.today().isoformat()
+
+    clip_lines = []
+    for row in frames:
+        s = _frame_to_servo(row, convention)
+        legs = ", ".join(
+            f"{leg}:[{s[leg][0]},{s[leg][1]},{s[leg][2]}]" for leg in _LEGS
+        )
+        clip_lines.append(f"  {{ t: {row['time_ms']}, {legs} }},")
+
+    ch_str = ", ".join(
+        f"{leg}:[{ch[leg][0]},{ch[leg][1]},{ch[leg][2]}]" for leg in _LEGS
+    )
+
+    js = f"""// FaceHugger clip: {clip_name}
+// Generated {today} from Blender animation
+// Paste into browser console while connected to
+// FaceHugger_Net (ws://192.168.4.1:81) to play
+
+const ws = new WebSocket("ws://192.168.4.1:81");
+const CHANNELS = {{ {ch_str} }};
+
+const CLIP = [
+{chr(10).join(clip_lines)}
+];
+
+let i = 0;
+function playFrame() {{
+  if (i >= CLIP.length) {{ i = 0; }}
+  const frame = CLIP[i++];
+  for (const leg of ["fr", "fl", "br", "bl"]) {{
+    const angles = frame[leg];
+    for (let j = 0; j < 3; j++) {{
+      if (ws.readyState === WebSocket.OPEN) {{
+        ws.send(JSON.stringify({{
+          "T": 4,
+          "id": CHANNELS[leg][j],
+          "a": angles[j]
+        }}));
+      }}
+    }}
+  }}
+}}
+
+ws.onopen = () => {{
+  console.log("Connected. Playing {clip_name}...");
+  setInterval(playFrame, 30);
+}};
+"""
+    with open(path, "w") as fh:
+        fh.write(js)
+    return path
+
+
+# ---------------------------------------------------------------------------
 # Operator — export active clip
 # ---------------------------------------------------------------------------
 
 
 class FH_OT_export_clip(bpy.types.Operator):
-    """Bake IK for the active clip and write <clip>.csv + <clip>.h next to the .blend file."""
+    """Bake the active clip once, then write the enabled outputs to
+    animation/exported_gaits/<clip>/ (.csv / .h / .js)."""
 
     bl_idname = "fh.export_clip"
     bl_label = "Export Active Clip"
@@ -558,41 +788,21 @@ class FH_OT_export_clip(bpy.types.Operator):
         if clip is None:
             self.report({"ERROR"}, "No active clip")
             return {"CANCELLED"}
-
-        arm_obj = _find_arm_obj()
-        if arm_obj is None:
-            self.report({"ERROR"}, f"Armature '{_ARM_OBJ_NAME}' not found in scene")
-            return {"CANCELLED"}
-
-        blend_path = bpy.data.filepath
-        if not blend_path:
+        if not bpy.data.filepath:
             self.report({"ERROR"}, "Save the .blend file before exporting")
             return {"CANCELLED"}
 
-        export_dir = os.path.dirname(bpy.path.abspath(blend_path))
-
-        action = clip_action(clip, "body_ctrl")
-        if action is None:
-            self.report({"ERROR"}, f"No body_ctrl action for clip '{clip}'")
+        # ── LAYER 1: bake once ───────────────────────────────────────────────
+        try:
+            rows = bake_clip(clip, context)
+        except ValueError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+        if not rows:
+            self.report({"ERROR"}, f"Clip '{clip}' produced no frames")
             return {"CANCELLED"}
 
-        frame_start = int(action.frame_range[0])
-        frame_end = int(action.frame_range[1])
-        fps = scene.render.fps / scene.render.fps_base
-
-        # ── Bake: step through every frame, evaluate the depsgraph, read poses ──
-        original_frame = scene.frame_current
-        rows = []
-        for frame in range(frame_start, frame_end + 1):
-            scene.frame_set(frame)
-            depsgraph = bpy.context.evaluated_depsgraph_get()
-            arm_eval = arm_obj.evaluated_get(depsgraph)
-            angles = _read_bone_angles(arm_eval)
-            time_ms = round((frame - frame_start) / fps * 1000)
-            rows.append({"frame": frame, "time_ms": time_ms, **angles})
-        scene.frame_set(original_frame)
-
-        # ── Soft guardrail: simultaneous-servo check ─────────────────────────
+        # ── Soft guardrail: simultaneous-servo check (report only) ───────────
         max_sim_cap = scene.fh_max_simultaneous_servos
         warning_count = 0
         max_seen = 0
@@ -603,61 +813,44 @@ class FH_OT_export_clip(bpy.types.Operator):
             if simultaneous > max_sim_cap:
                 warning_count += 1
                 print(
-                    f"WARNING frame {rows[i]['frame']}: {simultaneous} servos moving "
-                    f">{_DELTA_THRESHOLD_DEG}° in one step (limit {max_sim_cap})"
+                    f"WARNING frame {rows[i]['frame']}: {simultaneous} servos "
+                    f"moving >{_DELTA_THRESHOLD_DEG}° in one step "
+                    f"(limit {max_sim_cap})"
                 )
 
-        # ── Phase 1: CSV ─────────────────────────────────────────────────────
-        csv_path = os.path.join(export_dir, f"{clip}.csv")
-        fieldnames = ["frame", "time_ms"] + JOINT_BONES
-        with open(csv_path, "w", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=fieldnames)
-            writer.writeheader()
-            for row in rows:
-                writer.writerow(
-                    {
-                        k: (f"{row[k]:.4f}" if k in JOINT_BONES else row[k])
-                        for k in fieldnames
-                    }
-                )
+        # convention only needed by the .h / .js converters
+        convention = None
+        if scene.fh_export_header or scene.fh_export_js:
+            try:
+                convention = _load_convention()
+            except ValueError as e:
+                self.report({"ERROR"}, str(e))
+                return {"CANCELLED"}
 
-        # ── Phase 2: C header ─────────────────────────────────────────────────
-        h_path = os.path.join(export_dir, f"{clip}.h")
-        safe = clip.upper().replace("-", "_").replace(" ", "_")
-        guard = f"FH_CLIP_{safe}_H"
-        c_sym = f"fh_clip_{clip.lower().replace('-', '_').replace(' ', '_')}"
-        frame_count = len(rows)
-        bone_count = len(JOINT_BONES)
+        # ── LAYER 2: run the enabled converters ──────────────────────────────
+        written = []
+        if scene.fh_export_csv:
+            to_csv(rows, clip)
+            written.append("csv")
+        if scene.fh_export_header:
+            to_c_header(rows, clip, convention)
+            written.append("h")
+        if scene.fh_export_js:
+            to_js(rows, clip, convention)
+            written.append("js")
 
-        h_lines = [
-            f"#ifndef {guard}",
-            f"#define {guard}",
-            "/* Auto-generated by FH Clip Panel — do not edit */",
-            f"/* clip: {clip} | frames: {frame_start}..{frame_end} | fps: {fps:.2f} */",
-            f"/* bone order: {', '.join(JOINT_BONES)} */",
-            "",
-            f"#define FH_CLIP_{safe}_FRAMES {frame_count}",
-            f"#define FH_CLIP_{safe}_BONES  {bone_count}",
-            "",
-            f"static const float {c_sym}[{frame_count}][{bone_count}] = {{",
-        ]
-        for row in rows:
-            vals = ", ".join(f"{row[b]:8.4f}f" for b in JOINT_BONES)
-            h_lines.append(
-                f"    {{{vals}}},  /* f{row['frame']}, t={row['time_ms']}ms */"
-            )
-        h_lines += ["};", "", f"#endif /* {guard} */", ""]
+        if not written:
+            self.report({"WARNING"}, "No export formats enabled")
+            return {"CANCELLED"}
 
-        with open(h_path, "w") as fh:
-            fh.write("\n".join(h_lines))
-
+        rel = os.path.join("animation", "exported_gaits", clip)
         summary = (
-            f"Exported '{clip}': {frame_count} frames, "
-            f"max simultaneous servos: {max_seen}, "
-            f"warnings: {warning_count}"
+            f"Exported '{clip}' ({len(rows)} frames, "
+            f"{', '.join(written)}) → {rel}/  "
+            f"[max simultaneous servos: {max_seen}, warnings: {warning_count}]"
         )
         print(summary)
-        self.report({"INFO"}, summary)
+        self.report({"INFO"}, f"Exported to {rel}/ ({', '.join(written)})")
         return {"FINISHED"}
 
 
@@ -712,6 +905,10 @@ class FH_PT_clip_panel(bpy.types.Panel):
         layout.prop(
             context.scene, "fh_max_simultaneous_servos", text="Max Simultaneous Servos"
         )
+        col = layout.column(align=True)
+        col.prop(context.scene, "fh_export_csv", text="CSV (raw angles)")
+        col.prop(context.scene, "fh_export_header", text="C header (.h)")
+        col.prop(context.scene, "fh_export_js", text="Browser JS (.js)")
         row = layout.row()
         row.enabled = bool(active)
         row.operator(FH_OT_export_clip.bl_idname, icon="EXPORT")
@@ -756,6 +953,24 @@ def register():
         min=1,
         max=12,
     )
+    bpy.types.Scene.fh_export_csv = bpy.props.BoolProperty(
+        name="Export CSV",
+        description="Write the raw bone-angle CSV",
+        default=True,
+    )
+    bpy.types.Scene.fh_export_header = bpy.props.BoolProperty(
+        name="Export C Header",
+        description="Write the static C array (.h) of raw bone angles",
+        default=True,
+    )
+    bpy.types.Scene.fh_export_js = bpy.props.BoolProperty(
+        name="Export Browser JS",
+        description=(
+            "Write a self-contained .js that plays the clip live over "
+            "WebSocket (full hardware conversion from convention.json)"
+        ),
+        default=True,
+    )
     bpy.types.Scene.fh_heatmap_active = bpy.props.BoolProperty(
         name="Activity Heatmap",
         description=(
@@ -779,7 +994,14 @@ def unregister():
 
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)
-    for prop in ("fh_new_clip_name", "fh_max_simultaneous_servos", "fh_heatmap_active"):
+    for prop in (
+        "fh_new_clip_name",
+        "fh_max_simultaneous_servos",
+        "fh_export_csv",
+        "fh_export_header",
+        "fh_export_js",
+        "fh_heatmap_active",
+    ):
         if hasattr(bpy.types.Scene, prop):
             delattr(bpy.types.Scene, prop)
 
