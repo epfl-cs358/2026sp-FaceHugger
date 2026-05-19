@@ -12,8 +12,8 @@ and overlay them for cross-validation.
 | `urdf_to_blender_rigged.py` | scene builder (`--python`) | `facehugger.urdf` + `fusion_export.json` | **Animator-facing**. Pose-able rig: FK shoulder + IK on hip+knee, foot-target Empties. |
 | `visualize_urdf.py` | scene builder (`--python`) | `code/simulation/generated/facehugger.urdf` | Cross-check: does the URDF chain walk reproduce PyBullet's `loadURDF` rest pose? |
 | `visualize_fusion_export.py` | scene builder (`--python`) | `code/simulation/generated/fusion_export.json` | Cross-check: does the CAD's raw landmark/world data match the URDF generator's output? |
-| `fh_clip_panel.py` | UI add-on (sidebar N-panel) | `bpy.data.actions` in the open .blend | Manage named clips (5-Action bundles) on the rig — apply / duplicate / rename via the layered Action API. |
-| `fh_rename_actions.py` | one-shot CLI (`--background`) | `animation/fh_rigged_latest.blend` | Migrate the legacy `body_ctrlAction` / `foot_target_*Action` names to the `base_anim__<target>` clip convention. |
+| `fh_clip_panel.py` | UI add-on (sidebar N-panel) | `bpy.data.actions` + `animation/convention.json` + `animation/poses.json` | Clips (5-Action bundles), a position-based Pose Library, selection sets, export to `exported_gaits/`, activity heatmap — via the layered Action API. |
+| `fh_rename_actions.py` | **LEGACY** one-shot CLI (`--background`) | `animation/fh_rigged_latest.blend` | Idempotent migration of legacy `body_ctrlAction` / `foot_target_*Action` names to `base_anim__<target>`. Run once per old rig; not day-to-day. |
 
 ## urdf_to_blender_rigged.py — animation rig
 
@@ -162,24 +162,29 @@ Useful for diagnosing CAD-side issues (missing landmarks, wrong
 URDF visualizer disagrees with this one, the disagreement points at the
 URDF generator (`code/simulation/generate_urdf.py`).
 
-## fh_clip_panel.py — clip library add-on
+## fh_clip_panel.py — clip + pose tooling add-on
 
-A Blender add-on (not a CLI script) that adds an **"FH Clips"** panel
-to the 3D viewport sidebar (press `N`, look for the "FaceHugger" tab).
-Manages **clips** — named groups of 5 Actions matching the convention:
+A Blender add-on (not a CLI script) that adds a **"FaceHugger"** tab to
+the 3D viewport sidebar (press `N`). The single old "FH Clips" panel is
+now a parent panel with five collapsible sub-panels.
 
-```
-<clip_name>__body_ctrl
-<clip_name>__foot_target_fl
-<clip_name>__foot_target_fr
-<clip_name>__foot_target_bl
-<clip_name>__foot_target_br
-```
+Two core data models, kept deliberately separate:
 
-Built on the Blender 4.4+ **layered Action API**: each clip is applied
-by setting `obj.animation_data.action` + `obj.animation_data.action_slot`
-on the matching rig target. No NLA, no driver tricks — just direct
-per-object Action assignment.
+- **Clips** — named groups of 5 Actions on the rig's control objects:
+  ```
+  <clip_name>__body_ctrl
+  <clip_name>__foot_target_{fl,fr,bl,br}
+  ```
+  Applied via the Blender 4.4+ **layered Action API** (`obj.animation_data.action`
+  + `.action_slot`). No NLA, no drivers — direct per-object assignment.
+- **Poses** — a position-based library in committed `animation/poses.json`
+  (single-source-of-truth file, same pattern as `convention.json`). A
+  *pose* is a snapshot of the 5 controls' **local** transforms
+  (`body_ctrl` loc+rot, the 4 `foot_target_*` loc only — the IK reads
+  only foot-target position). Poses are **clip-independent**: applying a
+  pose sets transforms *only* — no keyframes, no Action/clip side
+  effects. Local transforms are stored so a pose round-trips with
+  keyframes ("Key into Clip").
 
 **Loading** (two ways):
 
@@ -188,35 +193,89 @@ per-object Action assignment.
 | `Edit > Preferences > Add-ons > Install...` → pick this file → enable "FH Clip Panel" | Persists across sessions. Use for actual animation work. |
 | Open in Text Editor → press `Alt+P` (Run Script) | Dev iteration. The script unregisters before re-registering, so you can edit and re-run without restarting Blender. |
 
-**Panel UI:**
+**Panel structure** (parent `FaceHugger` + `bl_parent_id` children):
 
-- **Active**: header box showing which clip is currently assigned to
-  `body_ctrl` (the anchor object used for active-clip detection), or
-  `<none>` if no FH-pattern Action is on `body_ctrl`.
-- **Clips**: one button per discovered clip name. The active clip
-  renders depressed with a filled radio icon; others with an empty
-  radio. Clicking applies all 5 Actions of that clip.
-- **New clip name**: text field used by the two buttons below.
-- **Duplicate Active Clip**: `Action.copy()` ×5, renamed
-  `<new>__<target>`, then applied so the animator can immediately
-  start editing the new clip. Disabled when there's no active clip.
-- **Rename Active Clip**: renames all 5 Actions of the active clip in
-  one step. Pre-checks for name collisions before mutating.
+- **(parent) FaceHugger** — always-visible status: active-clip header,
+  and the *not-keyed notice* (decision B). Applying a pose is a live
+  viewport change with nothing committed; the parent shows a yellow ⚠
+  box `Pose '<name>' applied — not keyed` plus a one-click
+  `Key into '<clip>' @ frame N` button that re-applies the pose and
+  inserts its 5 keyframes into the **active clip's own Actions** at the
+  recorded frame (refuses to key controls not bound to that clip — no
+  stray Actions / cross-clip writes). The notice clears on keying, on
+  applying another pose, or on applying a clip (now stale).
+- **Poses** — one row per library pose: Apply · Rename · Delete. Name
+  field + Save Current Pose (re-saving a name updates it in place).
+- **Clips** — one button per clip (active = depressed/filled radio),
+  applies all 5 Actions. New-clip name field + New Clip · Save
+  Current → New Clip · Duplicate · Rename (last two need an active
+  clip). Apply auto-completes a clip missing targets at neutral so
+  clip switching is exact.
+- **Selection** — `All · Body · Legs · Front · Back · FL · FR · BL ·
+  BR`. One operator (preset arg); replaces the selection and sets the
+  active object. Pure viewport selection — touches no data.
+- **Export** — **Set N Pose** / **Set Flat Pose** (see below);
+  Max-Simultaneous-Servos guard; CSV / `.h` / `.js` toggles; Export
+  Active Clip. Bakes the IK-solved joint angles once
+  (`bake_clip`, Layer 1) then runs the enabled converters (Layer 2)
+  into `animation/exported_gaits/<clip>/` (git-ignored output). The
+  `.h` stays raw bone angles; the `.js` applies the full hardware
+  conversion (scale-from-neutral + per-leg `translateToServo`) from
+  `convention.json`.
+- **Display** (collapsed by default) — Activity Heatmap toggle:
+  colours the per-joint **servo** meshes by per-frame angle delta
+  (green→orange→red). link2/hip has no `__servo` mesh, so 8 of 12
+  joints are shown; viewports switch to Object colour while active and
+  are restored losslessly on toggle-off.
+
+**Set N Pose / Set Flat Pose** (decision C) are no longer special
+angle-driving buttons — they **seed two built-in library poses** on
+first use, then apply them like any other pose:
+
+- `flat` — URDF rest, all joint angles 0 (no `convention.json` needed).
+- `neutral` — hardware-neutral N from `convention.json`'s
+  `neutral_joint_deg`.
+
+Seeding reuses the rig's own kinematics (`_pose_foot_targets`):
+body_ctrl is set to identity, the foot targets are read at the
+requested joint angles, the resulting **local** transforms captured,
+and the scene restored. Once seeded they are normal, re-savable
+entries in the Poses list. (`convention.json`'s N exceeds the rig's
+URDF `LIMIT_ROTATION` on some joints — this position-based library is
+exactly why poses are defined by reachable foot positions, not
+unreachable angles.)
 
 **Operator IDs** (callable from the Python console):
 
 ```python
-bpy.ops.fh.apply_clip(clip_name="base_anim")
-bpy.ops.fh.duplicate_clip()   # reads scene.fh_new_clip_name
-bpy.ops.fh.rename_clip()      # reads scene.fh_new_clip_name
+bpy.ops.fh.apply_clip(clip_name="stand up")
+bpy.ops.fh.new_clip()                    # reads scene.fh_new_clip_name
+bpy.ops.fh.save_as_clip()                # snapshot live actions → new clip
+bpy.ops.fh.duplicate_clip()              # reads scene.fh_new_clip_name
+bpy.ops.fh.rename_clip()                 # reads scene.fh_new_clip_name
+bpy.ops.fh.export_clip()                 # active clip → exported_gaits/
+
+bpy.ops.fh.pose_save()                   # reads scene.fh_pose_name
+bpy.ops.fh.pose_apply(pose_name="flat")
+bpy.ops.fh.pose_rename(pose_name="old")  # new name in scene.fh_pose_name
+bpy.ops.fh.pose_delete(pose_name="flat")
+bpy.ops.fh.key_pose_into_clip()          # commit pending pose to active clip
+bpy.ops.fh.set_n_pose()                  # seed+apply 'neutral'
+bpy.ops.fh.set_rest_pose()               # seed+apply 'flat'
+bpy.ops.fh.select_controls(preset="LEGS")
 ```
 
-**No timer / polling** — the panel rescans `bpy.data.actions` on every
-redraw, and operators call `area.tag_redraw()` after mutating, so the
-list stays current. New Actions added through other tools appear on
-the next mouse-move into the panel.
+**No timer / polling** — the panel rescans `bpy.data.actions` /
+`poses.json` on every redraw, and operators call `area.tag_redraw()`
+after mutating, so the lists stay current. Items added through other
+tools appear on the next mouse-move into the panel.
 
 ## fh_rename_actions.py — one-shot legacy-name migration
+
+> **LEGACY · run once · idempotent.** Only needed for an old rig whose
+> Actions still use the pre-convention names. A current rig built by
+> `urdf_to_blender_rigged.py` does not need this. Not part of the
+> day-to-day workflow — `fh_clip_panel.py` is the active tooling.
 
 One-shot CLI that renames the 5 legacy per-object Actions on the
 rig file to the clip convention `fh_clip_panel.py` expects. Idempotent
@@ -283,8 +342,16 @@ so a no-op re-run leaves the file's mtime untouched.
    `fr_link2`/`fr_link3`/`bl_link2`/`bl_link3` to mirror the L mesh onto R
    legs. Exporting native R-pair STLs from Fusion drops that flip and
    makes any future rigging code one branch simpler.
-3. **Wire `fh_clip_panel.py` into a `.gait` / `.fhc` exporter.** The
-   addon currently manages clips in-place; once the on-board animation
-   format lands (see [doc/animation-pipeline/](../../doc/animation-pipeline/))
-   it should grow an "Export Active Clip" button that bakes the 5
-   Actions to the binary playback format.
+3. **Binary `.fhc` exporter.** Export Active Clip already bakes the
+   IK-solved angles to CSV / `.h` / `.js` in
+   `animation/exported_gaits/<clip>/` (two-layer `bake_clip` →
+   converters). What's still missing is a converter to the on-board
+   binary playback format once it lands (see
+   [doc/animation-pipeline/](../../doc/animation-pipeline/)) — it slots
+   in as another Layer-2 converter alongside `to_csv` / `to_c_header` /
+   `to_js`.
+4. **Confirm the servo channel/translate convention.** `convention.json`'s
+   `channels` + the per-leg `translateToServo` in the `.js` converter
+   are still a proposal pending firmware `SERVO_CONFIG[]` confirmation
+   (see [animation/SERVO_ID_CONVENTION.md](../SERVO_ID_CONVENTION.md)) —
+   verify before trusting an exported `.js`/`.h` on hardware.

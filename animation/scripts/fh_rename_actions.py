@@ -1,4 +1,8 @@
 """
+[LEGACY · one-shot · idempotent] Run once per old rig to migrate legacy
+Action names; safe to re-run (no-op once migrated). Not part of the
+day-to-day workflow — fh_clip_panel.py is the active tooling.
+
 fh_rename_actions.py — one-shot migration of FaceHugger Actions to the
 clip-naming convention used by fh_clip_panel.py.
 
