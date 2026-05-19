@@ -1693,8 +1693,65 @@ ws.onopen = () => {{
 
 
 # ---------------------------------------------------------------------------
-# Operator — export active clip
+# Operators — export (active clip / a ticked selection of clips)
 # ---------------------------------------------------------------------------
+
+# Dynamic ENUM_FLAG items for the per-clip export checklist. Blender can
+# garbage-collect enum-item strings returned by a callback unless we keep
+# a reference, so cache the list at module scope and return that.
+_export_clip_enum_cache = []
+
+
+def _export_clip_items(self, context):
+    """ENUM_FLAG items = every clip in the scene (capped at 32 — the
+    flag bit budget; clips beyond that just won't be tick-selectable,
+    which is far more clips than this project will ever have)."""
+    _export_clip_enum_cache.clear()
+    for i, clip in enumerate(list_clips()[:32]):
+        _export_clip_enum_cache.append(
+            (clip, clip, f"Include '{clip}' in the selected-clips export", 1 << i)
+        )
+    return _export_clip_enum_cache
+
+
+def _bake_and_write(clip, context, convention):
+    """Bake one clip (Layer 1) then run the scene's enabled converters
+    (Layer 2) into animation/exported_gaits/<clip>/. Returns
+    (written, n_frames, max_simultaneous, warning_count). Raises
+    ValueError if the clip can't be baked or yields no frames. Shared by
+    Export Active Clip and Export Selected so both stay byte-identical."""
+    scene = context.scene
+    rows = bake_clip(clip, context)
+    if not rows:
+        raise ValueError(f"Clip '{clip}' produced no frames")
+
+    # Soft guardrail: simultaneous-servo check (report only).
+    max_sim_cap = scene.fh_max_simultaneous_servos
+    warning_count = 0
+    max_seen = 0
+    for i in range(1, len(rows)):
+        deltas = [abs(rows[i][b] - rows[i - 1][b]) for b in JOINT_BONES]
+        simultaneous = sum(1 for d in deltas if d > _DELTA_THRESHOLD_DEG)
+        max_seen = max(max_seen, simultaneous)
+        if simultaneous > max_sim_cap:
+            warning_count += 1
+            print(
+                f"WARNING {clip} frame {rows[i]['frame']}: {simultaneous} "
+                f"servos moving >{_DELTA_THRESHOLD_DEG}° in one step "
+                f"(limit {max_sim_cap})"
+            )
+
+    written = []
+    if scene.fh_export_csv:
+        to_csv(rows, clip)
+        written.append("csv")
+    if scene.fh_export_header:
+        to_c_header(rows, clip, convention)
+        written.append("h")
+    if scene.fh_export_js:
+        to_js(rows, clip, convention)
+        written.append("js")
+    return written, len(rows), max_seen, warning_count
 
 
 class FH_OT_export_clip(bpy.types.Operator):
@@ -1715,32 +1772,9 @@ class FH_OT_export_clip(bpy.types.Operator):
         if not bpy.data.filepath:
             self.report({"ERROR"}, "Save the .blend file before exporting")
             return {"CANCELLED"}
-
-        # ── LAYER 1: bake once ───────────────────────────────────────────────
-        try:
-            rows = bake_clip(clip, context)
-        except ValueError as e:
-            self.report({"ERROR"}, str(e))
+        if not (scene.fh_export_csv or scene.fh_export_header or scene.fh_export_js):
+            self.report({"WARNING"}, "No export formats enabled")
             return {"CANCELLED"}
-        if not rows:
-            self.report({"ERROR"}, f"Clip '{clip}' produced no frames")
-            return {"CANCELLED"}
-
-        # ── Soft guardrail: simultaneous-servo check (report only) ───────────
-        max_sim_cap = scene.fh_max_simultaneous_servos
-        warning_count = 0
-        max_seen = 0
-        for i in range(1, len(rows)):
-            deltas = [abs(rows[i][b] - rows[i - 1][b]) for b in JOINT_BONES]
-            simultaneous = sum(1 for d in deltas if d > _DELTA_THRESHOLD_DEG)
-            max_seen = max(max_seen, simultaneous)
-            if simultaneous > max_sim_cap:
-                warning_count += 1
-                print(
-                    f"WARNING frame {rows[i]['frame']}: {simultaneous} servos "
-                    f"moving >{_DELTA_THRESHOLD_DEG}° in one step "
-                    f"(limit {max_sim_cap})"
-                )
 
         # convention only needed by the .h / .js converters
         convention = None
@@ -1751,30 +1785,88 @@ class FH_OT_export_clip(bpy.types.Operator):
                 self.report({"ERROR"}, str(e))
                 return {"CANCELLED"}
 
-        # ── LAYER 2: run the enabled converters ──────────────────────────────
-        written = []
-        if scene.fh_export_csv:
-            to_csv(rows, clip)
-            written.append("csv")
-        if scene.fh_export_header:
-            to_c_header(rows, clip, convention)
-            written.append("h")
-        if scene.fh_export_js:
-            to_js(rows, clip, convention)
-            written.append("js")
-
-        if not written:
-            self.report({"WARNING"}, "No export formats enabled")
+        try:
+            written, nframes, max_seen, warning_count = _bake_and_write(
+                clip, context, convention
+            )
+        except ValueError as e:
+            self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
 
         rel = os.path.join("animation", "exported_gaits", clip)
-        summary = (
-            f"Exported '{clip}' ({len(rows)} frames, "
-            f"{', '.join(written)}) → {rel}/  "
-            f"[max simultaneous servos: {max_seen}, warnings: {warning_count}]"
+        print(
+            f"Exported '{clip}' ({nframes} frames, {', '.join(written)}) "
+            f"→ {rel}/  [max simultaneous servos: {max_seen}, "
+            f"warnings: {warning_count}]"
         )
-        print(summary)
         self.report({"INFO"}, f"Exported to {rel}/ ({', '.join(written)})")
+        return {"FINISHED"}
+
+
+class FH_OT_export_selected(bpy.types.Operator):
+    """Bake + export every clip ticked in the Export panel's checklist
+    (fh_export_clips), each into its own animation/exported_gaits/<clip>/
+    with the enabled formats. A clip that fails to bake is skipped and
+    reported; the rest still export."""
+
+    bl_idname = "fh.export_selected"
+    bl_label = "Export Selected Clips"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        scene = context.scene
+        if not bpy.data.filepath:
+            self.report({"ERROR"}, "Save the .blend file before exporting")
+            return {"CANCELLED"}
+        # Intersect with list_clips() so the order is stable and any
+        # stale tick (clip renamed/deleted since) is ignored.
+        ticked = set(scene.fh_export_clips)
+        chosen = [c for c in list_clips() if c in ticked]
+        if not chosen:
+            self.report({"ERROR"}, "No clips ticked — select clips to export")
+            return {"CANCELLED"}
+        if not (scene.fh_export_csv or scene.fh_export_header or scene.fh_export_js):
+            self.report({"ERROR"}, "No export formats enabled")
+            return {"CANCELLED"}
+
+        convention = None
+        if scene.fh_export_header or scene.fh_export_js:
+            try:
+                convention = _load_convention()
+            except ValueError as e:
+                self.report({"ERROR"}, str(e))
+                return {"CANCELLED"}
+
+        ok, failed = [], []
+        for clip in chosen:
+            try:
+                written, nframes, max_seen, warns = _bake_and_write(
+                    clip, context, convention
+                )
+            except ValueError as e:
+                failed.append(f"{clip} ({e})")
+                continue
+            ok.append(f"{clip}[{','.join(written)}]")
+            print(
+                f"Exported '{clip}' ({nframes} frames, {', '.join(written)}) "
+                f"[max simultaneous servos: {max_seen}, warnings: {warns}]"
+            )
+
+        if not ok:
+            self.report({"ERROR"}, f"Exported nothing — {'; '.join(failed)}")
+            return {"CANCELLED"}
+        if failed:
+            self.report(
+                {"WARNING"},
+                f"Exported {len(ok)}/{len(chosen)} ({', '.join(ok)}) → "
+                f"animation/exported_gaits/ | failed: {'; '.join(failed)}",
+            )
+        else:
+            self.report(
+                {"INFO"},
+                f"Exported {len(ok)} clip(s) ({', '.join(ok)}) → "
+                "animation/exported_gaits/",
+            )
         return {"FINISHED"}
 
 
@@ -1951,9 +2043,23 @@ class FH_PT_export(_FH_PT_child, bpy.types.Panel):
         col.prop(context.scene, "fh_export_csv", text="CSV (raw angles)")
         col.prop(context.scene, "fh_export_header", text="C header (.h)")
         col.prop(context.scene, "fh_export_js", text="Browser JS (.js)")
+
         row = layout.row()
         row.enabled = bool(active)
-        row.operator(FH_OT_export_clip.bl_idname, icon="EXPORT")
+        row.operator(
+            FH_OT_export_clip.bl_idname, text="Export Active Clip", icon="EXPORT"
+        )
+
+        # Selective multi-clip export: tick any subset, then one button.
+        if list_clips():
+            box = layout.box()
+            box.label(text="Clips to export:")
+            box.prop(context.scene, "fh_export_clips", expand=True)
+            box.operator(
+                FH_OT_export_selected.bl_idname,
+                text="Export Selected Clips",
+                icon="EXPORT",
+            )
 
 
 class FH_PT_display(_FH_PT_child, bpy.types.Panel):
@@ -1993,6 +2099,7 @@ CLASSES = (
     FH_OT_overwrite_clip,
     FH_OT_rename_clip,
     FH_OT_export_clip,
+    FH_OT_export_selected,
     # Panels: parent MUST be registered before its children so the
     # bl_parent_id link resolves.
     FH_PT_root,
@@ -2056,6 +2163,12 @@ def register():
         ),
         default=True,
     )
+    bpy.types.Scene.fh_export_clips = bpy.props.EnumProperty(
+        name="Clips to export",
+        description="Tick the clips that 'Export Selected Clips' should bake",
+        items=_export_clip_items,
+        options={"ENUM_FLAG"},
+    )
     bpy.types.Scene.fh_heatmap_active = bpy.props.BoolProperty(
         name="Activity Heatmap",
         description=(
@@ -2088,6 +2201,7 @@ def unregister():
         "fh_export_csv",
         "fh_export_header",
         "fh_export_js",
+        "fh_export_clips",
         "fh_heatmap_active",
     ):
         if hasattr(bpy.types.Scene, prop):
