@@ -101,8 +101,8 @@ void handleParsedMessage(uint8_t * payload) {
         }
         
         case CMD_MOVE: {
-            // Extract the direction string 
-            String dir = doc["d"] | "";
+            // Extract the direction string
+            String dir = doc["dir"] | "";
             
             spinalCord.walk(); 
             

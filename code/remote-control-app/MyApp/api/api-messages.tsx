@@ -18,4 +18,4 @@ export const TrotGaitPacket = {T: 5, g: GaitMode.TROT} as GaitIntegration;
 export const CrabGaitPacket = {T: 5, g: GaitMode.CRAB} as GaitIntegration;
 
 //Action packets
-export const InvertRobotPacket = {T: 6, id: ActionTypes.INVERT_ROBOT} as ActionPacket;
+export const InvertRobotPacket = {T: 6, a: ActionTypes.INVERT_ROBOT} as ActionPacket;

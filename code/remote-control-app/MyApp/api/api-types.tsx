@@ -62,7 +62,7 @@ export enum ActionTypes {
 }
 
 export type ActionPacket = PacketType & {
-    id: number
+    a: number
 }
 
 export type SystemStatus = PacketType & { //T10
