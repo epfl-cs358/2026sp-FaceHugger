@@ -339,6 +339,39 @@ def load_foot_tip_in_link3_frame(json_path):
     return (R_la @ delta_source_mm) / M_TO_MM
 
 
+def load_body_bottom_point(json_path):
+    """World position (metres) of `BodyBottomPoint` — the body's Z=0
+    datum under the cage. It lives in `FlexibleSkeleton:1`, the
+    base_link occurrence whose world transform is identity, so its
+    `pos_mm` is already in the base_link / rig-world frame. Returns a
+    Vector (metres) or None if absent (not yet re-exported from Fusion)."""
+    if not json_path or not Path(json_path).exists():
+        return None
+    try:
+        data = json.loads(Path(json_path).read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"[warn] could not read {json_path}: {e}")
+        return None
+
+    found = [None]
+
+    def _walk(node):
+        for point in node.get("points", []) or []:
+            if point.get("name") == "BodyBottomPoint" and found[0] is None:
+                xyz = point.get("pos_mm")
+                if xyz and len(xyz) >= 3:
+                    found[0] = Vector(xyz[:3]) / M_TO_MM
+        for child in node.get("children", []) or []:
+            if found[0] is None:
+                _walk(child)
+
+    for occ in data.get("occurrences", []) or []:
+        _walk(occ)
+        if found[0] is not None:
+            break
+    return found[0]
+
+
 def matrix_m_to_mm(M):
     out = M.copy()
     out.translation = out.translation * M_TO_MM
@@ -940,25 +973,31 @@ def place_ik_targets_and_constraints(
 # ---------------------------------------------------------------------------
 
 
-def add_body_control(arm_obj, controls_collection):
-    """Single `body_ctrl` Empty (CUBE, 80 mm) at world origin. Reparents
-    the armature OBJECT to body_ctrl so moving body_ctrl translates and
-    rotates the whole rig. Foot Empties are unparented (world space),
-    so as body_ctrl moves, IK on link3 + Damped Track on link1 keep the
-    legs reaching back to the planted feet.
+def add_body_control(arm_obj, controls_collection, body_bottom_m=None):
+    """Single `body_ctrl` Empty (CUBE, 80 mm) whose ORIGIN sits at the
+    body's bottom (`BodyBottomPoint`, world ~(0,0,-17) mm) so the
+    animator's handle is the body's ground-contact point — dragging its
+    Z directly reads "height of the body bottom". Reparents the armature
+    OBJECT to body_ctrl so moving body_ctrl translates/rotates the whole
+    rig; the armature's parent-inverse cancels the body_ctrl offset so
+    the rig's WORLD placement is unchanged (URDF kinematics untouched —
+    joint angles / exports are origin-independent).
+
+    `body_bottom_m` is BodyBottomPoint's world position in metres (from
+    fusion_export.json). Falls back to the world origin if absent — then
+    behaves exactly as before.
 
     The armature object is hidden afterward — animator's primary handle
     becomes the visible cube. Bones still evaluate (hide_viewport on
     the object hides display, not constraint evaluation), and the
     armature can be unhidden temporarily for per-bone pose-mode work.
-
-    User spec wording was "parented to base_link bone"; in practice the
-    parenting is inverted (armature parent = body_ctrl) so that moving
-    body_ctrl drives the rig rather than following it. body_ctrl sits
-    at base_link's rest position (world origin), satisfying the spec's
-    intent of a chassis-anchored handle.
     """
-    bpy.ops.object.empty_add(type="CUBE", radius=80.0, location=(0.0, 0.0, 0.0))
+    if body_bottom_m is None:
+        body_bottom_mm = Vector((0.0, 0.0, 0.0))
+    else:
+        body_bottom_mm = Vector(body_bottom_m) * M_TO_MM
+
+    bpy.ops.object.empty_add(type="CUBE", radius=80.0, location=tuple(body_bottom_mm))
     body_ctrl = bpy.context.object
     body_ctrl.name = "body_ctrl"
     for c in list(body_ctrl.users_collection):
@@ -967,7 +1006,9 @@ def add_body_control(arm_obj, controls_collection):
 
     arm_obj.parent = body_ctrl
     arm_obj.parent_type = "OBJECT"
-    arm_obj.matrix_parent_inverse = Matrix.Identity(4)
+    # Cancel body_ctrl's offset so the armature stays at the URDF world
+    # origin regardless of where body_ctrl's pivot is (rig must not move).
+    arm_obj.matrix_parent_inverse = Matrix.Translation(body_bottom_mm).inverted()
     arm_obj.hide_viewport = True
     return body_ctrl
 
@@ -1299,6 +1340,19 @@ def main():
     # entirely (the upper-section +Y face, not the claw tip). Prefer
     # the JSON; fall back to the constant only when the JSON is
     # missing.
+    body_bottom_m = load_body_bottom_point(args.json)
+    if body_bottom_m is not None:
+        print(
+            "[urdf_to_blender_rigged] BodyBottomPoint: world "
+            f"{tuple(round(v * M_TO_MM, 3) for v in body_bottom_m)} mm "
+            "— body_ctrl pivot placed here"
+        )
+    else:
+        print(
+            "[urdf_to_blender_rigged] BodyBottomPoint not in export — "
+            "body_ctrl stays at world origin (re-export from Fusion to use it)"
+        )
+
     foot_tip_from_json = load_foot_tip_in_link3_frame(args.json)
     if foot_tip_from_json is not None:
         foot_tip_in_link3_m = foot_tip_from_json
@@ -1373,7 +1427,9 @@ def main():
 
     _diagnose_foot_target_placement(robot, link_world, arm_obj)
     _verify_auto_yaw(arm_obj)
-    body_ctrl = add_body_control(arm_obj, collections[CONTROLS_COLLECTION])
+    body_ctrl = add_body_control(
+        arm_obj, collections[CONTROLS_COLLECTION], body_bottom_m
+    )
     body_ctrl.parent = world_origin
     body_ctrl.parent_type = "OBJECT"
     body_ctrl.matrix_parent_inverse = Matrix.Identity(4)
