@@ -57,6 +57,14 @@ export type GaitIntegration = PacketType & {
     g: number
 }
 
+export enum ActionTypes {
+    INVERT_ROBOT = 0
+}
+
+export type ActionPacket = PacketType & {
+    id: number
+}
+
 export type SystemStatus = PacketType & { //T10
     s: number, // current fsm state
     d: Array<number>, //tof distance readings

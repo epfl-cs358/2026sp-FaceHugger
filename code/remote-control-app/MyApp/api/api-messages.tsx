@@ -1,6 +1,6 @@
 import { webSocketIP } from "../config/config";
 import { connect, sendCommand, ws } from "../services/socket";
-import { DirectionVector, GaitIntegration, GaitMode, ManualMovement, ServoCalibration } from "./api-types";
+import { ActionPacket, ActionTypes, DirectionVector, GaitIntegration, GaitMode, ManualMovement, ServoCalibration } from "./api-types";
 
 //Movement packets
 export const FWMovementPacket    = {T: 1, dir: DirectionVector.FW}   as ManualMovement;
@@ -16,3 +16,6 @@ export const STOP                = {T: 1, dir: DirectionVector.STOP} as ManualMo
 //Gait mode packets
 export const TrotGaitPacket = {T: 5, g: GaitMode.TROT} as GaitIntegration;
 export const CrabGaitPacket = {T: 5, g: GaitMode.CRAB} as GaitIntegration;
+
+//Action packets
+export const InvertRobotPacket = {T: 6, id: ActionTypes.INVERT_ROBOT} as ActionPacket;
