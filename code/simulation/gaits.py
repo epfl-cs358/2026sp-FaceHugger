@@ -1,220 +1,212 @@
-"""Gait registry + run_stand / run_gait with foot-trajectory debug overlay."""
+"""Gait registry, foot trajectories, debug overlay, run_stand / run_gait."""
 
 import math
+import os
 import time
 
 import pybullet as p
 import pybullet_data
 
-from constants import (
-    HIP_ANGLE, KNEE_ANGLE, SHOULDER_ANGLE, STANCE,
-    SERVO_FORCE, SERVO_VELOCITY, TIMESTEP, URDF_PATH,
-)
+from constants import TIMESTEP
 from helpers import (
-    all_legs, apply_per_leg_pose, build_joint_map, reset_to_stance,
+    _wrap_pi,
+    apply_joint_targets,
+    apply_leg_pose,
+    build_joint_map,
+    reset_to_stance,
 )
-from kinematics import (
-    LEG_INFO, NEUTRAL_FOOT, foot_target, gait_joint_targets, leg_ik,
-)
 
 
-def pre_orient_splay(robot_id, joint_map, cfg, gui=True):
-    """Ramp shoulder joints from 0 to splay_signs[leg] * shoulder_splay over
-    `pre_orient` seconds, keeping hip/knee at STANCE. No-op if either the
-    splay or pre_orient duration is zero."""
-    pre_orient = cfg.get("pre_orient", 0.0)
-    splay = cfg.get("shoulder_splay", 0.0)
-    splay_signs = cfg.get("splay_signs", {})
-    if pre_orient <= 0.0 or splay == 0.0:
-        return
-    print(f"  [pre-orient] splaying shoulders to "
-          f"{math.degrees(splay):+.0f} deg over {pre_orient:.1f}s")
-    n_steps = int(pre_orient / TIMESTEP)
-    for k in range(n_steps):
-        if not p.isConnected():
-            break
-        alpha = (k + 1) / n_steps
-        for leg_id in LEG_INFO:
-            target = alpha * splay_signs.get(leg_id, 0) * splay
-            idx = joint_map.get(f"{leg_id}_shoulder_joint")
-            if idx is not None:
-                p.setJointMotorControl2(
-                    robot_id, idx, p.POSITION_CONTROL,
-                    targetPosition=target,
-                    force=SERVO_FORCE, maxVelocity=SERVO_VELOCITY,
-                )
-            for joint in ("hip", "knee"):
-                jidx = joint_map.get(f"{leg_id}_{joint}_joint")
-                if jidx is not None:
-                    p.setJointMotorControl2(
-                        robot_id, jidx, p.POSITION_CONTROL,
-                        targetPosition=STANCE[joint],
-                        force=SERVO_FORCE, maxVelocity=SERVO_VELOCITY,
-                    )
-        p.stepSimulation()
-        if gui:
-            time.sleep(TIMESTEP)
+# --------------------------------------------------------------------------- #
+# Gait registry
+# --------------------------------------------------------------------------- #
 
-
-# Gait registry. Each entry is a self-contained scheduler:
-#   - period / step_length / step_height / duty: trajectory shape
-#   - offsets: per-leg phase in [0, 1)
-#   - label: printed in the banner
 GAITS = {
-    # Tuned 2026-04: doubled/quadrupled ground speeds while keeping the robot
-    # within servo spec (force 1.47 N.m, velocity 5 rad/s). Raising the servo
-    # velocity cap actually hurt trot speed in sim (legs chase targets faster
-    # than the physics step resolves contacts, so the foot slips), so only
-    # the trajectory parameters were changed.
     "walk": {
-        "period":      1.2,       # was 2.4  -> 2x cycle rate
-        "step_length": 0.05,      # was 0.04
-        "step_height": 0.025,     # was 0.02
-        "duty":        0.25,
-        "offsets":     {"fl": 0.00, "rr": 0.25, "fr": 0.50, "rl": 0.75},
-        # Default 30 deg outward splay widens the Y footprint from 100 -> 180 mm
-        # to compensate for the smaller FlexibleSkeleton body mounts.
-        "shoulder_splay":   math.radians(30.0),
-        "splay_signs":      {"fl": -1, "fr": +1, "rl": +1, "rr": -1},
-        "pre_orient":       0.8,
-        "label":       "Static walk (FL -> RR -> FR -> RL)",
+        "period": 2.4,
+        "step_length": 0.04,
+        "step_height": 0.02,
+        "duty": 0.25,
+        "offsets": {"fl": 0.00, "br": 0.25, "fr": 0.50, "bl": 0.75},
+        "label": "Static walk",
     },
     "trot": {
-        # Keep step_height at the old 0.025 so the foot doesn't overshoot
-        # small obstacles -- over-tall steps caused the fast trot to bounce
-        # off the terrain. Shorter period + slightly longer stride gives
-        # ~13 cm/s on flat ground without destabilising bumps/step traversal.
-        "period":      0.50,      # was 0.8   -> 1.6x cycle rate
-        "step_length": 0.065,     # was 0.05  -> 1.3x stride
+        "period": 0.8,
+        "step_length": 0.05,
         "step_height": 0.025,
-        "duty":        0.5,
-        "offsets":     {"fl": 0.0, "rr": 0.0, "fr": 0.5, "rl": 0.5},
-        "shoulder_splay":   math.radians(30.0),
-        "splay_signs":      {"fl": -1, "fr": +1, "rl": +1, "rr": -1},
-        "pre_orient":       0.8,
-        "label":       "Trot (diagonal pairs: FL+RR | FR+RL)",
-    },
-    "bound": {
-        "period":      0.5,
-        # Negative step_length flips the swing/stance direction so the push-
-        # off actually propels the body forward. With positive step_length
-        # the synchronous front/rear pair timing made the robot drift in -Y.
-        "step_length": -0.055,
-        "step_height": 0.035,
-        "duty":        0.4,
-        "offsets":     {"fl": 0.0, "fr": 0.0, "rl": 0.5, "rr": 0.5},
-        "shoulder_splay":   math.radians(30.0),
-        "splay_signs":      {"fl": -1, "fr": +1, "rl": +1, "rr": -1},
-        "pre_orient":       0.8,
-        "label":       "Bound (front pair, then rear pair)",
-    },
-    "crab": {
-        # Sideways gait driven by HIP PITCH on splayed legs. With shoulders
-        # yawed 45 deg, the hip swing plane is rotated 45 deg -- a fore/aft
-        # stride in that plane puts each foot on a diagonal in body frame.
-        # Trot-style diagonal pairs keep two feet on the ground at all times.
-        "period":      0.55,
-        "step_length": 0.07,
-        "step_height": 0.028,
-        "duty":        0.55,
-        "axis":        "x",
-        "offsets":     {"fl": 0.0, "rr": 0.0, "fr": 0.5, "rl": 0.5},
-        # Legs splay 45 deg outward (X pattern). The splay branch rotates the
-        # rest foot around the shoulder mount; regular leg_ik then resolves
-        # shoulder yaw so the splay is kinematically honoured.
-        "shoulder_splay":   math.radians(45.0),
-        "splay_signs":      {"fl": -1, "fr": +1, "rl": +1, "rr": -1},
-        # Warmup: ramp shoulders from 0 to splay over this many seconds before
-        # starting the stride cycle.
-        "pre_orient":       1.2,
-        "label":       "Crab walk (sideways, 45 deg splay)",
+        "duty": 0.5,
+        "offsets": {"fl": 0.0, "br": 0.0, "fr": 0.5, "bl": 0.5},
+        "label": "Trot (diagonal pairs)",
     },
 }
 
-# Debug overlay of planned foot trajectories in the GUI
-SHOW_FOOT_TRAJECTORIES = True
 _TRAJ_COLORS = {
     "fl": (1.0, 0.30, 0.30),
     "fr": (0.30, 1.0, 0.30),
-    "rl": (0.30, 0.50, 1.0),
-    "rr": (1.0, 1.0, 0.30),
+    "bl": (0.30, 0.50, 1.0),
+    "br": (1.0, 1.0, 0.30),
 }
+
+
+# --------------------------------------------------------------------------- #
+# Foot trajectory + per-tick joint targets
+# --------------------------------------------------------------------------- #
+
+
+def foot_target(
+    neutral_foot, leg_id, phase, step_length, step_height, duty, swing_axis="y"
+):
+    """Body-frame foot target. swing_axis selects which body axis steps forward.
+    Body +Y is forward, so the default swing_axis="y" steps in the forward direction."""
+    nx, ny, nz = neutral_foot[leg_id]
+    if phase < duty:
+        s = phase / duty
+        d = -step_length * 0.5 + s * step_length
+        dz = step_height * math.sin(math.pi * s)
+    else:
+        s = (phase - duty) / (1.0 - duty)
+        d = step_length * 0.5 - s * step_length
+        dz = 0.0
+    if swing_axis == "y":
+        return (nx, ny + d, nz + dz)
+    return (nx + d, ny, nz + dz)
+
+
+def gait_joint_targets(cfg, gait, t):
+    offsets = gait["offsets"]
+    global_phase = (t / gait["period"]) % 1.0
+    targets = {}
+    for leg_id, off in offsets.items():
+        phase = (global_phase - off) % 1.0
+        foot = foot_target(
+            cfg.neutral_foot,
+            leg_id,
+            phase,
+            gait["step_length"],
+            gait["step_height"],
+            gait["duty"],
+        )
+        s, h, k = cfg.leg_ik(cfg, foot, leg_id)
+        targets[f"{leg_id}_link1_joint"] = s
+        targets[f"{leg_id}_link2_joint"] = h
+        targets[f"{leg_id}_link3_joint"] = k
+    return targets
+
+
+# --------------------------------------------------------------------------- #
+# Debug overlay
+# --------------------------------------------------------------------------- #
+
 _TRAJ_SAMPLES = 40
+_LINE_IDS: dict = {}
+_MARK_IDS: dict = {}
 
 
 def _body_to_world(pos_body, base_pos, base_orn):
-    """Transform a point from the robot's body frame into world frame."""
-    world_pos, _ = p.multiplyTransforms(base_pos, base_orn, pos_body, [0, 0, 0, 1])
-    return world_pos
+    wp, _ = p.multiplyTransforms(base_pos, base_orn, pos_body, [0, 0, 0, 1])
+    return wp
 
 
-def _precompute_foot_cycle(step_length, step_height, duty, axis="y",
-                           samples=_TRAJ_SAMPLES):
-    """Pre-sample one full cycle of body-frame foot positions per leg."""
+def _precompute_cycle(cfg, gait):
+    offsets = gait["offsets"]
     cycles = {}
-    for leg_id in LEG_INFO:
-        pts = []
-        for k in range(samples):
-            phase = k / samples
-            pts.append(foot_target(leg_id, phase, step_length, step_height,
-                                   duty, axis))
-        pts.append(pts[0])  # close the loop
+    for leg_id in offsets:
+        pts = [
+            foot_target(
+                cfg.neutral_foot,
+                leg_id,
+                k / _TRAJ_SAMPLES,
+                gait["step_length"],
+                gait["step_height"],
+                gait["duty"],
+            )
+            for k in range(_TRAJ_SAMPLES)
+        ]
+        pts.append(pts[0])
         cycles[leg_id] = pts
     return cycles
 
 
-def _draw_foot_trajectories(robot_id, cycles, line_ids, marker_ids, current_targets):
-    """Redraw trajectory loops + current-target crosses in world frame."""
+def _draw_overlay(robot_id, cycles, current_targets):
     base_pos, base_orn = p.getBasePositionAndOrientation(robot_id)
     for leg_id, pts in cycles.items():
-        color = _TRAJ_COLORS[leg_id]
-        prev_world = _body_to_world(pts[0], base_pos, base_orn)
+        color = _TRAJ_COLORS.get(leg_id, (1, 1, 1))
+        prev = _body_to_world(pts[0], base_pos, base_orn)
         for k in range(1, len(pts)):
-            cur_world = _body_to_world(pts[k], base_pos, base_orn)
+            cur = _body_to_world(pts[k], base_pos, base_orn)
             key = (leg_id, k - 1)
-            existing = line_ids.get(key)
-            if existing is None:
-                line_ids[key] = p.addUserDebugLine(prev_world, cur_world,
-                                                  lineColorRGB=color,
-                                                  lineWidth=1.5)
-            else:
-                p.addUserDebugLine(prev_world, cur_world,
-                                   lineColorRGB=color, lineWidth=1.5,
-                                   replaceItemUniqueId=existing)
-            prev_world = cur_world
-
-        target_world = _body_to_world(current_targets[leg_id], base_pos, base_orn)
+            lid = _LINE_IDS.get(key)
+            _LINE_IDS[key] = p.addUserDebugLine(
+                prev,
+                cur,
+                lineColorRGB=color,
+                lineWidth=1.5,
+                replaceItemUniqueId=lid if lid is not None else -1,
+            )
+            prev = cur
+        tw = _body_to_world(current_targets[leg_id], base_pos, base_orn)
         s = 0.012
-        axes = [((-s, 0, 0), (s, 0, 0)),
-                ((0, -s, 0), (0, s, 0)),
-                ((0, 0, -s), (0, 0, s))]
+        axes = [
+            ((-s, 0, 0), (s, 0, 0)),
+            ((0, -s, 0), (0, s, 0)),
+            ((0, 0, -s), (0, 0, s)),
+        ]
         for i, (a, b) in enumerate(axes):
-            p0 = (target_world[0] + a[0], target_world[1] + a[1], target_world[2] + a[2])
-            p1 = (target_world[0] + b[0], target_world[1] + b[1], target_world[2] + b[2])
+            p0 = tuple(tw[j] + a[j] for j in range(3))
+            p1 = tuple(tw[j] + b[j] for j in range(3))
             mkey = (leg_id, i)
-            existing = marker_ids.get(mkey)
-            if existing is None:
-                marker_ids[mkey] = p.addUserDebugLine(p0, p1,
-                                                     lineColorRGB=color,
-                                                     lineWidth=3.0)
-            else:
-                p.addUserDebugLine(p0, p1, lineColorRGB=color, lineWidth=3.0,
-                                   replaceItemUniqueId=existing)
+            mid = _MARK_IDS.get(mkey)
+            _MARK_IDS[mkey] = p.addUserDebugLine(
+                p0,
+                p1,
+                lineColorRGB=color,
+                lineWidth=3.0,
+                replaceItemUniqueId=mid if mid is not None else -1,
+            )
 
 
-def _verify_neutral_ik():
-    """Sanity check: IK of neutral foot should reproduce STANCE within 1 deg."""
-    tol = math.radians(1.5)
-    for leg_id, foot in NEUTRAL_FOOT.items():
-        s, h, k = leg_ik(foot, leg_id)
-        errs = (abs(s - SHOULDER_ANGLE), abs(h - HIP_ANGLE), abs(k - KNEE_ANGLE))
-        ok = all(e < tol for e in errs)
-        tag = "OK" if ok else "FAIL"
-        print(f"  IK check {leg_id}: s={math.degrees(s):+6.2f}  "
-              f"h={math.degrees(h):+6.2f}  k={math.degrees(k):+6.2f}  [{tag}]")
+# --------------------------------------------------------------------------- #
+# Simulation entry points
+# --------------------------------------------------------------------------- #
 
 
-def run_stand(gui=True):
+def _body_height_for_gait(cfg, gait, samples_per_period=100):
+    """Maximum foot-depth below body origin sampled over one gait period.
+    Covers swing + stance feet across all 4 legs. Used in place of the
+    neutral-stance depth so the spawn Z accommodates gait trajectories
+    where foot-contact Z differs from neutral_foot."""
+    offsets = gait["offsets"]
+    worst = 0.0
+    for k in range(samples_per_period):
+        global_phase = k / samples_per_period
+        for leg_id, off in offsets.items():
+            phase = (global_phase - off) % 1.0
+            foot = foot_target(
+                cfg.neutral_foot,
+                leg_id,
+                phase,
+                gait["step_length"],
+                gait["step_height"],
+                gait["duty"],
+            )
+            if -foot[2] > worst:
+                worst = -foot[2]
+    return max(1e-3, worst)
+
+
+def _settle(robot_id, joint_map, cfg, duration_s):
+    """Step the sim for `duration_s` while holding stance targets. Lets
+    gravity resolve any initial overlap before gait/stand loops begin.
+    No visible debug draws here — just physics."""
+    n_steps = int(duration_s / TIMESTEP)
+    for _ in range(n_steps):
+        apply_leg_pose(
+            robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity
+        )
+        p.stepSimulation()
+
+
+def _connect_and_setup(cfg, gui):
     p.connect(p.GUI if gui else p.DIRECT)
     if gui:
         p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
@@ -224,31 +216,78 @@ def run_stand(gui=True):
         p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
     p.setGravity(0, 0, -9.81)
+    p.setTimeStep(TIMESTEP)
     p.loadURDF("plane.urdf")
 
     robot_id = p.loadURDF(
-        URDF_PATH,
-        basePosition=[0, 0, 0.20],
+        cfg.urdf_path,
+        basePosition=[0, 0, cfg.body_height + 0.02],
         baseOrientation=p.getQuaternionFromEuler([0, 0, 0]),
         useFixedBase=False,
     )
     joint_map = build_joint_map(robot_id)
-
-    reset_to_stance(robot_id, joint_map, STANCE)
-    apply_per_leg_pose(robot_id, joint_map, all_legs(STANCE))
-
-    for joint_name, joint_idx in joint_map.items():
-        if "knee" in joint_name:
-            p.changeDynamics(robot_id, joint_idx,
-                             lateralFriction=1.0, restitution=0.1)
-
-    p.resetDebugVisualizerCamera(
-        cameraDistance=0.5, cameraYaw=45, cameraPitch=-30,
-        cameraTargetPosition=[0, 0, 0.1],
+    # stance_rad is already per-leg; reset + motor-command from the same dict.
+    reset_to_stance(robot_id, joint_map, cfg.stance_rad)
+    apply_leg_pose(
+        robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity
     )
-    p.setTimeStep(TIMESTEP)
 
-    print("\nSimulation running - press Ctrl+C to exit")
+    # Friction on the distal link (knee joint's child = lower leg).
+    for name, idx in joint_map.items():
+        if "knee" in name:
+            p.changeDynamics(robot_id, idx, lateralFriction=1.0, restitution=0.1)
+
+    if gui:
+        p.resetDebugVisualizerCamera(
+            cameraDistance=0.55,
+            cameraYaw=45,
+            cameraPitch=-25,
+            cameraTargetPosition=[0, 0, 0.1],
+        )
+    return robot_id, joint_map
+
+
+def _print_banner(cfg):
+    print("\n=== FaceHugger sim ===")
+    print(f"  URDF: {os.path.basename(cfg.urdf_path)}")
+    print(f"  legs: {list(cfg.legs.keys())}")
+    print(f"  servo: force={cfg.servo_force} N*m  vel={cfg.servo_velocity} rad/s")
+    print(f"  body_height: {cfg.body_height * 1000:.1f} mm")
+    print("  stance (deg, per leg):")
+    for leg_id, s in cfg.stance_rad.items():
+        print(
+            f"    {leg_id}: shoulder={math.degrees(s['shoulder']):+.1f}  "
+            f"hip={math.degrees(s['hip']):+.1f}  knee={math.degrees(s['knee']):+.1f}"
+        )
+    for leg_id, foot in cfg.neutral_foot.items():
+        print(
+            f"    {leg_id}: foot = "
+            f"({foot[0] * 1000:+6.1f}, {foot[1] * 1000:+6.1f}, {foot[2] * 1000:+6.1f}) mm"
+        )
+
+    # IK round-trip check: recover stance angles from neutral foot.
+    tol = math.radians(2.0)
+    for leg_id, foot in cfg.neutral_foot.items():
+        s, h, k = cfg.leg_ik(cfg, foot, leg_id)
+        target = cfg.stance_rad[leg_id]
+        ds = abs(_wrap_pi(s - target["shoulder"]))
+        dh = abs(h - target["hip"])
+        dk = abs(k - target["knee"])
+        ok = max(ds, dh, dk) < tol
+        tag = "OK" if ok else "FAIL"
+        print(
+            f"    IK[{leg_id}]: ds={math.degrees(ds):+.2f} dh={math.degrees(dh):+.2f} "
+            f"dk={math.degrees(dk):+.2f} [{tag}]"
+        )
+
+
+def run_stand(cfg, gui=True, settle_s=0.5):
+    robot_id, joint_map = _connect_and_setup(cfg, gui)
+    _print_banner(cfg)
+    if settle_s > 0:
+        print(f"\n[settle] holding stance for {settle_s:.2f}s before idle loop")
+        _settle(robot_id, joint_map, cfg, settle_s)
+    print("\nStanding - Ctrl+C to exit.")
     try:
         while p.isConnected():
             p.stepSimulation()
@@ -261,95 +300,66 @@ def run_stand(gui=True):
             p.disconnect()
 
 
-def run_gait(gait_name, gui=True):
-    """Run a named gait from the GAITS registry."""
+def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
     if gait_name not in GAITS:
-        raise ValueError(
-            f"Unknown gait '{gait_name}'. Known: {sorted(GAITS)}"
+        raise ValueError(f"Unknown gait: {gait_name}")
+    gait = GAITS[gait_name]
+
+    # Gait-aware spawn height: worst foot Z across a full period, not just
+    # neutral_foot. Prevents the body from sinking into the floor when a
+    # gait's stance-phase Z differs from the neutral Z used at build time.
+    gait_depth_m = _body_height_for_gait(cfg, gait)
+    if gait_depth_m > cfg.body_height:
+        print(
+            f"[body_height] lifting spawn from {cfg.body_height * 1000:.1f} mm "
+            f"to {gait_depth_m * 1000:.1f} mm for {gait_name} trajectory"
         )
-    cfg = GAITS[gait_name]
+        cfg.body_height = gait_depth_m
 
-    p.connect(p.GUI if gui else p.DIRECT)
-    if gui:
-        p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
-        p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 1)
-        p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, 0)
-        p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 0)
-        p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
-    p.setAdditionalSearchPath(pybullet_data.getDataPath())
-    p.setGravity(0, 0, -9.81)
-    p.setTimeStep(TIMESTEP)
-    p.loadURDF("plane.urdf")
-
-    # Body height = distance from foot tip to body origin given stance.
-    body_height = -NEUTRAL_FOOT["fl"][2]
-    robot_id = p.loadURDF(
-        URDF_PATH,
-        basePosition=[0, 0, body_height],
-        baseOrientation=p.getQuaternionFromEuler([0, 0, 0]),
-        useFixedBase=False,
-    )
-    joint_map = build_joint_map(robot_id)
-
-    reset_to_stance(robot_id, joint_map, STANCE)
-    apply_per_leg_pose(robot_id, joint_map, all_legs(STANCE))
-
-    for joint_name, joint_idx in joint_map.items():
-        if "knee" in joint_name:
-            p.changeDynamics(robot_id, joint_idx,
-                             lateralFriction=1.0, restitution=0.1)
-
-    p.resetDebugVisualizerCamera(
-        cameraDistance=0.65, cameraYaw=45, cameraPitch=-25,
-        cameraTargetPosition=[0, 0, 0.1],
+    robot_id, joint_map = _connect_and_setup(cfg, gui)
+    _print_banner(cfg)
+    if settle_s > 0:
+        print(f"\n[settle] holding stance for {settle_s:.2f}s before gait")
+        _settle(robot_id, joint_map, cfg, settle_s)
+    print(
+        f"\n{gait['label']}: period={gait['period']:.2f}s  "
+        f"len={gait['step_length'] * 1000:.0f}mm  h={gait['step_height'] * 1000:.0f}mm  "
+        f"duty={gait['duty']:.2f}"
     )
 
-    print(f"\n=== FaceHugger {cfg['label']} ===")
-    print(f"  period={cfg['period']:.2f}s  step_len={cfg['step_length']*1000:.0f}mm  "
-          f"step_h={cfg['step_height']*1000:.0f}mm  duty={cfg['duty']:.2f}")
-    _verify_neutral_ik()
-
-    cycles = _precompute_foot_cycle(cfg["step_length"], cfg["step_height"],
-                                    cfg["duty"], cfg.get("axis", "y"))
-    line_ids = {}
-    marker_ids = {}
-    draw_overlay = gui and SHOW_FOOT_TRAJECTORIES
-    draw_every = 4  # refresh overlay every N sim steps to keep GUI snappy
-
-    pre_orient_splay(robot_id, joint_map, cfg, gui=gui)
+    draw_overlay = gui
+    cycles = _precompute_cycle(cfg, gait) if draw_overlay else None
+    draw_every = 4
 
     t = 0.0
-    step_count = 0
+    step = 0
     try:
         while p.isConnected():
-            targets = gait_joint_targets(t, cfg)
-            for joint_name, angle in targets.items():
-                idx = joint_map.get(joint_name)
-                if idx is None:
-                    continue
-                p.setJointMotorControl2(
-                    robot_id, idx, p.POSITION_CONTROL,
-                    targetPosition=angle,
-                    force=SERVO_FORCE, maxVelocity=SERVO_VELOCITY,
-                )
-
-            if draw_overlay and step_count % draw_every == 0:
-                current_targets = {}
-                global_phase = (t / cfg["period"]) % 1.0
-                for leg_id, offset in cfg["offsets"].items():
-                    phase = (global_phase - offset) % 1.0
-                    current_targets[leg_id] = foot_target(
-                        leg_id, phase,
-                        cfg["step_length"], cfg["step_height"], cfg["duty"],
+            targets = gait_joint_targets(cfg, gait, t)
+            apply_joint_targets(
+                robot_id, joint_map, targets, cfg.servo_force, cfg.servo_velocity
+            )
+            if draw_overlay and step % draw_every == 0:
+                offsets = gait["offsets"]
+                global_phase = (t / gait["period"]) % 1.0
+                cur_targets = {
+                    leg_id: foot_target(
+                        cfg.neutral_foot,
+                        leg_id,
+                        (global_phase - off) % 1.0,
+                        gait["step_length"],
+                        gait["step_height"],
+                        gait["duty"],
                     )
-                _draw_foot_trajectories(robot_id, cycles, line_ids,
-                                        marker_ids, current_targets)
+                    for leg_id, off in offsets.items()
+                }
+                _draw_overlay(robot_id, cycles, cur_targets)
 
             p.stepSimulation()
             if gui:
                 time.sleep(TIMESTEP)
             t += TIMESTEP
-            step_count += 1
+            step += 1
     except (KeyboardInterrupt, p.error):
         pass
     finally:

@@ -6,21 +6,20 @@ export enum FSMStatus {
 }
 
 export enum DirectionVector {
-    FW = 0,
-    BW = 1,
-    FR = 2,
-    FL = 3,
-    BR = 4,
-    BL = 5,
-    R = 6,
-    L = 7,
-    STOP = 8
+    FW   = "FW",
+    BW   = "BW",
+    FR   = "FW_R",
+    FL   = "FW_L",
+    BR   = "BW_R",
+    BL   = "BW_L",
+    R    = "R",
+    L    = "L",
+    STOP = "STOP"
 }
 
 export enum GaitMode {
-    TROT = 0,
-    CRAB = 1,
-    CRAWL = 2
+    TROT = 2,
+    CRAB = 3
 }
 
 export enum Legs {
@@ -41,7 +40,7 @@ export type PacketType = {
 }
 
 export type ManualMovement = PacketType & {
-    d: number
+    dir: string
 }
 
 export type FSMStateModification = PacketType & {

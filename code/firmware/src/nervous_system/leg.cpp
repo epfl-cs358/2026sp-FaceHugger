@@ -60,6 +60,13 @@ void Leg::setPose(float x, float y, float z) {
     updateServos(servoShoulder, servoThigh, servoKnee);
 }
 
+void Leg::setJointAngles(double hip, double thigh, double knee) {
+    hip   = constrain(hip,   0.0, 180.0);
+    thigh = constrain(thigh, 0.0, 180.0);
+    knee  = constrain(knee,  0.0, 180.0);
+    updateServos(hip, thigh, knee);
+}
+
 void Leg::updateServos(double hipAngle, double thighAngle, double kneeAngle){
     hipServo.setServoAngle(hipAngle);
     thighServo.setServoAngle(thighAngle);
