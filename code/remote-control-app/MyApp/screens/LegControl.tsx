@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 import {
@@ -15,7 +15,18 @@ export default function LegControl() {
 
     const [selectedLeg, setSelectedLeg] = useState(Legs.FRONT_RIGHT_LEG);
     const [selectedServo, setSelectedServo] = useState(Servos.HIP_SERVO);
+
+    // Last commanded angle per (leg, servo) — defaults to 90 until the user sends one.
+    const [committedAngles, setCommittedAngles] = useState<number[][]>(() =>
+        Array.from({ length: 4 }, () => Array(3).fill(90))
+    );
+    // Angle currently shown in the input (may differ from committed while typing).
     const [selectedAngle, setSelectedAngle] = useState(90);
+
+    // When the user picks a different leg/servo, show that pair's last-sent angle.
+    useEffect(() => {
+        setSelectedAngle(committedAngles[selectedLeg][selectedServo]);
+    }, [selectedLeg, selectedServo]);
 
     const legs: IndividualSelectionProps[] = [
         {
@@ -59,6 +70,11 @@ export default function LegControl() {
     ];
 
     const sendServoAngle = () => {
+        setCommittedAngles(prev => {
+            const next = prev.map(row => row.slice());
+            next[selectedLeg][selectedServo] = selectedAngle;
+            return next;
+        });
         sendCommand(
             JSON.stringify({
                 T: 4,
