@@ -846,6 +846,9 @@ cad/scripts/**/.DS_Store
 !animation/scripts/
 !animation/scripts/**
 animation/scripts/**/.DS_Store
+# ...but the broad re-include above also resurrects Python bytecode
+# caches, which the global __pycache__/ rule can no longer catch.
+animation/scripts/**/__pycache__/
 
 # Local-only Blender working files: per-iteration .blend dumps + the
 # rig rebuilder's default save target. Both are regenerated on demand
