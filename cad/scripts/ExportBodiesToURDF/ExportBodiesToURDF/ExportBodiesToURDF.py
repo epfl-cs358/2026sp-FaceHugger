@@ -117,6 +117,10 @@ CONSTRUCTION_POINTS = [
     "LegMountPointFR",
     "LegMountPointBR",
     "LegMountPointBL",
+    # Body Z=0 datum (under the cage) — re-origins the URDF so this
+    # point sits at world z=0. Consumed by generate_urdf.py; harmless
+    # if absent.
+    "BodyBottomPoint",
     # Joint origins (FaceHuggerLegAssembly:1).
     "BodyToLink1Point",
     "Link1ToLink2Point",
