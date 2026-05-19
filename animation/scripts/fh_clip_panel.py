@@ -639,6 +639,10 @@ class FH_OT_apply_clip(bpy.types.Operator):
         # clip's motion on those targets.
         repaired = _autocomplete_clip(self.clip_name, context)
         assigned, missing = assign_clip(self.clip_name)
+        # Switching the clip context makes any pending "pose applied but
+        # not keyed" notice stale — the pose was relative to a different
+        # clip. Clear it so the panel doesn't show a misleading prompt.
+        context.scene.fh_unkeyed_pose = ""
         if missing:
             self.report(
                 {"WARNING"},
@@ -1067,6 +1071,12 @@ class FH_OT_pose_apply(bpy.types.Operator):
             self.report({"ERROR"}, f"Pose '{self.pose_name}' not found")
             return {"CANCELLED"}
         applied, missing = _apply_pose(pose, context)
+        # Raise the "applied but not keyed" notice (decision B): the pose
+        # is live in the viewport but nothing is committed to a clip yet.
+        # Records the pose name + the frame it was applied at so the
+        # one-click Key button knows exactly where to insert keyframes.
+        context.scene.fh_unkeyed_pose = self.pose_name
+        context.scene.fh_unkeyed_frame = context.scene.frame_current
         if missing:
             self.report(
                 {"WARNING"},
@@ -1137,6 +1147,90 @@ class FH_OT_pose_delete(bpy.types.Operator):
         del poses[self.pose_name]
         _save_poses(poses)
         self.report({"INFO"}, f"Deleted pose '{self.pose_name}'")
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
+class FH_OT_key_pose_into_clip(bpy.types.Operator):
+    """Commit the pending (applied-but-not-keyed) pose into the active
+    clip: re-apply the saved pose, then insert its keyframes into each
+    control's clip Action at the frame the pose was applied, and clear
+    the notice. Keys ONLY into the active clip's own Actions — it never
+    creates a stray Action or writes onto another clip."""
+
+    bl_idname = "fh.key_pose_into_clip"
+    bl_label = "Key Pose Into Clip"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        scene = context.scene
+        name = scene.fh_unkeyed_pose
+        if not name:
+            self.report({"ERROR"}, "No pose is pending")
+            return {"CANCELLED"}
+        clip = active_clip()
+        if clip is None:
+            self.report(
+                {"ERROR"},
+                "No active clip to key into — Apply a clip first "
+                f"(pose '{name}' stays applied so you can retry)",
+            )
+            return {"CANCELLED"}
+        try:
+            poses = _load_poses()
+        except ValueError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+        pose = poses.get(name)
+        if pose is None:
+            # Renamed/deleted since it was applied -> the notice is stale.
+            scene.fh_unkeyed_pose = ""
+            self.report({"WARNING"}, f"Pose '{name}' no longer exists — notice cleared")
+            return {"CANCELLED"}
+
+        frame = scene.fh_unkeyed_frame
+        # Re-apply so we key the pose's stored values even if the
+        # timeline was scrubbed after Apply (the bound clip would
+        # otherwise have re-evaluated the controls at the new frame).
+        _apply_pose(pose, context)
+
+        keyed, skipped = [], []
+        for target in pose:
+            obj = bpy.data.objects.get(target)
+            if obj is None:
+                skipped.append(target)
+                continue
+            ad = obj.animation_data
+            if ad is None or ad.action is None or ad.action.name != f"{clip}__{target}":
+                # Not bound to THIS clip's Action — refuse to key it
+                # (re-Apply the clip to bind all 5 targets, then retry).
+                skipped.append(target)
+                continue
+            obj.keyframe_insert("location", frame=frame)
+            if target == ANCHOR:
+                obj.keyframe_insert("rotation_euler", frame=frame)
+            keyed.append(target)
+
+        if not keyed:
+            self.report(
+                {"ERROR"},
+                f"Could not key pose '{name}' — no control is bound to "
+                f"clip '{clip}'. Re-Apply the clip, then retry.",
+            )
+            return {"CANCELLED"}
+
+        scene.fh_unkeyed_pose = ""
+        if skipped:
+            self.report(
+                {"WARNING"},
+                f"Keyed pose '{name}' into '{clip}' @ frame {frame} "
+                f"({len(keyed)}/{len(pose)}) — not bound to this clip: "
+                f"{', '.join(skipped)} (re-Apply the clip, then retry)",
+            )
+        else:
+            self.report(
+                {"INFO"}, f"Keyed pose '{name}' into clip '{clip}' @ frame {frame}"
+            )
         _redraw_view3d(context)
         return {"FINISHED"}
 
@@ -1508,6 +1602,21 @@ class FH_PT_clip_panel(bpy.types.Panel):
         header = layout.box()
         header.label(text=f"Active: {active or '<none>'}", icon="ACTION")
 
+        # ── Not-keyed notice (a pose is live but not committed) ───────────────
+        pending = context.scene.fh_unkeyed_pose
+        if pending:
+            frame = context.scene.fh_unkeyed_frame
+            note = layout.box()
+            note.label(text=f"Pose '{pending}' applied — not keyed", icon="ERROR")
+            if active:
+                note.operator(
+                    FH_OT_key_pose_into_clip.bl_idname,
+                    text=f"Key into '{active}' @ frame {frame}",
+                    icon="KEY_HLT",
+                )
+            else:
+                note.label(text="Apply a clip to enable keying", icon="INFO")
+
         # ── Poses (position-based, clip-independent) ──────────────────────────
         layout.label(text="Poses:")
         try:
@@ -1624,6 +1733,7 @@ CLASSES = (
     FH_OT_pose_apply,
     FH_OT_pose_rename,
     FH_OT_pose_delete,
+    FH_OT_key_pose_into_clip,
     FH_OT_select_controls,
     FH_OT_duplicate_clip,
     FH_OT_rename_clip,
@@ -1644,6 +1754,20 @@ def register():
         name="Pose Name",
         description="Used by Save Current Pose and Rename Pose",
         default="",
+    )
+    bpy.types.Scene.fh_unkeyed_pose = bpy.props.StringProperty(
+        name="Unkeyed Pose",
+        description=(
+            "Name of a pose that was applied to the viewport but not yet "
+            "keyed into a clip. Empty = nothing pending. Drives the "
+            "panel's not-keyed notice"
+        ),
+        default="",
+    )
+    bpy.types.Scene.fh_unkeyed_frame = bpy.props.IntProperty(
+        name="Unkeyed Pose Frame",
+        description="Frame the pending pose was applied at (where Key inserts it)",
+        default=0,
     )
     bpy.types.Scene.fh_max_simultaneous_servos = bpy.props.IntProperty(
         name="Max Simultaneous Servos",
@@ -1696,6 +1820,8 @@ def unregister():
     for prop in (
         "fh_new_clip_name",
         "fh_pose_name",
+        "fh_unkeyed_pose",
+        "fh_unkeyed_frame",
         "fh_max_simultaneous_servos",
         "fh_export_csv",
         "fh_export_header",
