@@ -19,6 +19,10 @@ enum LegId : uint8_t {
     LEG_COUNT = 4,
 };
 
+enum ActionType: uint8_t {
+    INVERT_ROBOT = 0
+};
+
 struct GaitParams {
     float       period_s;
     float       step_length_deg;

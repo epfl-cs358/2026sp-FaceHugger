@@ -53,7 +53,7 @@ SpinalCord::SpinalCord(uint8_t pwm):
     gaitPhaseStartMs_(0),
     targetX(0.0f), targetY(0.0f), targetYaw(0.0f),
     activeX(0.0f), activeY(0.0f), activeYaw(0.0f),
-    isMovingRequested(false), lastCommandMs(0)
+    isMovingRequested(false), lastCommandMs(0), isInverted(false)
 {
 }
 
@@ -206,6 +206,8 @@ void SpinalCord::tickGait() {
         th += lift;
         kn -= lift;
 
+        if (isInverted) { th = -th; kn = -kn; }
+
         // Translate math-space angles to servo angles (0–180°).
         // Mirrors the JS translateToServo() function exactly.
         double servoHip, servoThigh, servoKnee;
@@ -323,6 +325,8 @@ void SpinalCord::tickTrot() {
         th = NEUTRAL[i].th + (th - NEUTRAL[i].th) * SCALE;
         kn = NEUTRAL[i].kn + (kn - NEUTRAL[i].kn) * SCALE;
 
+        if (isInverted) { th = -th; kn = -kn; }
+
         // Math → servo, identical to the JS translateToServo().
         double servoHip, servoThigh, servoKnee;
         switch (i) {
@@ -405,6 +409,8 @@ void SpinalCord::tickYawRotation() {
         th = NEUTRAL[i].th + (th - NEUTRAL[i].th) * SCALE;
         kn = NEUTRAL[i].kn + (kn - NEUTRAL[i].kn) * SCALE;
 
+        if (isInverted) { th = -th; kn = -kn; }
+
         double servoHip, servoThigh, servoKnee;
         switch (i) {
             case LEG_FR:
@@ -432,4 +438,22 @@ void SpinalCord::tickYawRotation() {
         }
         legs[i]->setJointAngles(servoHip, servoThigh, servoKnee);
     }
+}
+
+void SpinalCord::invertRobot() {
+    isInverted = !isInverted;
+
+    if (isInverted) {
+        leg1.setJointAngles(90,  30, 127);  // FR: 180-150, 180-53
+        leg2.setJointAngles(75, 150,  50);  // FL: 180-30,  180-130
+        leg3.setJointAngles(90, 140,  40);  // RR: 180-40,  180-140
+        leg4.setJointAngles(90,  30, 125);  // RL: 180-150, 180-55
+    } else {
+        leg1.returnToDefaultAngles();
+        leg2.returnToDefaultAngles();
+        leg3.returnToDefaultAngles();
+        leg4.returnToDefaultAngles();
+    }
+
+    gaitPhaseStartMs_ = millis();
 }

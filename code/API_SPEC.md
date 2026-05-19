@@ -22,7 +22,11 @@ The direction vector of the robot
 The gait mode the robot is currently in
 - **TROT (id 0):** Trot gait mode
 - **CRAB (id 1):** Crab gait mode
-- **CRAWL:** Crawl gait mode
+- **CRAWL (id 2):** Crawl gait mode
+
+## Action Mode Type
+The action mode type
+- **INVERT ROBOT (id 0):** Send a message to invert the robot 
 
 ## 📥 Dashboard -> Robot (Commands)
 
@@ -74,6 +78,14 @@ Gait mode change
 | :-- | :---- | :----------------------- | :------------- |
 | 'g' | int  | Gait mode ID | 0,1,2...|
 **Example:** '{"T": 5, "g": 1}' *(This is needed in order to avoid sending the gait each time with the T: 1 packets as well as have a separation of concern as to what the robot should do when changing gait)*
+
+### 6. Action phase ('T: 6')
+
+| Key | Type | Description | Range |
+| :-- | :---- | :----------------------- | :------------- |
+| 'a' | int  | Action ID | 0,1,2...|
+**Example:** '{"T": 6, "a": 1}'
+
 
 ---
 

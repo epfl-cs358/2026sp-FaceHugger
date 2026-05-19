@@ -17,6 +17,7 @@ class SpinalCord{
         void relax();
         void wallFlip();
         void update();
+        void invertRobot();
         void applyCalibration(int channel, int angle);
         void setGait(GaitType g);
         GaitType currentGait() const;
@@ -40,6 +41,7 @@ class SpinalCord{
         float activeY;
         float activeYaw;
         bool isMovingRequested;
+        bool isInverted;
         uint32_t lastCommandMs;
 
         void tickGait();
