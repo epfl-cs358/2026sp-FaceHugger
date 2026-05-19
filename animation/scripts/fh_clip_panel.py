@@ -378,9 +378,7 @@ def _autocomplete_clip(clip, context):
         try:
             arm = _find_arm_obj()
             if arm is not None:
-                npos = _n_pose_foot_targets(
-                    arm, _load_convention()["neutral_joint_deg"]
-                )
+                npos = _pose_foot_targets(arm, _load_convention()["neutral_joint_deg"])
         except (ValueError, KeyError) as e:
             print(
                 f"[fh_clip_panel] auto-complete: no N pose ({e}); "
@@ -497,11 +495,13 @@ def _exported_gaits_dir(clip_name):
 _N_POSE_LINKS = ("link1", "link2", "link3")  # = [shoulder, hip, knee]
 
 
-def _n_pose_foot_targets(arm, neutral_joint_deg):
+def _pose_foot_targets(arm, joint_deg_by_leg):
     """{leg: (x, y, z) mm} world position of each leg's link3 bone tail
-    (the IK chain tip) when the 12 joint bones are posed at the N joint
-    angles via pure FK. Restores all bone rotations + constraint mute
-    states before returning, so it has no lasting effect on the rig."""
+    (the IK chain tip) when the 12 joint bones are posed at the given
+    per-leg [shoulder, hip, knee] angles (deg) via pure FK. Works for any
+    pose — N (convention.json) or flat/rest (all zeros). Restores all
+    bone rotations + constraint mute states before returning, so it has
+    no lasting effect on the rig."""
     saved_rot = {}
     saved_mute = []
     for leg in ("fl", "fr", "bl", "br"):
@@ -512,8 +512,8 @@ def _n_pose_foot_targets(arm, neutral_joint_deg):
                 saved_mute.append((c, c.mute))
                 c.mute = True
             # joint axis == bone-local Z for every joint (see
-            # _JOINT_AXIS_EULER_IDX); N[leg][idx] is that angle in deg.
-            pb.rotation_euler = (0.0, 0.0, math.radians(neutral_joint_deg[leg][idx]))
+            # _JOINT_AXIS_EULER_IDX); angle is that joint's value in deg.
+            pb.rotation_euler = (0.0, 0.0, math.radians(joint_deg_by_leg[leg][idx]))
     bpy.context.view_layer.update()
 
     out = {}
@@ -825,6 +825,62 @@ class FH_OT_new_clip(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _drive_to_joint_pose(context, joint_deg_by_leg, label):
+    """Move the 4 foot targets so the live IK solves the rig to
+    `joint_deg_by_leg` ({leg: [shoulder, hip, knee] deg}). Returns
+    (status_set, report_level, report_msg). Joints whose target exceeds
+    the URDF LIMIT_ROTATION range are clamped on the re-solve
+    (best-effort) and the residual is reported."""
+    arm = _find_arm_obj()
+    if arm is None:
+        return {"CANCELLED"}, "ERROR", f"Armature '{_ARM_OBJ_NAME}' not found"
+
+    targets = _pose_foot_targets(arm, joint_deg_by_leg)
+    moved, missing = [], []
+    for leg, (fx, fy, fz) in targets.items():
+        obj = bpy.data.objects.get(f"foot_target_{leg}")
+        if obj is None:
+            missing.append(f"foot_target_{leg}")
+            continue
+        # Set the WORLD position robustly whether or not the target is
+        # parented (rig parents it to world_origin): edit a copy of
+        # matrix_world and assign it back so Blender re-derives the
+        # local transform through the parent inverse.
+        mw = obj.matrix_world.copy()
+        mw.translation = (fx, fy, fz)
+        obj.matrix_world = mw
+        moved.append(leg)
+
+    context.view_layer.update()  # let the IK solve to the new targets
+    _redraw_view3d(context)
+
+    # Residual: how far the live (possibly clamped) pose lands from the
+    # requested angles. ~0 for the flat pose (0 is in range); non-zero
+    # for N where it exceeds the URDF limits (hips ±45° vs N≈-60°, ...).
+    dg = context.evaluated_depsgraph_get()
+    ang = _read_bone_angles(arm.evaluated_get(dg))
+    worst = 0.0
+    for leg in ("fl", "fr", "bl", "br"):
+        for idx, link in enumerate(_N_POSE_LINKS):
+            worst = max(worst, abs(ang[f"{leg}_{link}"] - joint_deg_by_leg[leg][idx]))
+
+    if missing:
+        return (
+            {"FINISHED"},
+            "WARNING",
+            f"Set {label} for {len(moved)}/4 legs — missing: {', '.join(missing)}",
+        )
+    if worst > 2.0:
+        return (
+            {"FINISHED"},
+            "WARNING",
+            f"Rig set to {label} (best-effort: up to {worst:.0f}° residual "
+            "— URDF limit clamping and/or the rig's IK/Damped-Track "
+            "foot-target fidelity; shoulders carry a small uniform offset)",
+        )
+    return {"FINISHED"}, "INFO", f"Rig set to {label}"
+
+
 class FH_OT_set_n_pose(bpy.types.Operator):
     """Move the foot targets to the hardware-neutral (N) standing pose so
     the IK solves to the robot's real starting position. Click before
@@ -837,61 +893,34 @@ class FH_OT_set_n_pose(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            convention = _load_convention()
-        except ValueError as e:
+            jd = _load_convention()["neutral_joint_deg"]
+        except (ValueError, KeyError) as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
+        status, level, msg = _drive_to_joint_pose(
+            context, jd, "N pose (hardware neutral)"
+        )
+        self.report({level}, msg)
+        return status
 
-        arm = _find_arm_obj()
-        if arm is None:
-            self.report({"ERROR"}, f"Armature '{_ARM_OBJ_NAME}' not found")
-            return {"CANCELLED"}
 
-        targets = _n_pose_foot_targets(arm, convention["neutral_joint_deg"])
-        moved = []
-        missing = []
-        for leg, (fx, fy, fz) in targets.items():
-            obj = bpy.data.objects.get(f"foot_target_{leg}")
-            if obj is None:
-                missing.append(f"foot_target_{leg}")
-                continue
-            # Set the WORLD position robustly whether or not the target is
-            # parented (rig parents it to world_origin): edit a copy of
-            # matrix_world and assign it back so Blender re-derives the
-            # local transform through the parent inverse.
-            mw = obj.matrix_world.copy()
-            mw.translation = (fx, fy, fz)
-            obj.matrix_world = mw
-            moved.append(leg)
+class FH_OT_set_rest_pose(bpy.types.Operator):
+    """Move the foot targets to the FLAT base pose — the URDF rest (all
+    joint angles 0; the splayed stance the rig builder sets on every
+    `--rigged` rebuild). Use it to snap the rig back to the known
+    baseline. No convention.json needed (it's all zeros)."""
 
-        context.view_layer.update()  # let the IK solve to the new targets
-        _redraw_view3d(context)
+    bl_idname = "fh.set_rest_pose"
+    bl_label = "Set Flat Pose"
+    bl_options = {"REGISTER", "UNDO"}
 
-        # Report how far the live (clamped) pose lands from N so the
-        # animator sees the best-effort residual where N exceeds the
-        # URDF joint limits (hips ~±45° vs N≈-60°, bl shoulder, ...).
-        dg = context.evaluated_depsgraph_get()
-        ang = _read_bone_angles(arm.evaluated_get(dg))
-        n = convention["neutral_joint_deg"]
-        worst = 0.0
-        for leg in ("fl", "fr", "bl", "br"):
-            for idx, link in enumerate(_N_POSE_LINKS):
-                worst = max(worst, abs(ang[f"{leg}_{link}"] - n[leg][idx]))
-
-        if missing:
-            self.report(
-                {"WARNING"},
-                f"Set N pose for {len(moved)}/4 legs — missing: {', '.join(missing)}",
-            )
-        elif worst > 2.0:
-            self.report(
-                {"WARNING"},
-                f"Rig set to N pose (best-effort: up to {worst:.0f}° clamped "
-                "by URDF joint limits — see convention.json vs rig limits)",
-            )
-        else:
-            self.report({"INFO"}, "Rig set to N pose (hardware neutral)")
-        return {"FINISHED"}
+    def execute(self, context):
+        jd = {leg: (0.0, 0.0, 0.0) for leg in ("fl", "fr", "bl", "br")}
+        status, level, msg = _drive_to_joint_pose(
+            context, jd, "flat/rest pose (URDF θ=0)"
+        )
+        self.report({level}, msg)
+        return status
 
 
 # ---------------------------------------------------------------------------
@@ -1205,7 +1234,9 @@ class FH_PT_clip_panel(bpy.types.Panel):
         # enabled); Duplicate/Rename act on the active clip.
         layout.operator(FH_OT_new_clip.bl_idname, icon="ADD")
         layout.operator(FH_OT_save_as_clip.bl_idname, icon="FILE_TICK")
-        layout.operator(FH_OT_set_n_pose.bl_idname, icon="ARMATURE_DATA")
+        pose_row = layout.row(align=True)
+        pose_row.operator(FH_OT_set_n_pose.bl_idname, icon="ARMATURE_DATA")
+        pose_row.operator(FH_OT_set_rest_pose.bl_idname, icon="MOD_ARMATURE")
         row = layout.row(align=True)
         row.enabled = bool(active)
         row.operator(FH_OT_duplicate_clip.bl_idname, icon="DUPLICATE")
@@ -1245,6 +1276,7 @@ CLASSES = (
     FH_OT_new_clip,
     FH_OT_save_as_clip,
     FH_OT_set_n_pose,
+    FH_OT_set_rest_pose,
     FH_OT_duplicate_clip,
     FH_OT_rename_clip,
     FH_OT_export_clip,
