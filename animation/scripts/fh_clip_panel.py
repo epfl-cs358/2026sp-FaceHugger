@@ -1654,38 +1654,75 @@ def to_js(frames, clip_name, convention):
 
     js = f"""// FaceHugger clip: {clip_name}
 // Generated {today} from Blender animation
-// Paste into browser console while connected to
-// FaceHugger_Net (ws://192.168.4.1:81) to play
+//
+// HOW TO RUN (browser):
+//   1. Join the robot Wi-Fi (FaceHugger_Net); robot is at 192.168.4.1.
+//   2. Open a console on a NON-HTTPS page (http://, file://, or
+//      about:blank). A ws:// socket is BLOCKED from an https:// page
+//      (mixed content) — this is the #1 reason "nothing happens".
+//   3. Paste this whole file. Call  fhStop()  to stop at any time.
+//
+// Protocol: matches the firmware T:4 handler (flat `id` + `a`; the
+// firmware ignores `servo_id`). Channels come from convention.json.
 
-const ws = new WebSocket("ws://192.168.4.1:81");
+const LOOP = true;     // set false to play the clip once, then stop
+const FRAME_MS = 30;   // send cadence (ms)
+
 const CHANNELS = {{ {ch_str} }};
 
 const CLIP = [
 {chr(10).join(clip_lines)}
 ];
 
-let i = 0;
+// Servos accept 0..180; clamp defensively (extreme poses / a drifted
+// convention can push the converted angle out of range).
+const clamp = (v) => Math.max(0, Math.min(180, v | 0));
+
+let _i = 0;
+let _timer = null;
+const ws = new WebSocket("ws://192.168.4.1:81");
+
+function fhStop() {{
+  if (_timer !== null) {{ clearInterval(_timer); _timer = null; }}
+  try {{ ws.close(); }} catch (e) {{}}
+  console.log("FaceHugger: playback stopped.");
+}}
+globalThis.fhStop = fhStop;
+
 function playFrame() {{
-  if (i >= CLIP.length) {{ i = 0; }}
-  const frame = CLIP[i++];
+  if (_i >= CLIP.length) {{
+    if (!LOOP) {{ fhStop(); return; }}
+    _i = 0;
+  }}
+  const frame = CLIP[_i++];
+  if (ws.readyState !== WebSocket.OPEN) return;
   for (const leg of ["fr", "fl", "br", "bl"]) {{
     const angles = frame[leg];
     for (let j = 0; j < 3; j++) {{
-      if (ws.readyState === WebSocket.OPEN) {{
-        ws.send(JSON.stringify({{
-          "T": 4,
-          "id": CHANNELS[leg][j],
-          "a": angles[j]
-        }}));
-      }}
+      ws.send(JSON.stringify({{
+        "T": 4,
+        "id": CHANNELS[leg][j],
+        "a": clamp(angles[j])
+      }}));
     }}
   }}
 }}
 
 ws.onopen = () => {{
-  console.log("Connected. Playing {clip_name}...");
-  setInterval(playFrame, 30);
+  console.log(
+    "FaceHugger: connected — playing {clip_name} (" + CLIP.length +
+    " frames). Call fhStop() to stop."
+  );
+  _timer = setInterval(playFrame, FRAME_MS);
 }};
+ws.onerror = (e) => {{
+  console.error(
+    "FaceHugger: WebSocket error. On the robot Wi-Fi (FaceHugger_Net, " +
+    "ws://192.168.4.1:81)? Is this page http:// (NOT https:// — ws:// " +
+    "is blocked from https pages)?", e
+  );
+}};
+ws.onclose = () => {{ fhStop(); console.log("FaceHugger: socket closed."); }};
 """
     with open(path, "w") as fh:
         fh.write(js)
