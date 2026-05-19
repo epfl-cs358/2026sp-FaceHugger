@@ -140,6 +140,10 @@ void SpinalCord::setGait(GaitType g) {
 GaitType SpinalCord::currentGait() const { return currentGait_; }
 
 void SpinalCord::tickGait() {
+    // Yaw input → coordinated in-place rotation, regardless of selected gait.
+    // Lets the user spin in place from either TROT or CRAB with the diagonals.
+    if (fabsf(activeYaw) > 0.05f) { tickYawRotation(); return; }
+
     if (currentGait_ == GAIT_TROT) { tickTrot(); return; }
 
     const GaitParams& cfg = GAITS[currentGait_];
@@ -296,19 +300,16 @@ void SpinalCord::tickTrot() {
             else if (legPhase >= 0.00f && legPhase <  0.25f) { sh = hipBack;  lift = 0.0f; }
             else                                              { sh = hipFront; lift = 0.0f; }
         } else {
-            // Rear legs: continuous hip sweep scaled by effective magnitude.
-            // RR (right side) adds yaw, RL (left side) subtracts it — negative effMag
-            // naturally reverses the sweep direction, producing opposite motion on each side.
-            const float yawSign = (i == LEG_RR) ? 1.0f : -1.0f;
-            const float effMag  = fmaxf(-1.0f, fminf(mag + yawSign * activeYaw * YAW_GAIN, 1.0f));
+            // Rear legs: continuous hip sweep scaled by forward magnitude only
+            // (yaw handled by the yawMode branch above).
             float sweep, progress;
             if (legPhase < DUTY) {
                 progress = legPhase / DUTY;
-                sweep    = STEP_LENGTH * (0.5f - progress) * effMag;
+                sweep    = STEP_LENGTH * (0.5f - progress) * mag;
             } else {
                 progress = (legPhase - DUTY) / (1.0f - DUTY);
-                sweep    = STEP_LENGTH * (-0.5f + progress) * effMag;
-                lift     = sinf(progress * (float)M_PI) * STEP_HEIGHT * fabsf(effMag);
+                sweep    = STEP_LENGTH * (-0.5f + progress) * mag;
+                lift     = sinf(progress * (float)M_PI) * STEP_HEIGHT * mag;
             }
             sh -= sweep;
         }
@@ -349,6 +350,86 @@ void SpinalCord::tickTrot() {
                 continue;
         }
 
+        legs[i]->setJointAngles(servoHip, servoThigh, servoKnee);
+    }
+}
+
+// Gait-independent in-place rotation. Called from tickGait whenever |activeYaw|
+// is significant. All 4 legs sweep their hips in a diagonal trot pattern with
+// per-leg signs chosen so every servo hip rotates the SAME way during its stance.
+// The two stance-phase forces cancel translationally and only torque remains —
+// body stays put, body rotates. Works identically under TROT or CRAB.
+void SpinalCord::tickYawRotation() {
+    constexpr float STEP_LENGTH = 40.0f;
+    constexpr float STEP_HEIGHT = 50.0f;
+    constexpr float DUTY        = 0.50f;
+    constexpr float PERIOD_S    = 1.5f;
+    constexpr float SCALE       = 2.0f / 3.0f;
+    constexpr float YAW_GAIN    = 2.0f;
+
+    // Diagonal trot pairing: FL+RR in stance during one half, FR+RL the other.
+    static const float OFFSETS[LEG_COUNT] = { 0.5f, 0.0f, 0.0f, 0.5f };
+
+    // RR is flipped because its servoHip = 90 - (sh + 45) inverts sh;
+    // the other three have servoHip = sh + const (no flip).
+    static const float YAW_COEF[LEG_COUNT] = { -1.0f, -1.0f, +1.0f, -1.0f };
+
+    const float t           = (millis() - gaitPhaseStartMs_) / 1000.0f;
+    const float globalPhase = fmodf(t / PERIOD_S, 1.0f);
+
+    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+
+    for (uint8_t i = 0; i < LEG_COUNT; ++i) {
+        const float legPhase = fmodf(globalPhase - OFFSETS[i] + 1.0f, 1.0f);
+
+        float sh = NEUTRAL[i].sh;
+        float th = NEUTRAL[i].th;
+        float kn = NEUTRAL[i].kn;
+        float lift = 0.0f;
+
+        float sweep, progress;
+        if (legPhase < DUTY) {
+            progress = legPhase / DUTY;
+            sweep    = STEP_LENGTH * (0.5f - progress);
+        } else {
+            progress = (legPhase - DUTY) / (1.0f - DUTY);
+            sweep    = STEP_LENGTH * (-0.5f + progress);
+            lift     = sinf(progress * (float)M_PI) * STEP_HEIGHT * fminf(fabsf(activeYaw), 1.0f);
+        }
+        sh -= sweep * YAW_COEF[i] * activeYaw * YAW_GAIN;
+
+        th += lift;
+        kn -= lift;
+
+        sh = NEUTRAL[i].sh + (sh - NEUTRAL[i].sh) * SCALE;
+        th = NEUTRAL[i].th + (th - NEUTRAL[i].th) * SCALE;
+        kn = NEUTRAL[i].kn + (kn - NEUTRAL[i].kn) * SCALE;
+
+        double servoHip, servoThigh, servoKnee;
+        switch (i) {
+            case LEG_FR:
+                servoHip   = 90.0 + (sh - 45.0);
+                servoThigh = 90.0 - th;
+                servoKnee  = 90.0 + kn;
+                break;
+            case LEG_FL:
+                servoHip   = sh;
+                servoThigh = 90.0 + th;
+                servoKnee  = 90.0 - kn;
+                break;
+            case LEG_RR:
+                servoHip   = 90.0 - (sh + 45.0);
+                servoThigh = 90.0 + th;
+                servoKnee  = 90.0 - kn;
+                break;
+            case LEG_RL:
+                servoHip   = 90.0 + (sh + 135.0);
+                servoThigh = 90.0 - th;
+                servoKnee  = 90.0 + kn;
+                break;
+            default:
+                continue;
+        }
         legs[i]->setJointAngles(servoHip, servoThigh, servoKnee);
     }
 }
