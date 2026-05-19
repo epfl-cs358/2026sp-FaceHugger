@@ -877,6 +877,115 @@ class FH_OT_save_as_clip(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class FH_OT_overwrite_clip(bpy.types.Operator):
+    """Replace an EXISTING clip's 5 Actions with whatever animation is
+    currently bound to the 5 control objects, then apply it.
+
+    Use this when the live animation came from somewhere else (another
+    clip, a fresh keyframing session, drifted action names) and you want
+    to commit it onto clip <clip_name>, overwriting it. Destructive to
+    that clip's previous contents (cannot be undone via these tools) —
+    hence the confirm. The SOURCE actions are copied, not moved, so
+    they are left intact (same non-destructive-to-source behaviour as
+    Save Current → New Clip).
+
+    Per-target: if the live action already IS this clip's action (you
+    Applied the clip then edited it), that target is left as-is — your
+    edits were already in the clip in place, nothing to copy."""
+
+    bl_idname = "fh.overwrite_clip"
+    bl_label = "Overwrite Clip From Current"
+    bl_options = {"REGISTER", "UNDO"}
+
+    clip_name: bpy.props.StringProperty(name="Clip Name")
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        try:
+            return wm.invoke_confirm(
+                self,
+                event,
+                title=f"Overwrite '{self.clip_name}'?",
+                message=(
+                    "Replace this clip's 5 Actions with the current "
+                    "animation. Destructive — cannot be undone via these "
+                    "tools. The source animation is left intact."
+                ),
+                confirm_text="Overwrite",
+            )
+        except TypeError:
+            # Older Blender without the rich invoke_confirm kwargs.
+            return wm.invoke_confirm(self, event)
+
+    def execute(self, context):
+        clip = self.clip_name.strip()
+        if not clip:
+            self.report({"ERROR"}, "No clip name supplied")
+            return {"CANCELLED"}
+        if clip not in list_clips():
+            self.report({"ERROR"}, f"Clip '{clip}' does not exist")
+            return {"CANCELLED"}
+
+        replaced, already, no_anim = [], [], []
+        for target in CLIP_TARGETS:
+            obj = bpy.data.objects.get(target)
+            if obj is None:
+                no_anim.append(f"object:{target}")
+                continue
+            ad = obj.animation_data
+            live = ad.action if ad is not None else None
+            if live is None:
+                no_anim.append(f"no-action:{target}")
+                continue
+            dest_name = f"{clip}__{target}"
+            if live.name == dest_name:
+                # This target already IS the clip (Applied then edited
+                # in place) — nothing to copy, leave it.
+                already.append(target)
+                continue
+            dup = live.copy()
+            old = bpy.data.actions.get(dest_name)
+            if old is not None and old != live and old != dup:
+                # Remove the OLD clip content first so the rename below
+                # doesn't get an auto ".001" suffix. old is unbound here
+                # (live != dest, so the clip wasn't the bound one).
+                bpy.data.actions.remove(old)
+            dup.name = dest_name
+            replaced.append(target)
+
+        if not replaced and not already:
+            self.report(
+                {"ERROR"},
+                "Nothing bound to overwrite with — no actions on the "
+                f"control objects ({', '.join(no_anim) or 'none'})",
+            )
+            return {"CANCELLED"}
+
+        assigned, missing = assign_clip(clip)
+
+        if not replaced:
+            self.report(
+                {"INFO"},
+                f"'{clip}' already matches the live animation — nothing to overwrite",
+            )
+        elif no_anim or missing:
+            self.report(
+                {"WARNING"},
+                f"Overwrote {len(replaced)}/{len(CLIP_TARGETS)} of '{clip}' "
+                f"(applied {assigned}/{len(CLIP_TARGETS)}, kept "
+                f"{len(already)} already-current, skipped "
+                f"{', '.join(no_anim) or 'none'})",
+            )
+        else:
+            self.report(
+                {"INFO"},
+                f"Overwrote clip '{clip}' with the current animation "
+                f"({len(replaced)} action(s)) and applied",
+            )
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
 class FH_OT_rename_clip(bpy.types.Operator):
     """Rename all 5 Actions of the active clip in one step."""
 
@@ -1778,6 +1887,11 @@ class FH_PT_clips(_FH_PT_child, bpy.types.Panel):
                     FH_OT_apply_clip.bl_idname, text=clip, icon=icon, depress=is_active
                 )
                 op.clip_name = clip
+                # Overwrite this clip with the current bound animation
+                # (confirm dialog; destructive to the clip's old content).
+                row.operator(
+                    FH_OT_overwrite_clip.bl_idname, text="", icon="FILE_REFRESH"
+                ).clip_name = clip
 
         layout.separator()
         layout.label(text="New clip name:")
@@ -1878,6 +1992,7 @@ CLASSES = (
     FH_OT_key_pose_into_clip,
     FH_OT_select_controls,
     FH_OT_duplicate_clip,
+    FH_OT_overwrite_clip,
     FH_OT_rename_clip,
     FH_OT_export_clip,
     # Panels: parent MUST be registered before its children so the

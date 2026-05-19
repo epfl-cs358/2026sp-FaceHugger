@@ -206,11 +206,19 @@ Two core data models, kept deliberately separate:
   applying another pose, or on applying a clip (now stale).
 - **Poses** — one row per library pose: Apply · Rename · Delete. Name
   field + Save Current Pose (re-saving a name updates it in place).
-- **Clips** — one button per clip (active = depressed/filled radio),
-  applies all 5 Actions. New-clip name field + New Clip · Save
-  Current → New Clip · Duplicate · Rename (last two need an active
-  clip). Apply auto-completes a clip missing targets at neutral so
-  clip switching is exact.
+- **Clips** — one button per clip (active = depressed/filled radio)
+  applies all 5 Actions; the ⟳ icon next to each **overwrites that
+  clip** with the currently-bound animation (confirm dialog;
+  destructive to the clip's old content, source left intact). New-clip
+  name field + New Clip · Save Current → New Clip · Duplicate · Rename
+  (last two need an active clip). Apply auto-completes a clip missing
+  targets at neutral so clip switching is exact.
+
+  *Note on "updating" a clip:* a clip **is** its 5 bound Actions, so
+  editing/keyframing while a clip is **active** already updates it in
+  place (just save the `.blend`). The ⟳ overwrite is for the other
+  case — pushing animation that came from elsewhere (another clip, a
+  fresh session, drifted names) onto an existing clip by name.
 - **Selection** — `All · Body · Legs · Front · Back · FL · FR · BL ·
   BR`. One operator (preset arg); replaces the selection and sets the
   active object. Pure viewport selection — touches no data.
@@ -252,6 +260,7 @@ bpy.ops.fh.apply_clip(clip_name="stand up")
 bpy.ops.fh.new_clip()                    # reads scene.fh_new_clip_name
 bpy.ops.fh.save_as_clip()                # snapshot live actions → new clip
 bpy.ops.fh.duplicate_clip()              # reads scene.fh_new_clip_name
+bpy.ops.fh.overwrite_clip(clip_name="walk")  # live anim → overwrite existing
 bpy.ops.fh.rename_clip()                 # reads scene.fh_new_clip_name
 bpy.ops.fh.export_clip()                 # active clip → exported_gaits/
 
