@@ -469,6 +469,92 @@ def _exported_gaits_dir(clip_name):
 
 
 # ---------------------------------------------------------------------------
+# Pose Library — animation/poses.json (committed, like convention.json)
+# ---------------------------------------------------------------------------
+#
+# A "pose" is a snapshot of the 5 control objects' LOCAL transforms:
+# body_ctrl gets loc+rot, the 4 foot_target_* get loc only (the IK reads
+# only foot-target *position*). Local transforms are stored so a pose
+# round-trips with keyframes — "Key into Clip" inserts the same local
+# values the clip Actions hold. JSON shape:
+#
+#   { "<pose>": { "body_ctrl": {"loc":[3], "rot":[3]},
+#                 "foot_target_fl": {"loc":[3]}, ... } }
+#
+# Poses are independent of clips: applying a pose sets transforms ONLY —
+# no keyframes, no Action assignment, no clip side effects.
+
+
+def _poses_path():
+    return os.path.join(_animation_dir(), "poses.json")
+
+
+def _load_poses():
+    """Load animation/poses.json -> {name: pose-dict}. A missing file is
+    not an error (nothing saved yet) -> {}. Corrupt JSON raises ValueError
+    so the operator can surface it rather than silently losing poses."""
+    path = _poses_path()
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"poses.json is not valid JSON: {e}") from e
+    return data if isinstance(data, dict) else {}
+
+
+def _save_poses(data):
+    """Write poses.json with stable formatting (sorted keys, indent=2,
+    trailing newline) so it diffs cleanly — it's a committed file."""
+    path = _poses_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as fh:
+        json.dump(data, fh, indent=2, sort_keys=True)
+        fh.write("\n")
+
+
+def _capture_pose():
+    """Snapshot the live LOCAL transforms of the control objects:
+    body_ctrl -> loc+rot, the 4 foot targets -> loc only. Values are
+    rounded to 6 dp (sub-micron at the rig's mm scale) to keep poses.json
+    diffs stable. Controls absent from the scene are omitted."""
+    pose = {}
+    for target in CLIP_TARGETS:
+        obj = bpy.data.objects.get(target)
+        if obj is None:
+            continue
+        if target == ANCHOR:
+            pose[target] = {
+                "loc": [round(v, 6) for v in obj.location],
+                "rot": [round(v, 6) for v in obj.rotation_euler],
+            }
+        else:
+            pose[target] = {"loc": [round(v, 6) for v in obj.location]}
+    return pose
+
+
+def _apply_pose(pose, context):
+    """Set ONLY the named control objects' local transforms to the saved
+    snapshot — no keyframes, no Action/clip side effects. Runs a
+    view-layer update so the IK re-solves to the new foot targets.
+    Returns (applied, missing) name lists."""
+    applied, missing = [], []
+    for target, xf in pose.items():
+        obj = bpy.data.objects.get(target)
+        if obj is None:
+            missing.append(target)
+            continue
+        if "loc" in xf:
+            obj.location = xf["loc"]
+        if "rot" in xf:
+            obj.rotation_euler = xf["rot"]
+        applied.append(target)
+    context.view_layer.update()
+    return applied, missing
+
+
+# ---------------------------------------------------------------------------
 # N-pose: foot targets from the RIG's own kinematics (not a hand model)
 # ---------------------------------------------------------------------------
 #
@@ -924,6 +1010,138 @@ class FH_OT_set_rest_pose(bpy.types.Operator):
 
 
 # ---------------------------------------------------------------------------
+# Operators — Pose Library (position-based, clip-independent)
+# ---------------------------------------------------------------------------
+
+
+class FH_OT_pose_save(bpy.types.Operator):
+    """Snapshot the current control-object transforms into the Pose
+    Library under the name in the field. Re-saving an existing name
+    updates it — poses are meant to be re-tuned in place."""
+
+    bl_idname = "fh.pose_save"
+    bl_label = "Save Current Pose"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        name = context.scene.fh_pose_name.strip()
+        if not name:
+            self.report({"ERROR"}, "Enter a pose name first")
+            return {"CANCELLED"}
+        try:
+            poses = _load_poses()
+        except ValueError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+        existed = name in poses
+        poses[name] = _capture_pose()
+        _save_poses(poses)
+        context.scene.fh_pose_name = ""
+        self.report({"INFO"}, f"{'Updated' if existed else 'Saved'} pose '{name}'")
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
+class FH_OT_pose_apply(bpy.types.Operator):
+    """Apply a library pose: set the 5 control transforms to the saved
+    snapshot. No keyframes are inserted — this is a pure viewport pose
+    change. Use "Key into Clip" afterwards to commit it to a clip."""
+
+    bl_idname = "fh.pose_apply"
+    bl_label = "Apply Pose"
+    bl_options = {"REGISTER", "UNDO"}
+
+    pose_name: bpy.props.StringProperty(name="Pose Name")
+
+    def execute(self, context):
+        if not self.pose_name:
+            self.report({"ERROR"}, "No pose name supplied")
+            return {"CANCELLED"}
+        try:
+            poses = _load_poses()
+        except ValueError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+        pose = poses.get(self.pose_name)
+        if pose is None:
+            self.report({"ERROR"}, f"Pose '{self.pose_name}' not found")
+            return {"CANCELLED"}
+        applied, missing = _apply_pose(pose, context)
+        if missing:
+            self.report(
+                {"WARNING"},
+                f"Applied pose '{self.pose_name}' — missing controls: "
+                f"{', '.join(missing)}",
+            )
+        else:
+            self.report({"INFO"}, f"Applied pose '{self.pose_name}'")
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
+class FH_OT_pose_rename(bpy.types.Operator):
+    """Rename a library pose to the name currently in the field."""
+
+    bl_idname = "fh.pose_rename"
+    bl_label = "Rename Pose"
+    bl_options = {"REGISTER", "UNDO"}
+
+    pose_name: bpy.props.StringProperty(name="Pose Name")
+
+    def execute(self, context):
+        new_name = context.scene.fh_pose_name.strip()
+        if not new_name:
+            self.report({"ERROR"}, "Enter the new pose name in the field first")
+            return {"CANCELLED"}
+        try:
+            poses = _load_poses()
+        except ValueError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+        if self.pose_name not in poses:
+            self.report({"ERROR"}, f"Pose '{self.pose_name}' not found")
+            return {"CANCELLED"}
+        if new_name == self.pose_name:
+            self.report({"INFO"}, "Name unchanged")
+            return {"CANCELLED"}
+        if new_name in poses:
+            self.report({"ERROR"}, f"Pose '{new_name}' already exists")
+            return {"CANCELLED"}
+        poses[new_name] = poses.pop(self.pose_name)
+        _save_poses(poses)
+        context.scene.fh_pose_name = ""
+        self.report({"INFO"}, f"Renamed pose '{self.pose_name}' -> '{new_name}'")
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
+class FH_OT_pose_delete(bpy.types.Operator):
+    """Delete a library pose. poses.json is the store; this rewrites it
+    (the file is git-tracked, so a mistaken delete is recoverable)."""
+
+    bl_idname = "fh.pose_delete"
+    bl_label = "Delete Pose"
+    bl_options = {"REGISTER", "UNDO"}
+
+    pose_name: bpy.props.StringProperty(name="Pose Name")
+
+    def execute(self, context):
+        try:
+            poses = _load_poses()
+        except ValueError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+        if self.pose_name not in poses:
+            self.report({"ERROR"}, f"Pose '{self.pose_name}' not found")
+            return {"CANCELLED"}
+        del poses[self.pose_name]
+        _save_poses(poses)
+        self.report({"INFO"}, f"Deleted pose '{self.pose_name}'")
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
+# ---------------------------------------------------------------------------
 # LAYER 1 — pure Blender data extraction (no hardware knowledge)
 # ---------------------------------------------------------------------------
 
@@ -1212,6 +1430,35 @@ class FH_PT_clip_panel(bpy.types.Panel):
         header = layout.box()
         header.label(text=f"Active: {active or '<none>'}", icon="ACTION")
 
+        # ── Poses (position-based, clip-independent) ──────────────────────────
+        layout.label(text="Poses:")
+        try:
+            pose_names = sorted(_load_poses().keys())
+            bad_poses = False
+        except ValueError:
+            pose_names, bad_poses = [], True
+        if bad_poses:
+            layout.label(text="(poses.json invalid)", icon="ERROR")
+        elif not pose_names:
+            layout.label(text="(no saved poses)", icon="INFO")
+        else:
+            pcol = layout.column(align=True)
+            for pname in pose_names:
+                prow = pcol.row(align=True)
+                prow.operator(
+                    FH_OT_pose_apply.bl_idname, text=pname, icon="ARMATURE_DATA"
+                ).pose_name = pname
+                prow.operator(
+                    FH_OT_pose_rename.bl_idname, text="", icon="FONT_DATA"
+                ).pose_name = pname
+                prow.operator(
+                    FH_OT_pose_delete.bl_idname, text="", icon="X"
+                ).pose_name = pname
+        prow = layout.row(align=True)
+        prow.prop(context.scene, "fh_pose_name", text="")
+        prow.operator(FH_OT_pose_save.bl_idname, text="", icon="ADD")
+
+        layout.separator()
         layout.label(text="Clips:")
         clips = list_clips()
         if not clips:
@@ -1277,6 +1524,10 @@ CLASSES = (
     FH_OT_save_as_clip,
     FH_OT_set_n_pose,
     FH_OT_set_rest_pose,
+    FH_OT_pose_save,
+    FH_OT_pose_apply,
+    FH_OT_pose_rename,
+    FH_OT_pose_delete,
     FH_OT_duplicate_clip,
     FH_OT_rename_clip,
     FH_OT_export_clip,
@@ -1290,6 +1541,11 @@ def register():
     bpy.types.Scene.fh_new_clip_name = bpy.props.StringProperty(
         name="New Clip Name",
         description="Used by New Clip, Duplicate Clip and Rename Active Clip",
+        default="",
+    )
+    bpy.types.Scene.fh_pose_name = bpy.props.StringProperty(
+        name="Pose Name",
+        description="Used by Save Current Pose and Rename Pose",
         default="",
     )
     bpy.types.Scene.fh_max_simultaneous_servos = bpy.props.IntProperty(
@@ -1342,6 +1598,7 @@ def unregister():
         bpy.utils.unregister_class(cls)
     for prop in (
         "fh_new_clip_name",
+        "fh_pose_name",
         "fh_max_simultaneous_servos",
         "fh_export_csv",
         "fh_export_header",
