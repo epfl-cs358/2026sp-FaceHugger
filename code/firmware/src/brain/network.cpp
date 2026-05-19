@@ -128,8 +128,8 @@ void handleParsedMessage(uint8_t * payload) {
         case CMD_ACTION_SELECTION: {
             if(doc.containsKey("a")){
                 int a = doc["a"];
-                if(a == 0){
-
+                if(a == INVERT_ROBOT){
+                    spinalCord.invertRobot();
                 }
             }
             break;
