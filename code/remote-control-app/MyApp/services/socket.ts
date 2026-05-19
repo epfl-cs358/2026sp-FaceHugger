@@ -39,13 +39,14 @@ export const sendCommand = (cmd: string) => {
     ws.send(cmd);
     return;
   }
-  // Queue if still connecting; drop if closed/closing.
-  if (ws?.readyState === WebSocket.CONNECTING) {
+  // Queue if not open yet — covers both "ws not created yet" (child useEffect
+  // fired before connect()) and "still CONNECTING". Flushed on onopen.
+  if (!ws || ws.readyState === WebSocket.CONNECTING) {
     if (DEBUGGING) console.log('[TX-queued]', cmd);
     pendingQueue.push(cmd);
-  } else if (DEBUGGING) {
-    console.log('[TX-dropped]', cmd);
+    return;
   }
+  if (DEBUGGING) console.log('[TX-dropped]', cmd);
 };
 
 export const onMessage = (cb: (data: any) => void) => {

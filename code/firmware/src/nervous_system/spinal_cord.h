@@ -44,6 +44,7 @@ class SpinalCord{
 
         void tickGait();
         void tickTrot();
+        void tickYawRotation();
 };
 
 #endif
