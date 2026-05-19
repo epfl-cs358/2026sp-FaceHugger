@@ -409,13 +409,18 @@ so a no-op re-run leaves the file's mtime untouched.
    [doc/animation-pipeline/](../../doc/animation-pipeline/)) — it slots
    in as another Layer-2 converter alongside `to_csv` / `to_c_header` /
    `to_js`.
-4. **Confirm the servo channel/translate convention.** `convention.json`'s
-   `channels` + the per-leg `translateToServo` in the `.js` converter
-   are still a proposal pending firmware `SERVO_CONFIG[]` confirmation
+4. **Confirm the servo channel/translate convention.** The exported
+   `.js` `T:4` message shape (`{T:4, id:<flat channel>, a}`) **matches
+   the firmware** (`code/firmware/src/brain/network.cpp` →
+   `applyCalibration(channel, angle)`, which ignores `servo_id`) — it
+   is [code/API_SPEC.md](../../code/API_SPEC.md) §4 and the mobile app
+   that still carry the old `id`+`servo_id` form; that cross-component
+   discrepancy is flagged in API_SPEC.md and unresolved. Separately,
+   `convention.json`'s `channels` + the per-leg `translateToServo` are
+   still a proposal pending firmware `SERVO_CONFIG[]` confirmation
    (see [animation/SERVO_ID_CONVENTION.md](../SERVO_ID_CONVENTION.md)) —
-   and the exported `.js` WebSocket message shape (`{T:4,id,a}`) must be
-   checked against [code/API_SPEC.md](../../code/API_SPEC.md). Verify
-   both before trusting an exported `.js`/`.h` on hardware.
+   servos will move but possibly the wrong joint/direction until
+   validated on hardware.
 5. **Torque heatmap.** Gravity-hold torque mode for the Display
    heatmap — scoped (incl. the ground-contact caveat) in
    [torque-heatmap.md](torque-heatmap.md).
