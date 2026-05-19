@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include "shared/data.h"
+#include "shared/config.h"
 #include "../nervous_system/spinal_cord.h"
 #include "../nervous_system/movements.h"
 
@@ -78,13 +79,14 @@ void handleParsedMessage(uint8_t * payload) {
                 int newState = doc["s"];
                 if(newState >= STATE_IDLE && newState <= STATE_FAILSAFE){
                     switch(newState){
-                        case STATE_IDLE: spinalCord.rest();
-                        case STATE_WALK: spinalCord.walk();
-                        case STATE_ACTION: spinalCord.wallFlip();
-                        default: //do nothing
+                        case STATE_IDLE: spinalCord.rest(); break;
+                        case STATE_WALK: spinalCord.walk(); break;
+                        case STATE_ACTION: spinalCord.wallFlip(); break;
+                        default: break;
                     }
                 }
             }
+            break;
         case CMD_CALIBRATE: { 
             if(doc.containsKey("id") && doc.containsKey("servo_id") && doc.containsKey("a")){
                 int id = doc["id"];
@@ -123,8 +125,17 @@ void handleParsedMessage(uint8_t * payload) {
             }
             break;
         }
-        case CMD_TELEMETRY: //this is the robot that sends it
-            Serial.printf("FSM state: %d, Battery voltage: %lf, In stabilization mode: %s\n", 
+        case CMD_ACTION_SELECTION: {
+            if(doc.containsKey("a")){
+                int a = doc["a"];
+                if(a == 0){
+
+                }
+            }
+            break;
+        }
+        case CMD_TELEMETRY: { //this is the robot that sends it
+            Serial.printf("FSM state: %d, Battery voltage: %lf, In stabilization mode: %s\n",
                 (int)doc["s"], (float)doc["b"], (int)doc["a"] ? "true": "false");
 
             JsonArray dists = doc["d"];
@@ -138,6 +149,7 @@ void handleParsedMessage(uint8_t * payload) {
             }
             Serial.println();
             break;
+        }
     }
 }
 
