@@ -1938,14 +1938,12 @@ class FH_PT_export(_FH_PT_child, bpy.types.Panel):
         layout = self.layout
         active = active_clip()
 
-        # Seeded built-in poses (decision C): convenience shortcuts that
-        # seed 'neutral'/'flat' into the library on first use, then apply
-        # them. Handy for snapping frame 1 before authoring/export.
-        prow = layout.row(align=True)
-        prow.operator(FH_OT_set_n_pose.bl_idname, icon="ARMATURE_DATA")
-        prow.operator(FH_OT_set_rest_pose.bl_idname, icon="MOD_ARMATURE")
-
-        layout.separator()
+        # NOTE: the old Set N Pose / Set Flat Pose buttons were removed —
+        # 'neutral' / 'flat' now ship as committed entries in the Poses
+        # library (poses.json), so just Apply them from the Poses panel.
+        # The fh.set_n_pose / fh.set_rest_pose operators stay registered
+        # as a console re-seed path if those defaults are ever deleted:
+        #   bpy.ops.fh.set_n_pose()  /  bpy.ops.fh.set_rest_pose()
         layout.prop(
             context.scene, "fh_max_simultaneous_servos", text="Max Simultaneous Servos"
         )
