@@ -222,34 +222,45 @@ Two core data models, kept deliberately separate:
 - **Selection** — `All · Body · Legs · Front · Back · FL · FR · BL ·
   BR`. One operator (preset arg); replaces the selection and sets the
   active object. Pure viewport selection — touches no data.
-- **Export** — **Set N Pose** / **Set Flat Pose** (see below);
-  Max-Simultaneous-Servos guard; CSV / `.h` / `.js` toggles; Export
-  Active Clip. Bakes the IK-solved joint angles once
-  (`bake_clip`, Layer 1) then runs the enabled converters (Layer 2)
-  into `animation/exported_gaits/<clip>/` (git-ignored output). The
-  `.h` stays raw bone angles; the `.js` applies the full hardware
-  conversion (scale-from-neutral + per-leg `translateToServo`) from
-  `convention.json`.
+- **Export** — Max-Simultaneous-Servos guard; CSV / `.h` / `.js`
+  format toggles; **Export Active Clip**; a **Clips to export**
+  checklist (tick any subset) + **Export Selected Clips**. Bakes the
+  IK-solved joint angles once per clip (`bake_clip`, Layer 1) then runs
+  the enabled converters (Layer 2) into
+  `animation/exported_gaits/<clip>/` (git-ignored output) — one folder
+  per clip. The `.h` stays raw bone angles; the `.js` applies the full
+  hardware conversion (scale-from-neutral + per-leg `translateToServo`)
+  from `convention.json`. (No more Set N/Flat buttons here — those poses
+  ship in the library now; see below.)
 - **Display** (collapsed by default) — Activity Heatmap toggle:
   colours the per-joint **servo** meshes by per-frame angle delta
   (green→orange→red). link2/hip has no `__servo` mesh, so 8 of 12
   joints are shown; viewports switch to Object colour while active and
   are restored losslessly on toggle-off.
 
-**Set N Pose / Set Flat Pose** (decision C) are no longer special
-angle-driving buttons — they **seed two built-in library poses** on
-first use, then apply them like any other pose:
+**Default poses ship in `animation/poses.json`** (committed, like
+`convention.json`). A fresh checkout already has:
 
-- `flat` — URDF rest, all joint angles 0 (no `convention.json` needed).
-- `neutral` — hardware-neutral N from `convention.json`'s
-  `neutral_joint_deg`.
+- `flat` — body on the BodyBottomPoint (`z=-17`), legs splayed flat
+  (URDF θ=0 rest).
+- `neutral` — body at identity, the convention-N hardware stance.
+- `standing` — body raised (`z=+100`), feet tucked under.
+
+Just **Apply** them from the Poses panel. The old Set N / Set Flat
+buttons were removed (they were redundant once the poses ship as
+defaults). The seeding machinery still exists as a **console re-seed**
+path if you ever delete `flat`/`neutral` from the library:
+
+```python
+bpy.ops.fh.set_rest_pose()   # re-seed + apply 'flat'
+bpy.ops.fh.set_n_pose()      # re-seed + apply 'neutral'
+```
 
 Seeding reuses the rig's own kinematics (`_pose_foot_targets`):
 body_ctrl is set to identity, the foot targets are read at the
 requested joint angles, the resulting **local** transforms captured,
-and the scene restored. Once seeded they are normal, re-savable
-entries in the Poses list. (`convention.json`'s N exceeds the rig's
-URDF `LIMIT_ROTATION` on some joints — this position-based library is
+and the scene restored. (`convention.json`'s N exceeds the rig's URDF
+`LIMIT_ROTATION` on some joints — this position-based library is
 exactly why poses are defined by reachable foot positions, not
 unreachable angles.)
 
@@ -263,14 +274,15 @@ bpy.ops.fh.duplicate_clip()              # reads scene.fh_new_clip_name
 bpy.ops.fh.overwrite_clip(clip_name="walk")  # live anim → overwrite existing
 bpy.ops.fh.rename_clip()                 # reads scene.fh_new_clip_name
 bpy.ops.fh.export_clip()                 # active clip → exported_gaits/
+bpy.ops.fh.export_selected()             # ticked clips (scene.fh_export_clips)
 
 bpy.ops.fh.pose_save()                   # reads scene.fh_pose_name
 bpy.ops.fh.pose_apply(pose_name="flat")
 bpy.ops.fh.pose_rename(pose_name="old")  # new name in scene.fh_pose_name
 bpy.ops.fh.pose_delete(pose_name="flat")
 bpy.ops.fh.key_pose_into_clip()          # commit pending pose to active clip
-bpy.ops.fh.set_n_pose()                  # seed+apply 'neutral'
-bpy.ops.fh.set_rest_pose()               # seed+apply 'flat'
+bpy.ops.fh.set_n_pose()                  # console re-seed+apply 'neutral'
+bpy.ops.fh.set_rest_pose()               # console re-seed+apply 'flat'
 bpy.ops.fh.select_controls(preset="LEGS")
 ```
 
@@ -278,6 +290,44 @@ bpy.ops.fh.select_controls(preset="LEGS")
 `poses.json` on every redraw, and operators call `area.tag_redraw()`
 after mutating, so the lists stay current. Items added through other
 tools appear on the next mouse-move into the panel.
+
+### Typical workflow
+
+The mental model: a **clip is its 5 bound Actions**; a **pose is a
+saved set of control transforms** (independent of clips).
+
+1. **Block out a stance.** In **Poses**, Apply `flat` / `neutral` /
+   `standing` (or your own). Apply only sets transforms — nothing is
+   keyed yet, so the parent panel shows the yellow *“Pose ‘…’ applied
+   — not keyed”* notice.
+2. **Pick a clip to work in.** In **Clips**, Apply the clip (or `New
+   Clip`). Its 5 Actions are now bound to the controls.
+3. **Commit the pose into the clip.** Click *Key into ‘<clip>’ @ frame
+   N* in the notice — it inserts the 5 keyframes into that clip at the
+   frame the pose was applied. Repeat at other frames to build motion.
+4. **Editing a clip = updating it.** While a clip is active, every
+   keyframe you set lands directly in its Actions — the clip *is*
+   updated in place. Just **Ctrl-S** the `.blend`. There is no
+   separate “save clip”.
+5. **Branch / overwrite.**
+   - `Save Current → New Clip` — snapshot whatever is bound into a
+     **new** clip (does not touch the source; Duplicate/Save *before*
+     experimenting if you want a fallback).
+   - The ⟳ on a clip row — push the currently-bound animation onto
+     **that existing** clip (confirm; for animation that came from
+     elsewhere — another clip, a fresh session, drifted names).
+   - `Save Current Pose` — store the 5 control transforms as a named
+     library pose (re-saving a name updates it).
+6. **Select fast.** The **Selection** buttons grab control groups
+   (`Legs`, `Front`, `FL`, …) so you can grab/key them together.
+7. **Export.** In **Export**, tick CSV / `.h` / `.js`, then either
+   *Export Active Clip* or tick clips in *Clips to export* and hit
+   *Export Selected Clips* → `animation/exported_gaits/<clip>/`.
+
+**Activity Heatmap** (Display, collapsed) colours the servo meshes by
+per-frame motion to spot busy/jerky joints. A future *gravity-torque*
+mode is sketched in
+[torque-heatmap.md](torque-heatmap.md).
 
 ## fh_rename_actions.py — one-shot legacy-name migration
 
@@ -363,4 +413,9 @@ so a no-op re-run leaves the file's mtime untouched.
    `channels` + the per-leg `translateToServo` in the `.js` converter
    are still a proposal pending firmware `SERVO_CONFIG[]` confirmation
    (see [animation/SERVO_ID_CONVENTION.md](../SERVO_ID_CONVENTION.md)) —
-   verify before trusting an exported `.js`/`.h` on hardware.
+   and the exported `.js` WebSocket message shape (`{T:4,id,a}`) must be
+   checked against [code/API_SPEC.md](../../code/API_SPEC.md). Verify
+   both before trusting an exported `.js`/`.h` on hardware.
+5. **Torque heatmap.** Gravity-hold torque mode for the Display
+   heatmap — scoped (incl. the ground-contact caveat) in
+   [torque-heatmap.md](torque-heatmap.md).
