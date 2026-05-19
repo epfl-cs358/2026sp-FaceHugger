@@ -554,6 +554,78 @@ def _apply_pose(pose, context):
     return applied, missing
 
 
+def _seed_pose_from_angles(joint_deg_by_leg):
+    """Build a Pose-Library pose dict from per-leg [shoulder, hip, knee]
+    joint angles, reusing the rig's own kinematics. This is the
+    repurposed N/Flat machinery (decision C): _pose_foot_targets gives
+    the IK-tip world position for each leg at those angles; we drive the
+    foot targets there (body_ctrl at rest/identity), capture the
+    resulting LOCAL transforms, then restore the scene exactly. The
+    output is a normal library pose — once seeded it is re-savable like
+    any other."""
+    arm = _find_arm_obj()
+    if arm is None:
+        raise ValueError(f"Armature '{_ARM_OBJ_NAME}' not found in scene")
+
+    snap = {}
+    for target in CLIP_TARGETS:
+        obj = bpy.data.objects.get(target)
+        if obj is not None:
+            snap[target] = (obj.location.copy(), obj.rotation_euler.copy())
+
+    # body_ctrl must be at its home/identity BEFORE we read the IK-tip
+    # world positions: the armature is parented to body_ctrl, so moving
+    # it afterwards would invalidate the foot targets and the IK would
+    # re-solve to a wrong (non-θ) pose. Set identity, update, THEN ask
+    # _pose_foot_targets where the joints-at-angles land.
+    body = bpy.data.objects.get(ANCHOR)
+    if body is not None:
+        body.location = (0.0, 0.0, 0.0)
+        body.rotation_euler = (0.0, 0.0, 0.0)
+    bpy.context.view_layer.update()
+
+    foot_world = _pose_foot_targets(arm, joint_deg_by_leg)  # restores the rig
+
+    for leg, (fx, fy, fz) in foot_world.items():
+        obj = bpy.data.objects.get(f"foot_target_{leg}")
+        if obj is None:
+            continue
+        mw = obj.matrix_world.copy()
+        mw.translation = (fx, fy, fz)
+        obj.matrix_world = mw
+    bpy.context.view_layer.update()
+
+    pose = _capture_pose()
+
+    for target, (loc, rot) in snap.items():
+        obj = bpy.data.objects.get(target)
+        if obj is None:
+            continue
+        obj.location = loc
+        obj.rotation_euler = rot
+    bpy.context.view_layer.update()
+    return pose
+
+
+def _seeded_pose(name):
+    """Return (poses[name], poses), seeding the built-in 'flat' /
+    'neutral' entries on first use and persisting poses.json. 'flat' is
+    URDF θ=0 (no convention.json needed); 'neutral' uses
+    convention.json's neutral_joint_deg (raises ValueError if it's
+    missing). Unknown names return (None, poses)."""
+    poses = _load_poses()
+    if name not in poses:
+        if name == "flat":
+            angles = {leg: (0.0, 0.0, 0.0) for leg in ("fl", "fr", "bl", "br")}
+        elif name == "neutral":
+            angles = _load_convention()["neutral_joint_deg"]
+        else:
+            return None, poses
+        poses[name] = _seed_pose_from_angles(angles)
+        _save_poses(poses)
+    return poses.get(name), poses
+
+
 # ---------------------------------------------------------------------------
 # N-pose: foot targets from the RIG's own kinematics (not a hand model)
 # ---------------------------------------------------------------------------
@@ -971,46 +1043,60 @@ def _drive_to_joint_pose(context, joint_deg_by_leg, label):
     return {"FINISHED"}, "INFO", f"Rig set to {label}"
 
 
+def _apply_seeded(operator, context, name):
+    """Shared body for Set N / Set Flat (decision C): seed the built-in
+    '<name>' library pose on first use, then apply it exactly like
+    FH_OT_pose_apply (set transforms + raise the not-keyed notice). No
+    special angle-based path — they are just two library poses now."""
+    try:
+        pose, _ = _seeded_pose(name)
+    except (ValueError, KeyError) as e:
+        operator.report({"ERROR"}, str(e))
+        return {"CANCELLED"}
+    if pose is None:
+        operator.report({"ERROR"}, f"Could not seed the '{name}' pose")
+        return {"CANCELLED"}
+    _, missing = _apply_pose(pose, context)
+    context.scene.fh_unkeyed_pose = name
+    context.scene.fh_unkeyed_frame = context.scene.frame_current
+    if missing:
+        operator.report(
+            {"WARNING"},
+            f"Applied seeded pose '{name}' — missing controls: {', '.join(missing)}",
+        )
+    else:
+        operator.report({"INFO"}, f"Applied seeded library pose '{name}'")
+    _redraw_view3d(context)
+    return {"FINISHED"}
+
+
 class FH_OT_set_n_pose(bpy.types.Operator):
-    """Move the foot targets to the hardware-neutral (N) standing pose so
-    the IK solves to the robot's real starting position. Click before
-    authoring a clip so frame 1 matches hardware. N comes from
-    convention.json."""
+    """Apply the built-in 'neutral' library pose (hardware-neutral N
+    standing pose from convention.json). Seeded into poses.json on first
+    use, then it is just a normal, re-savable library pose — this button
+    is a convenience shortcut for it (decision C)."""
 
     bl_idname = "fh.set_n_pose"
     bl_label = "Set N Pose"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        try:
-            jd = _load_convention()["neutral_joint_deg"]
-        except (ValueError, KeyError) as e:
-            self.report({"ERROR"}, str(e))
-            return {"CANCELLED"}
-        status, level, msg = _drive_to_joint_pose(
-            context, jd, "N pose (hardware neutral)"
-        )
-        self.report({level}, msg)
-        return status
+        return _apply_seeded(self, context, "neutral")
 
 
 class FH_OT_set_rest_pose(bpy.types.Operator):
-    """Move the foot targets to the FLAT base pose — the URDF rest (all
-    joint angles 0; the splayed stance the rig builder sets on every
-    `--rigged` rebuild). Use it to snap the rig back to the known
-    baseline. No convention.json needed (it's all zeros)."""
+    """Apply the built-in 'flat' library pose — the URDF rest (all joint
+    angles 0; the splayed stance the rig builder sets on every
+    `--rigged` rebuild). Seeded into poses.json on first use (no
+    convention.json needed), then a normal re-savable library pose; this
+    button is a convenience shortcut for it (decision C)."""
 
     bl_idname = "fh.set_rest_pose"
     bl_label = "Set Flat Pose"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        jd = {leg: (0.0, 0.0, 0.0) for leg in ("fl", "fr", "bl", "br")}
-        status, level, msg = _drive_to_joint_pose(
-            context, jd, "flat/rest pose (URDF θ=0)"
-        )
-        self.report({level}, msg)
-        return status
+        return _apply_seeded(self, context, "flat")
 
 
 # ---------------------------------------------------------------------------
@@ -1588,11 +1674,19 @@ class FH_OT_export_clip(bpy.types.Operator):
 # ---------------------------------------------------------------------------
 
 
-class FH_PT_clip_panel(bpy.types.Panel):
-    bl_idname = "VIEW3D_PT_fh_clip_panel"
-    bl_label = "FH Clips"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
+_PANEL_SPACE = "VIEW_3D"
+_PANEL_REGION = "UI"
+
+
+class FH_PT_root(bpy.types.Panel):
+    """Parent panel — always-visible status (active clip + the not-keyed
+    pose notice). Feature groups live in the collapsible sub-panels
+    below (Poses / Clips / Selection / Export / Display)."""
+
+    bl_idname = "VIEW3D_PT_fh_root"
+    bl_label = "FaceHugger"
+    bl_space_type = _PANEL_SPACE
+    bl_region_type = _PANEL_REGION
     bl_category = CATEGORY
 
     def draw(self, context):
@@ -1600,9 +1694,10 @@ class FH_PT_clip_panel(bpy.types.Panel):
         active = active_clip()
 
         header = layout.box()
-        header.label(text=f"Active: {active or '<none>'}", icon="ACTION")
+        header.label(text=f"Active clip: {active or '<none>'}", icon="ACTION")
 
-        # ── Not-keyed notice (a pose is live but not committed) ───────────────
+        # Not-keyed notice — a pose is live in the viewport but nothing
+        # is committed to a clip yet (decision B).
         pending = context.scene.fh_unkeyed_pose
         if pending:
             frame = context.scene.fh_unkeyed_frame
@@ -1617,8 +1712,24 @@ class FH_PT_clip_panel(bpy.types.Panel):
             else:
                 note.label(text="Apply a clip to enable keying", icon="INFO")
 
-        # ── Poses (position-based, clip-independent) ──────────────────────────
-        layout.label(text="Poses:")
+
+class _FH_PT_child:
+    """Mixin for the collapsible sub-panels: all share space/region and
+    parent onto FH_PT_root."""
+
+    bl_space_type = _PANEL_SPACE
+    bl_region_type = _PANEL_REGION
+    bl_category = CATEGORY
+    bl_parent_id = "VIEW3D_PT_fh_root"
+
+
+class FH_PT_poses(_FH_PT_child, bpy.types.Panel):
+    bl_idname = "VIEW3D_PT_fh_poses"
+    bl_label = "Poses"
+    bl_order = 0
+
+    def draw(self, context):
+        layout = self.layout
         try:
             pose_names = sorted(_load_poses().keys())
             bad_poses = False
@@ -1645,26 +1756,15 @@ class FH_PT_clip_panel(bpy.types.Panel):
         prow.prop(context.scene, "fh_pose_name", text="")
         prow.operator(FH_OT_pose_save.bl_idname, text="", icon="ADD")
 
-        # ── Selection (pick control objects; touches no data) ─────────────────
-        layout.separator()
-        layout.label(text="Selection:")
-        scol = layout.column(align=True)
-        scol.operator(FH_OT_select_controls.bl_idname, text="All").preset = "ALL"
-        srow = scol.row(align=True)
-        srow.operator(FH_OT_select_controls.bl_idname, text="Body").preset = "BODY"
-        srow.operator(FH_OT_select_controls.bl_idname, text="Legs").preset = "LEGS"
-        srow = scol.row(align=True)
-        srow.operator(FH_OT_select_controls.bl_idname, text="Front").preset = "FRONT"
-        srow.operator(FH_OT_select_controls.bl_idname, text="Back").preset = "BACK"
-        srow = scol.row(align=True)
-        srow.operator(FH_OT_select_controls.bl_idname, text="FL").preset = "FL"
-        srow.operator(FH_OT_select_controls.bl_idname, text="FR").preset = "FR"
-        srow = scol.row(align=True)
-        srow.operator(FH_OT_select_controls.bl_idname, text="BL").preset = "BL"
-        srow.operator(FH_OT_select_controls.bl_idname, text="BR").preset = "BR"
 
-        layout.separator()
-        layout.label(text="Clips:")
+class FH_PT_clips(_FH_PT_child, bpy.types.Panel):
+    bl_idname = "VIEW3D_PT_fh_clips"
+    bl_label = "Clips"
+    bl_order = 1
+
+    def draw(self, context):
+        layout = self.layout
+        active = active_clip()
         clips = list_clips()
         if not clips:
             layout.label(text="(no clips found)", icon="INFO")
@@ -1686,17 +1786,52 @@ class FH_PT_clip_panel(bpy.types.Panel):
         # enabled); Duplicate/Rename act on the active clip.
         layout.operator(FH_OT_new_clip.bl_idname, icon="ADD")
         layout.operator(FH_OT_save_as_clip.bl_idname, icon="FILE_TICK")
-        pose_row = layout.row(align=True)
-        pose_row.operator(FH_OT_set_n_pose.bl_idname, icon="ARMATURE_DATA")
-        pose_row.operator(FH_OT_set_rest_pose.bl_idname, icon="MOD_ARMATURE")
         row = layout.row(align=True)
         row.enabled = bool(active)
         row.operator(FH_OT_duplicate_clip.bl_idname, icon="DUPLICATE")
         row.operator(FH_OT_rename_clip.bl_idname, icon="FONT_DATA")
 
-        # ── Export ────────────────────────────────────────────────────────────
+
+class FH_PT_selection(_FH_PT_child, bpy.types.Panel):
+    bl_idname = "VIEW3D_PT_fh_selection"
+    bl_label = "Selection"
+    bl_order = 2
+
+    def draw(self, context):
+        layout = self.layout
+        scol = layout.column(align=True)
+        scol.operator(FH_OT_select_controls.bl_idname, text="All").preset = "ALL"
+        srow = scol.row(align=True)
+        srow.operator(FH_OT_select_controls.bl_idname, text="Body").preset = "BODY"
+        srow.operator(FH_OT_select_controls.bl_idname, text="Legs").preset = "LEGS"
+        srow = scol.row(align=True)
+        srow.operator(FH_OT_select_controls.bl_idname, text="Front").preset = "FRONT"
+        srow.operator(FH_OT_select_controls.bl_idname, text="Back").preset = "BACK"
+        srow = scol.row(align=True)
+        srow.operator(FH_OT_select_controls.bl_idname, text="FL").preset = "FL"
+        srow.operator(FH_OT_select_controls.bl_idname, text="FR").preset = "FR"
+        srow = scol.row(align=True)
+        srow.operator(FH_OT_select_controls.bl_idname, text="BL").preset = "BL"
+        srow.operator(FH_OT_select_controls.bl_idname, text="BR").preset = "BR"
+
+
+class FH_PT_export(_FH_PT_child, bpy.types.Panel):
+    bl_idname = "VIEW3D_PT_fh_export"
+    bl_label = "Export"
+    bl_order = 3
+
+    def draw(self, context):
+        layout = self.layout
+        active = active_clip()
+
+        # Seeded built-in poses (decision C): convenience shortcuts that
+        # seed 'neutral'/'flat' into the library on first use, then apply
+        # them. Handy for snapping frame 1 before authoring/export.
+        prow = layout.row(align=True)
+        prow.operator(FH_OT_set_n_pose.bl_idname, icon="ARMATURE_DATA")
+        prow.operator(FH_OT_set_rest_pose.bl_idname, icon="MOD_ARMATURE")
+
         layout.separator()
-        layout.label(text="Export:")
         layout.prop(
             context.scene, "fh_max_simultaneous_servos", text="Max Simultaneous Servos"
         )
@@ -1708,8 +1843,15 @@ class FH_PT_clip_panel(bpy.types.Panel):
         row.enabled = bool(active)
         row.operator(FH_OT_export_clip.bl_idname, icon="EXPORT")
 
-        # ── Heatmap ───────────────────────────────────────────────────────────
-        layout.separator()
+
+class FH_PT_display(_FH_PT_child, bpy.types.Panel):
+    bl_idname = "VIEW3D_PT_fh_display"
+    bl_label = "Display"
+    bl_order = 4
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
         layout.prop(
             context.scene,
             "fh_heatmap_active",
@@ -1738,7 +1880,14 @@ CLASSES = (
     FH_OT_duplicate_clip,
     FH_OT_rename_clip,
     FH_OT_export_clip,
-    FH_PT_clip_panel,
+    # Panels: parent MUST be registered before its children so the
+    # bl_parent_id link resolves.
+    FH_PT_root,
+    FH_PT_poses,
+    FH_PT_clips,
+    FH_PT_selection,
+    FH_PT_export,
+    FH_PT_display,
 )
 
 
