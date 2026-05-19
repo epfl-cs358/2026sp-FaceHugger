@@ -284,14 +284,17 @@ void SpinalCord::tickTrot() {
         const bool isFront = (i == LEG_FR || i == LEG_FL);
         if (isFront) {
             const int idx = (i == LEG_FR) ? 0 : 1;
-            const float hi = HIP_IN[idx];
-            // Scale excursion by joystick magnitude, anchored at hip_in.
-            const float ho = hi + (HIP_OUT[idx] - hi) * mag;
+            // Anchor both endpoints at neutral and scale the delta by mag, so mag=0
+            // (pure yaw input) holds the front legs exactly at neutral instead of
+            // biasing FR ~13° forward and dragging the body backward during the spin.
+            const float n        = NEUTRAL[i].sh;
+            const float hipBack  = n + (HIP_IN[idx]  - n) * mag;
+            const float hipFront = n + (HIP_OUT[idx] - n) * mag;
 
-            if      (legPhase >= 0.50f && legPhase <  0.75f) { sh = ho; lift = STEP_HEIGHT * mag; }
-            else if (legPhase >= 0.75f && legPhase <= 1.00f) { sh = hi; lift = STEP_HEIGHT * mag; }
-            else if (legPhase >= 0.00f && legPhase <  0.25f) { sh = hi; lift = 0.0f; }
-            else                                              { sh = ho; lift = 0.0f; }
+            if      (legPhase >= 0.50f && legPhase <  0.75f) { sh = hipFront; lift = STEP_HEIGHT * mag; }
+            else if (legPhase >= 0.75f && legPhase <= 1.00f) { sh = hipBack;  lift = STEP_HEIGHT * mag; }
+            else if (legPhase >= 0.00f && legPhase <  0.25f) { sh = hipBack;  lift = 0.0f; }
+            else                                              { sh = hipFront; lift = 0.0f; }
         } else {
             // Rear legs: continuous hip sweep scaled by effective magnitude.
             // RR (right side) adds yaw, RL (left side) subtracts it — negative effMag
