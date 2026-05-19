@@ -1142,6 +1142,84 @@ class FH_OT_pose_delete(bpy.types.Operator):
 
 
 # ---------------------------------------------------------------------------
+# Operator — selection sets (pick control objects; touches no data)
+# ---------------------------------------------------------------------------
+#
+# Convenience for animators: select a meaningful group of the rig's
+# control objects in one click (so you can grab/key them together).
+# Pure viewport selection — no transforms, keyframes or Actions touched.
+
+_SELECTION_PRESETS = {
+    "ALL": list(CLIP_TARGETS),
+    "BODY": [ANCHOR],
+    "FRONT": ["foot_target_fl", "foot_target_fr"],
+    "BACK": ["foot_target_bl", "foot_target_br"],
+    "LEGS": [
+        "foot_target_fl",
+        "foot_target_fr",
+        "foot_target_bl",
+        "foot_target_br",
+    ],
+    "FL": ["foot_target_fl"],
+    "FR": ["foot_target_fr"],
+    "BL": ["foot_target_bl"],
+    "BR": ["foot_target_br"],
+}
+
+# Button order in the panel (kept stable, independent of dict order).
+_SELECTION_ORDER = ("ALL", "BODY", "FRONT", "BACK", "LEGS", "FL", "FR", "BL", "BR")
+
+
+class FH_OT_select_controls(bpy.types.Operator):
+    """Select a preset group of rig control objects (replacing the
+    current selection) and make one of them active. Selection only —
+    no transforms, keyframes or Actions are modified."""
+
+    bl_idname = "fh.select_controls"
+    bl_label = "Select Controls"
+    bl_options = {"REGISTER", "UNDO"}
+
+    preset: bpy.props.StringProperty(name="Preset")
+
+    def execute(self, context):
+        names = _SELECTION_PRESETS.get(self.preset)
+        if names is None:
+            self.report({"ERROR"}, f"Unknown selection preset '{self.preset}'")
+            return {"CANCELLED"}
+
+        view_objs = context.view_layer.objects
+        for obj in view_objs:
+            obj.select_set(False)
+
+        selected, missing = [], []
+        for name in names:
+            obj = view_objs.get(name)  # None if absent or not in this view layer
+            if obj is None:
+                missing.append(name)
+                continue
+            obj.select_set(True)
+            selected.append(obj)
+
+        if not selected:
+            self.report({"WARNING"}, f"No '{self.preset}' controls found in the scene")
+            return {"CANCELLED"}
+        view_objs.active = selected[0]
+
+        if missing:
+            self.report(
+                {"WARNING"},
+                f"Selected {len(selected)} ({self.preset}) — missing: "
+                f"{', '.join(missing)}",
+            )
+        else:
+            self.report(
+                {"INFO"}, f"Selected {len(selected)} control(s) ({self.preset})"
+            )
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
+# ---------------------------------------------------------------------------
 # LAYER 1 — pure Blender data extraction (no hardware knowledge)
 # ---------------------------------------------------------------------------
 
@@ -1458,6 +1536,24 @@ class FH_PT_clip_panel(bpy.types.Panel):
         prow.prop(context.scene, "fh_pose_name", text="")
         prow.operator(FH_OT_pose_save.bl_idname, text="", icon="ADD")
 
+        # ── Selection (pick control objects; touches no data) ─────────────────
+        layout.separator()
+        layout.label(text="Selection:")
+        scol = layout.column(align=True)
+        scol.operator(FH_OT_select_controls.bl_idname, text="All").preset = "ALL"
+        srow = scol.row(align=True)
+        srow.operator(FH_OT_select_controls.bl_idname, text="Body").preset = "BODY"
+        srow.operator(FH_OT_select_controls.bl_idname, text="Legs").preset = "LEGS"
+        srow = scol.row(align=True)
+        srow.operator(FH_OT_select_controls.bl_idname, text="Front").preset = "FRONT"
+        srow.operator(FH_OT_select_controls.bl_idname, text="Back").preset = "BACK"
+        srow = scol.row(align=True)
+        srow.operator(FH_OT_select_controls.bl_idname, text="FL").preset = "FL"
+        srow.operator(FH_OT_select_controls.bl_idname, text="FR").preset = "FR"
+        srow = scol.row(align=True)
+        srow.operator(FH_OT_select_controls.bl_idname, text="BL").preset = "BL"
+        srow.operator(FH_OT_select_controls.bl_idname, text="BR").preset = "BR"
+
         layout.separator()
         layout.label(text="Clips:")
         clips = list_clips()
@@ -1528,6 +1624,7 @@ CLASSES = (
     FH_OT_pose_apply,
     FH_OT_pose_rename,
     FH_OT_pose_delete,
+    FH_OT_select_controls,
     FH_OT_duplicate_clip,
     FH_OT_rename_clip,
     FH_OT_export_clip,
