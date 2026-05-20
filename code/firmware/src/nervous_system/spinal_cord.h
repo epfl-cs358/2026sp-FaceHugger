@@ -30,7 +30,7 @@ class SpinalCord{
             uint8_t  gait;
             bool     is_moving;
             bool     is_inverted;
-            uint32_t last_command_ms;
+            uint32_t last_cmd_ms;
             float    target_x, target_y, target_yaw;
             float    active_x, active_y, active_yaw;
             float    servo_angles[12]; // FR(h,t,k), FL(h,t,k), BR(h,t,k), BL(h,t,k)

@@ -7,7 +7,7 @@ namespace csv_log {
 
 template <std::size_t N>
 void Ring<N>::append(const char* row, std::size_t row_len) {
-    if (row_len == 0 || row_len > N) return;
+    if (row_len == 0 || row_len > N || row[row_len - 1] != '\n') return;
 
     // Evict oldest whole rows until row_len fits.
     while (len_ + row_len > N) {

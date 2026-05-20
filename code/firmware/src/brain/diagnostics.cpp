@@ -8,12 +8,10 @@
 
 namespace {
 
-constexpr std::size_t kBufBytes = 8 * 1024;  // 8 KB rolling buffer
-
-WebServer                gServer(diagnostics::kHttpPort);
+WebServer                              gServer(diagnostics::kHttpPort);
 // gRing is mutated by both tick() (append) and handleLog/handleClear (read/clear),
 // but both are driven from loop() in series — no concurrency to worry about.
-csv_log::Ring<kBufBytes> gRing;
+csv_log::Ring<diagnostics::kBufBytes>  gRing;
 SpinalCord*              gSc           = nullptr;
 unsigned long            gLastSampleMs = 0;
 
@@ -38,8 +36,8 @@ void handleClear() {
 void handleRoot() {
     gServer.send(200, "text/plain",
         "FaceHugger diagnostics\n"
-        "  GET /log        — CSV header + rolling buffer\n"
-        "  GET /log/clear  — clear the buffer\n");
+        "  GET  /log        — CSV header + rolling buffer\n"
+        "  POST /log/clear  — clear the buffer\n");
 }
 
 } // namespace
@@ -50,7 +48,7 @@ void begin(SpinalCord& sc) {
     gSc = &sc;
     gServer.on("/",          HTTP_GET, handleRoot);
     gServer.on("/log",       HTTP_GET, handleLog);
-    gServer.on("/log/clear", HTTP_GET, handleClear);
+    gServer.on("/log/clear", HTTP_POST, handleClear);
     gServer.begin();
 }
 
@@ -67,7 +65,7 @@ void tick() {
     s.gait         = snap.gait;
     s.is_moving    = snap.is_moving ? 1 : 0;
     s.is_inverted  = snap.is_inverted ? 1 : 0;
-    s.last_cmd_ms  = snap.last_command_ms;
+    s.last_cmd_ms  = snap.last_cmd_ms;
     s.target_x = snap.target_x; s.target_y = snap.target_y; s.target_yaw = snap.target_yaw;
     s.active_x = snap.active_x; s.active_y = snap.active_y; s.active_yaw = snap.active_yaw;
     for (int i = 0; i < 12; ++i) s.servo_angles[i] = snap.servo_angles[i];

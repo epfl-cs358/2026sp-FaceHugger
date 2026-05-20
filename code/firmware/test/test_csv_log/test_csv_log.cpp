@@ -162,6 +162,17 @@ void test_ring_accepts_row_equal_to_capacity(void) {
     TEST_ASSERT_EQUAL_MEMORY("abcd\n", d1, 5);
 }
 
+void test_ring_rejects_unterminated_row(void) {
+    // Defense-in-depth: append() requires '\n'-terminated rows so eviction's
+    // "scan forward to next \n" loop stays row-aligned. Rows without a trailing
+    // '\n' must be silently rejected.
+    csv_log::Ring<8> r;
+    r.append("nope", 4);            // no trailing '\n'
+    TEST_ASSERT_EQUAL_INT(0, (int)r.size());
+    r.append("ok\n", 3);            // proper row still works after a reject
+    TEST_ASSERT_EQUAL_INT(3, (int)r.size());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_header_has_expected_column_count);
@@ -176,5 +187,6 @@ int main(int, char**) {
     RUN_TEST(test_ring_oversize_row_is_dropped);
     RUN_TEST(test_ring_single_append_evicts_multiple_rows);
     RUN_TEST(test_ring_accepts_row_equal_to_capacity);
+    RUN_TEST(test_ring_rejects_unterminated_row);
     return UNITY_END();
 }

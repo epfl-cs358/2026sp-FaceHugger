@@ -33,7 +33,10 @@ const char* header();
 // Returns bytes written (not counting the null terminator), or 0 if `cap` is too small.
 std::size_t format_row(const State& s, char* out, std::size_t cap);
 
-// Maximum bytes any row will ever produce (upper bound for buffer sizing).
+// Upper bound for buffer sizing given expected robot state/value ranges
+// (joystick floats in [-1, 1], servo angles in [0, 180], 32-bit timestamps).
+// NOT a theoretical bound for every representable float — but format_row()
+// returns 0 on overflow, so any pathological input is dropped, not corrupted.
 constexpr std::size_t kMaxRowBytes = 192;
 
 // Append-only ring of whole CSV rows. Static, fixed capacity at compile time.
@@ -46,8 +49,9 @@ public:
     void clear() { head_ = tail_ = len_ = 0; }
 
     // Append a single row. `row` must end with '\n' (the convention of format_row()).
-    // If the row is larger than capacity, the call is a no-op. Otherwise oldest whole
-    // rows are evicted (tail advances past their trailing '\n') until it fits.
+    // The call is a no-op if row_len == 0, row_len > N, or the row is not
+    // '\n'-terminated. Otherwise oldest whole rows are evicted (tail advances
+    // past their trailing '\n') until it fits.
     void append(const char* row, std::size_t row_len);
 
     // Two-segment view of stored bytes in logical order: [data1, data1+size1) then

@@ -464,7 +464,7 @@ SpinalCord::Snapshot SpinalCord::snapshot() const {
     s.gait            = (uint8_t)currentGait_;
     s.is_moving       = isMovingRequested;
     s.is_inverted     = isInverted;
-    s.last_command_ms = lastCommandMs;
+    s.last_cmd_ms     = lastCommandMs;
     s.target_x = targetX; s.target_y = targetY; s.target_yaw = targetYaw;
     s.active_x = activeX; s.active_y = activeY; s.active_yaw = activeYaw;
     leg1.getJointAngles(s.servo_angles[0], s.servo_angles[1],  s.servo_angles[2]);
