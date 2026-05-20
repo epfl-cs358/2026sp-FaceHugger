@@ -6,6 +6,7 @@
 #include <cstdint>
 #include "leg.h"
 #include "movements.h"
+#include "face.h"
 #include "../shared/data.h"
 
 class SpinalCord{
@@ -22,9 +23,11 @@ class SpinalCord{
         void setGait(GaitType g);
         GaitType currentGait() const;
         void processCommand(String dir);
+        Face& getFace() { return face; }
     private:
         volatile RobotState robotState;
         Adafruit_PWMServoDriver driver;
+        Face face;
         Leg leg1;
         Leg leg2;
         Leg leg3;

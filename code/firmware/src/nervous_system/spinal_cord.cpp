@@ -29,6 +29,7 @@ static const GaitParams GAITS[] = {
 SpinalCord::SpinalCord(uint8_t pwm):
     robotState(STATE_IDLE),
     driver(Adafruit_PWMServoDriver(ADDR_SERVO_DRIVER)),
+    face(),
     leg1(Leg(driver, 0,
         Servo(driver, FRONT_RIGHT_LEG_HIP_PCA_CHANNEL,    FRONT_RIGHT_LEG_HIP_DEFAULT_ANGLE),
         Servo(driver, FRONT_RIGHT_LEG_THIGH_PCA_CHANNEL,  FRONT_RIGHT_LEG_THIGH_DEFAULT_ANGLE),
@@ -66,21 +67,24 @@ void SpinalCord::begin() {
     leg2.returnToDefaultAngles();
     leg3.returnToDefaultAngles();
     leg4.returnToDefaultAngles();
+    
+    face.begin();
+    face.setState(EYES_FRONT);
 }
 
 void SpinalCord::processCommand(String dir) {
     lastCommandMs = millis();
     isMovingRequested = (dir != "STOP");
 
-    if      (dir == "FW")   { targetX =  0.0f; targetY =  1.0f; targetYaw =  0.0f; }
-    else if (dir == "BW")   { targetX =  0.0f; targetY = -1.0f; targetYaw =  0.0f; }
-    else if (dir == "L")    { targetX = -1.0f; targetY =  0.0f; targetYaw =  0.0f; }
-    else if (dir == "R")    { targetX =  1.0f; targetY =  0.0f; targetYaw =  0.0f; }
-    else if (dir == "FW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; }
-    else if (dir == "FW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; }
-    else if (dir == "BW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; }
-    else if (dir == "BW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; }
-    else if (dir == "STOP") { targetX =  0.0f; targetY =  0.0f; targetYaw =  0.0f; }
+    if      (dir == "FW")   { targetX =  0.0f; targetY =  1.0f; targetYaw =  0.0f; face.setState(EYES_FRONT); }
+    else if (dir == "BW")   { targetX =  0.0f; targetY = -1.0f; targetYaw =  0.0f; face.setState(EYES_FRONT); }
+    else if (dir == "L")    { targetX = -1.0f; targetY =  0.0f; targetYaw =  0.0f; face.setState(EYES_LEFT); }
+    else if (dir == "R")    { targetX =  1.0f; targetY =  0.0f; targetYaw =  0.0f; face.setState(EYES_RIGHT); }
+    else if (dir == "FW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; face.setState(EYES_RIGHT); }
+    else if (dir == "FW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; face.setState(EYES_LEFT); }
+    else if (dir == "BW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; face.setState(EYES_RIGHT); }
+    else if (dir == "BW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; face.setState(EYES_LEFT); }
+    else if (dir == "STOP") { targetX =  0.0f; targetY =  0.0f; targetYaw =  0.0f; face.setState(EYES_FRONT); }
 }
 
 void SpinalCord::walk()     { robotState = STATE_WALK; }
@@ -131,6 +135,8 @@ void SpinalCord::update() {
             leg4.returnToDefaultAngles();
             break;
     }
+    
+    face.update();
 }
 
 void SpinalCord::setGait(GaitType g) {
@@ -450,11 +456,13 @@ void SpinalCord::invertRobot() {
         leg2.setJointAngles(75, 150,  50);  // FL: 180-30,  180-130
         leg3.setJointAngles(90, 140,  40);  // RR: 180-40,  180-140
         leg4.setJointAngles(90,  30, 125);  // RL: 180-150, 180-55
+        face.setState(EYES_CONFUSED);
     } else {
         leg1.returnToDefaultAngles();
         leg2.returnToDefaultAngles();
         leg3.returnToDefaultAngles();
         leg4.returnToDefaultAngles();
+        face.setState(EYES_FRONT);
     }
 
     gaitPhaseStartMs_ = millis();
