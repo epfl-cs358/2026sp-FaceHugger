@@ -1816,6 +1816,23 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False):
     path = os.path.join(_exported_gaits_dir(clip_name), f"{clip_name}.js")
     today = datetime.date.today().isoformat()
 
+    # Derive the playback wall-clock period from the baked time_ms
+    # column — the median delta between consecutive frames gives the
+    # source scene's frame period (typically ~42 ms at 24 fps). The
+    # previous hard-coded FRAME_MS=30 made every clip play 1.4× faster
+    # than authored at the default Blender scene FPS. Using the
+    # source-frame period keeps playback wall-clock = authored
+    # wall-clock. Falls back to 33 ms (~30 fps) if the clip has fewer
+    # than 2 frames.
+    if len(frames) >= 2:
+        deltas = sorted(
+            frames[i + 1]["time_ms"] - frames[i]["time_ms"]
+            for i in range(len(frames) - 1)
+        )
+        frame_ms = deltas[len(deltas) // 2]
+    else:
+        frame_ms = 33
+
     clip_lines = []
     for row in frames:
         s = _frame_to_servo(row, convention)
@@ -1897,7 +1914,11 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False):
 //     (servos hold their last commanded angle in hardware).
 
 const LOOP = {loop_js};
-const FRAME_MS = 30;
+// Playback wall-clock period — derived from the Blender scene FPS at
+// bake time (median delta of `t` between consecutive frames), so this
+// clip plays at the speed it was authored. Each scheduled tick sends
+// the next CLIP[] frame.
+const FRAME_MS = {frame_ms};
 const CLIP_NAME = {json.dumps(clip_name)};
 
 // Blender leg name -> firmware LegId (see movements.h enum LegId on
