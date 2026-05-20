@@ -573,15 +573,14 @@ def _seed_pose_from_angles(joint_deg_by_leg):
         if obj is not None:
             snap[target] = (obj.location.copy(), obj.rotation_euler.copy())
 
-    # body_ctrl must be at its home/identity BEFORE we read the IK-tip
-    # world positions: the armature is parented to body_ctrl, so moving
-    # it afterwards would invalidate the foot targets and the IK would
-    # re-solve to a wrong (non-θ) pose. Set identity, update, THEN ask
-    # _pose_foot_targets where the joints-at-angles land.
-    body = bpy.data.objects.get(ANCHOR)
-    if body is not None:
-        body.location = (0.0, 0.0, 0.0)
-        body.rotation_euler = (0.0, 0.0, 0.0)
+    # Let body_ctrl stay at whatever rest position the rig builder set
+    # (post-pivot-move that's (0,0,-17) — the BodyBottomPoint world
+    # offset; pre-move it was identity). _pose_foot_targets below is
+    # computed RELATIVE to that, and the captured pose then stores body
+    # + feet at consistent positions. Earlier code forced body to
+    # (0,0,0) here, which silently put the rig 17 mm above canonical
+    # rest in every seeded pose — trigger Set N/Flat with the rig at
+    # rest (its default state on open) and the seeded pose is correct.
     bpy.context.view_layer.update()
 
     foot_world = _pose_foot_targets(arm, joint_deg_by_leg)  # restores the rig
@@ -1815,21 +1814,33 @@ function playFrame() {{
 # Operators — export (active clip / a ticked selection of clips)
 # ---------------------------------------------------------------------------
 
-# Dynamic ENUM_FLAG items for the per-clip export checklist. Blender can
-# garbage-collect enum-item strings returned by a callback unless we keep
-# a reference, so cache the list at module scope and return that.
-_export_clip_enum_cache = []
+# Dynamic ENUM_FLAG items for the per-clip export checklist. Blender
+# can garbage-collect enum-item strings returned by a callback unless
+# we keep a reference, so cache the list at module scope. The cache is
+# rebuilt ONLY when the underlying clip set changes — rebuilding on
+# every panel redraw causes the toggle widgets to visibly twitch as
+# Blender re-renders the (logically-identical) item list.
+_export_clip_enum_cache: list[tuple] = []
+_export_clip_enum_signature: tuple = ()
 
 
 def _export_clip_items(self, context):
     """ENUM_FLAG items = every clip in the scene (capped at 32 — the
     flag bit budget; clips beyond that just won't be tick-selectable,
-    which is far more clips than this project will ever have)."""
-    _export_clip_enum_cache.clear()
-    for i, clip in enumerate(list_clips()[:32]):
-        _export_clip_enum_cache.append(
-            (clip, clip, f"Include '{clip}' in the selected-clips export", 1 << i)
-        )
+    which is far more clips than this project will ever have).
+
+    Content-cached: returns the same list object on consecutive calls
+    when the clip set is unchanged, so Blender's ENUM_FLAG widget
+    doesn't twitch on every panel redraw."""
+    global _export_clip_enum_signature
+    clips = tuple(list_clips()[:32])
+    if clips != _export_clip_enum_signature:
+        _export_clip_enum_cache.clear()
+        for i, clip in enumerate(clips):
+            _export_clip_enum_cache.append(
+                (clip, clip, f"Include '{clip}' in the selected-clips export", 1 << i)
+            )
+        _export_clip_enum_signature = clips
     return _export_clip_enum_cache
 
 
