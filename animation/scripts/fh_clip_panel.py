@@ -331,6 +331,32 @@ def active_clip():
     return _action_clip_name(obj.animation_data.action.name)
 
 
+def _keep_action(action):
+    """Mark a clip Action with the fake-user flag so it survives
+    Blender's orphan-purge-on-save when it's not the currently-bound
+    one. The user model is "all my clips persist regardless of which
+    one is active" — without this, every non-active clip has zero
+    users and gets garbage-collected on the next .blend save."""
+    if action is not None:
+        action.use_fake_user = True
+    return action
+
+
+def _rescue_existing_clip_actions():
+    """Sweep bpy.data.actions on register, mark every clip-pattern
+    Action (`<clip>__<target>`) as fake_user=True. Rescues clips that
+    are still in the current .blend but were created before this fix —
+    without the sweep they'd be lost on the very next save."""
+    rescued = 0
+    for action in bpy.data.actions:
+        if _action_clip_name(action.name) is None:
+            continue
+        if not action.use_fake_user:
+            action.use_fake_user = True
+            rescued += 1
+    return rescued
+
+
 def assign_clip(clip):
     """Wire each of the 5 Actions onto its target object via the layered API.
 
@@ -401,7 +427,7 @@ def _autocomplete_clip(clip, context):
     repaired = []
     for target in fixable:
         obj = bpy.data.objects[target]
-        action = bpy.data.actions.new(f"{clip}__{target}")
+        action = _keep_action(bpy.data.actions.new(f"{clip}__{target}"))
         action.slots.new(id_type="OBJECT", name=target)
         adt = obj.animation_data_create()
         adt.action = action
@@ -811,7 +837,7 @@ class FH_OT_duplicate_clip(bpy.types.Operator):
             src_action = clip_action(src, target)
             if src_action is None:
                 continue
-            dup = src_action.copy()
+            dup = _keep_action(src_action.copy())
             dup.name = f"{new_name}__{target}"
             copied += 1
 
@@ -875,7 +901,7 @@ class FH_OT_save_as_clip(bpy.types.Operator):
             if src_action is None:
                 no_anim.append(f"no-action:{target}")
                 continue
-            dup = src_action.copy()
+            dup = _keep_action(src_action.copy())
             dup.name = f"{new_name}__{target}"
             copied += 1
 
@@ -992,7 +1018,7 @@ class FH_OT_overwrite_clip(bpy.types.Operator):
                 # in place) — nothing to copy, leave it.
                 already.append(target)
                 continue
-            dup = live.copy()
+            dup = _keep_action(live.copy())
             old = bpy.data.actions.get(dest_name)
             if old is not None and old != live and old != dup:
                 # Remove the OLD clip content first so the rename below
@@ -1138,7 +1164,7 @@ class FH_OT_new_clip(bpy.types.Operator):
         # identifier auto-becomes `OB<target>` — exactly what assign_clip()
         # looks up, so the wiring is identical to every other clip.
         for target in CLIP_TARGETS:
-            action = bpy.data.actions.new(f"{new_name}__{target}")
+            action = _keep_action(bpy.data.actions.new(f"{new_name}__{target}"))
             action.slots.new(id_type="OBJECT", name=target)
 
         assigned, missing = assign_clip(new_name)
@@ -2413,6 +2439,13 @@ def register():
         default=False,
         update=_toggle_heatmap,
     )
+
+    # Rescue any clip-pattern Actions that pre-date this fix and would
+    # otherwise be culled on the next .blend save (zero users + no
+    # fake-user flag). Safe to re-run — re-marks idempotently.
+    n = _rescue_existing_clip_actions()
+    if n:
+        print(f"[fh_clip_panel] rescued {n} clip Action(s) (fake-user set)")
 
 
 def unregister():
