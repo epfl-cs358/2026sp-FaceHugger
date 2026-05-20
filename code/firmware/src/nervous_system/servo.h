@@ -13,6 +13,7 @@ class Servo {
         void setServoAngle(double angle);
         void returnToDefaultAngle();
         uint8_t getChannel() const;
+        double getServoAngle() const;
     private:
         Adafruit_PWMServoDriver& pwm;
         uint8_t pcaChannel;

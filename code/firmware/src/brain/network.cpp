@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include "shared/data.h"
+#include "shared/config.h"
 #include "../nervous_system/spinal_cord.h"
 #include "../nervous_system/movements.h"
 
@@ -23,6 +24,9 @@ void initNetwork() {
         Serial.print("SSID: FaceHugger_Net\nIP:   ");
         Serial.println(WiFi.softAPIP());
         Serial.println("======================================\n");
+    }else{
+        Serial.println("\n======================================");
+        Serial.println("Did not succeed to create the access point \n");
     }
 
     webSocket.begin();
@@ -62,23 +66,54 @@ void handleParsedMessage(uint8_t * payload) {
     JsonDocument doc; // ArduinoJson 7 syntax
     DeserializationError error = deserializeJson(doc, payload);
 
-    if (error) return;
+    if (error) {
+        Serial.println("Failed to parse JSON");
+        return;
+    }
 
     int type = doc["T"];
 
     switch (type) {
         case CMD_STATE:
-            Serial.printf("State Change Request: %d\n", (int)doc["s"]);
+            if(doc.containsKey("s")){
+                int newState = doc["s"];
+                if(newState >= STATE_IDLE && newState <= STATE_FAILSAFE){
+                    switch(newState){
+                        case STATE_IDLE: spinalCord.rest(); break;
+                        case STATE_WALK: spinalCord.walk(); break;
+                        case STATE_ACTION: spinalCord.wallFlip(); break;
+                        default: break;
+                    }
+                }
+            }
             break;
         case CMD_CALIBRATE: { 
-            int channel = doc["id"] | 0;
-            int angle = doc["a"] | 90; 
-
-            spinalCord.applyCalibration(channel, angle);
-            Serial.printf("Calibrating servo %d to %d", channel, angle);
+            if(doc.containsKey("id") && doc.containsKey("servo_id") && doc.containsKey("a")){
+                int id = doc["id"];
+                int servoId = doc["servo_id"];
+                int angle = doc["a"];
+                //create a mapping between the channels and leg servo id
+                uint8_t channel = LEG_SERVO_CHANNEL[id][servoId];
+                spinalCord.applyCalibration(channel, angle);
+                Serial.printf("Calibrating servo %d to %d", channel, angle);
+                break;
+            }
+        }
+        
+        case CMD_MOVE: {
+            // Extract the direction string
+            String dir = doc["dir"] | "";
+            
+            spinalCord.walk(); 
+            
+            
+            // Send the intent to the 4-Phase Engine
+            spinalCord.processCommand(dir);
+            Serial.printf("Move -> Dir: %s", dir.c_str());
             break;
         }
-        case CMD_MOVE: {
+        
+        case CMD_GAIT_MODE: {
             if (doc["g"].is<int>()) {
                 int g = doc["g"];
                 if (g >= GAIT_NONE && g <= GAIT_CRAB) {
@@ -88,11 +123,19 @@ void handleParsedMessage(uint8_t * payload) {
                     }
                 }
             }
-            Serial.printf("Moving -> X:%.2f Y:%.2f\n", (float)doc["x"], (float)doc["y"]);
             break;
         }
-        case CMD_TELEMETRY:
-            Serial.printf("FSM state: %d, Battery voltage: %lf, In stabilization mode: %s\n", 
+        case CMD_ACTION_SELECTION: {
+            if(doc.containsKey("a")){
+                int a = doc["a"];
+                if(a == INVERT_ROBOT){
+                    spinalCord.invertRobot();
+                }
+            }
+            break;
+        }
+        case CMD_TELEMETRY: { //this is the robot that sends it
+            Serial.printf("FSM state: %d, Battery voltage: %lf, In stabilization mode: %s\n",
                 (int)doc["s"], (float)doc["b"], (int)doc["a"] ? "true": "false");
 
             JsonArray dists = doc["d"];
@@ -106,6 +149,7 @@ void handleParsedMessage(uint8_t * payload) {
             }
             Serial.println();
             break;
+        }
     }
 }
 
