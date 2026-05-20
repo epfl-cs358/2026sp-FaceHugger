@@ -1551,7 +1551,16 @@ def bake_clip(clip_name, context):
 # LAYER 2 — converters: baked rows -> animation/exported_gaits/<clip>/
 # ---------------------------------------------------------------------------
 
-_LEGS = ("fr", "fl", "br", "bl")  # JS playback / channel order
+_LEGS = ("fr", "fl", "br", "bl")  # firmware LegId order: FR=0, FL=1, BR=2, BL=3
+
+# Blender leg name -> firmware LegId (matches `enum LegId` in
+# code/firmware/src/nervous_system/movements.h on origin/main). Used as
+# the wire `id` field in CMD_CALIBRATE (T:4) — firmware then does the
+# PCA-channel mapping via LEG_SERVO_CHANNEL[id][servo_id] (config.h:64),
+# so the exporter no longer needs convention.json's `channels` on the
+# wire. The Python list-of-3 returned by _frame_to_servo is indexed by
+# firmware `servo_id` (0=hip, 1=thigh, 2=knee).
+_LEG_ID = {"fr": 0, "fl": 1, "br": 2, "bl": 3}
 
 
 def to_csv(frames, clip_name):
@@ -1608,8 +1617,19 @@ def to_c_header(frames, clip_name, convention):
 
 
 def _frame_to_servo(row, convention):
-    """One baked row -> {leg: [servo0, servo1, servo2] ints} applying:
-    (1) scale-from-neutral, (2) translateToServo, (3) round."""
+    """One baked row -> {leg: [hip, thigh, knee] ints} where the per-leg
+    list index IS the firmware `servo_id` (0=hip, 1=thigh, 2=knee —
+    matching LEG_SERVO_CHANNEL[leg_id][servo_id] in
+    code/firmware/src/shared/config.h on origin/main).
+
+    Applies (1) scale-from-NEUTRAL, (2) per-leg translateToServo —
+    byte-identical to the firmware tickGait switch, locked by
+    test_servo_parity.py — and (3) rounds to int.
+
+    Wire shape consumed by to_js: {T:4, id:_LEG_ID[leg], servo_id:j,
+    a:result[leg][j]}. The firmware does the PCA-channel mapping;
+    convention.json's `channels` field is kept for reference but is
+    NOT used on the wire."""
     neutral = convention["neutral_joint_deg"]
     scale = convention["scale"]
     out = {}
@@ -1632,12 +1652,31 @@ def _frame_to_servo(row, convention):
     return out
 
 
-def to_js(frames, clip_name, convention):
-    """Self-contained browser-console JS that plays the clip live over
-    WebSocket. Applies the full hardware conversion (scale-from-neutral,
-    translateToServo, round). N/SCALE/CHANNELS come from convention.json."""
+def to_js(frames, clip_name, convention, loop=False, dry_run=False):
+    """Self-contained browser-console JS that plays the clip.
+
+    Spec: docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md
+    §3.1 — by default play **once** and **hold the final pose** by
+    continuously re-sending the last frame's servo angles each tick
+    (Phase-1 ↔ Phase-2 parity with firmware `tickClip`). `loop=True` is
+    opt-in, intended only for diagnostic re-play.
+
+    `dry_run=True` emits a variant with no `new WebSocket`/`ws.send`;
+    every per-frame `{T:4,id,a}` message goes to `console.log` instead.
+    Lets you validate a clip's servo stream without a robot. Stop
+    semantics, hold-at-end behaviour, and the clamp are identical to
+    the live version.
+
+    Math: applies the full hardware conversion (scale-from-NEUTRAL +
+    per-leg translateToServo + round) at bake time via
+    `_frame_to_servo`. N/SCALE come from convention.json (the single
+    source of truth that matches firmware NEUTRAL[]).
+
+    Wire shape (origin/main CMD_CALIBRATE): per joint,
+    {T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}. Firmware maps to
+    PCA channel via LEG_SERVO_CHANNEL[id][servo_id] (config.h:64);
+    convention.json's `channels` is no longer on the wire."""
     path = os.path.join(_exported_gaits_dir(clip_name), f"{clip_name}.js")
-    ch = convention["channels"]
     today = datetime.date.today().isoformat()
 
     clip_lines = []
@@ -1648,27 +1687,86 @@ def to_js(frames, clip_name, convention):
         )
         clip_lines.append(f"  {{ t: {row['time_ms']}, {legs} }},")
 
-    ch_str = ", ".join(
-        f"{leg}:[{ch[leg][0]},{ch[leg][1]},{ch[leg][2]}]" for leg in _LEGS
-    )
+    # Per-mode pieces of the template (kept as plain Python strings —
+    # injected verbatim into the outer f-string so their JS-literal { }
+    # braces don't need doubling).
+    loop_js = "true" if loop else "false"
+    if dry_run:
+        header_block = (
+            '// DRY RUN — prints each {"T":4,...} message to the console\n'
+            "// instead of sending it. No WebSocket is opened; no robot\n"
+            "// needed. Paste into any JS console to validate the servo\n"
+            "// stream before connecting to hardware.\n"
+            "//\n"
+            "// Wire shape matches origin/main CMD_CALIBRATE (T:4):\n"
+            "//   {T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}\n"
+            "// Firmware maps to PCA channel via LEG_SERVO_CHANNEL."
+        )
+        transport_decl = "// (dry run — no WebSocket opened)"
+        open_guard = ""
+        send_call = "console.log(JSON.stringify(msg));"
+        stop_close = "// (no socket to close in dry-run)"
+        starter = (
+            'console.log("FaceHugger DRY RUN — " + CLIP_NAME + " (" +'
+            ' CLIP.length + " frames). No WebSocket; messages echoed'
+            ' to console. Call fhStop() to stop.");\n'
+            "_timer = setInterval(playFrame, FRAME_MS);"
+        )
+    else:
+        header_block = (
+            "// HOW TO RUN (browser):\n"
+            "//   1. Join the robot Wi-Fi (FaceHugger_Net); robot at 192.168.4.1.\n"
+            "//   2. Open a console on a NON-HTTPS page (http://, file://, or\n"
+            "//      about:blank). ws:// is BLOCKED from https:// (mixed content)\n"
+            '//      — the #1 reason "nothing happens".\n'
+            "//   3. Paste this whole file. Call  fhStop()  to stop at any time.\n"
+            "//\n"
+            "// Wire shape matches origin/main CMD_CALIBRATE (T:4):\n"
+            "//   {T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}\n"
+            "// Firmware does PCA-channel mapping via LEG_SERVO_CHANNEL."
+        )
+        transport_decl = 'const ws = new WebSocket("ws://192.168.4.1:81");'
+        open_guard = "if (ws.readyState !== WebSocket.OPEN) return;"
+        send_call = "ws.send(JSON.stringify(msg));"
+        stop_close = "try { ws.close(); } catch (e) {}"
+        starter = (
+            "ws.onopen = () => {\n"
+            '  console.log("FaceHugger: connected — playing " + CLIP_NAME +'
+            ' " (" + CLIP.length + " frames). Hold-at-end is on by default;'
+            ' call fhStop() when done.");\n'
+            "  _timer = setInterval(playFrame, FRAME_MS);\n"
+            "};\n"
+            "ws.onerror = (e) => {\n"
+            '  console.error("FaceHugger: WebSocket error. On the robot '
+            "Wi-Fi (FaceHugger_Net, ws://192.168.4.1:81)? Is this page http:// "
+            '(NOT https:// — ws:// is blocked from https pages)?", e);\n'
+            "};\n"
+            'ws.onclose = () => { fhStop(); console.log("FaceHugger: socket closed."); };'
+        )
 
     js = f"""// FaceHugger clip: {clip_name}
 // Generated {today} from Blender animation
 //
-// HOW TO RUN (browser):
-//   1. Join the robot Wi-Fi (FaceHugger_Net); robot is at 192.168.4.1.
-//   2. Open a console on a NON-HTTPS page (http://, file://, or
-//      about:blank). A ws:// socket is BLOCKED from an https:// page
-//      (mixed content) — this is the #1 reason "nothing happens".
-//   3. Paste this whole file. Call  fhStop()  to stop at any time.
+{header_block}
 //
-// Protocol: matches the firmware T:4 handler (flat `id` + `a`; the
-// firmware ignores `servo_id`). Channels come from convention.json.
+// PLAYBACK SEMANTICS (Phase-1 parity with firmware tickClip, see spec
+// docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md §3.1):
+//   - DEFAULT: play the clip ONCE, then HOLD the final pose by
+//     re-sending the last frame's servo angles every FRAME_MS — the
+//     same as the firmware's hold-at-end behaviour.
+//   - LOOP=true: replay from frame 0 instead of holding (diagnostic).
+//   - fhStop(): explicit safe stop — clears the interval and closes
+//     the socket. The robot keeps the last commanded servo positions
+//     (servos hold their last commanded angle in hardware).
 
-const LOOP = true;     // set false to play the clip once, then stop
-const FRAME_MS = 30;   // send cadence (ms)
+const LOOP = {loop_js};
+const FRAME_MS = 30;
+const CLIP_NAME = {json.dumps(clip_name)};
 
-const CHANNELS = {{ {ch_str} }};
+// Blender leg name -> firmware LegId (see movements.h enum LegId on
+// origin/main). The wire `id` field is this leg_id; the firmware maps
+// to a PCA channel via LEG_SERVO_CHANNEL[id][servo_id].
+const LEG_IDS = {{ fr: 0, fl: 1, br: 2, bl: 3 }};
 
 const CLIP = [
 {chr(10).join(clip_lines)}
@@ -1680,49 +1778,33 @@ const clamp = (v) => Math.max(0, Math.min(180, v | 0));
 
 let _i = 0;
 let _timer = null;
-const ws = new WebSocket("ws://192.168.4.1:81");
+{transport_decl}
 
 function fhStop() {{
   if (_timer !== null) {{ clearInterval(_timer); _timer = null; }}
-  try {{ ws.close(); }} catch (e) {{}}
-  console.log("FaceHugger: playback stopped.");
+  {stop_close}
+  console.log("FaceHugger: playback stopped (servos hold last commanded pose).");
 }}
 globalThis.fhStop = fhStop;
 
 function playFrame() {{
+  // End of clip: in LOOP mode wrap to the start; otherwise clamp to
+  // the last frame and keep re-sending it (hold-at-end per spec §3.1).
   if (_i >= CLIP.length) {{
-    if (!LOOP) {{ fhStop(); return; }}
-    _i = 0;
+    _i = LOOP ? 0 : (CLIP.length - 1);
   }}
   const frame = CLIP[_i++];
-  if (ws.readyState !== WebSocket.OPEN) return;
+  {open_guard}
   for (const leg of ["fr", "fl", "br", "bl"]) {{
     const angles = frame[leg];
     for (let j = 0; j < 3; j++) {{
-      ws.send(JSON.stringify({{
-        "T": 4,
-        "id": CHANNELS[leg][j],
-        "a": clamp(angles[j])
-      }}));
+      const msg = {{ "T": 4, "id": LEG_IDS[leg], "servo_id": j, "a": clamp(angles[j]) }};
+      {send_call}
     }}
   }}
 }}
 
-ws.onopen = () => {{
-  console.log(
-    "FaceHugger: connected — playing {clip_name} (" + CLIP.length +
-    " frames). Call fhStop() to stop."
-  );
-  _timer = setInterval(playFrame, FRAME_MS);
-}};
-ws.onerror = (e) => {{
-  console.error(
-    "FaceHugger: WebSocket error. On the robot Wi-Fi (FaceHugger_Net, " +
-    "ws://192.168.4.1:81)? Is this page http:// (NOT https:// — ws:// " +
-    "is blocked from https pages)?", e
-  );
-}};
-ws.onclose = () => {{ fhStop(); console.log("FaceHugger: socket closed."); }};
+{starter}
 """
     with open(path, "w") as fh:
         fh.write(js)
@@ -1786,8 +1868,14 @@ def _bake_and_write(clip, context, convention):
         to_c_header(rows, clip, convention)
         written.append("h")
     if scene.fh_export_js:
-        to_js(rows, clip, convention)
-        written.append("js")
+        to_js(
+            rows,
+            clip,
+            convention,
+            loop=scene.fh_export_js_loop,
+            dry_run=scene.fh_export_js_dryrun,
+        )
+        written.append("js-dry" if scene.fh_export_js_dryrun else "js")
     return written, len(rows), max_seen, warning_count
 
 
@@ -2080,6 +2168,13 @@ class FH_PT_export(_FH_PT_child, bpy.types.Panel):
         col.prop(context.scene, "fh_export_csv", text="CSV (raw angles)")
         col.prop(context.scene, "fh_export_header", text="C header (.h)")
         col.prop(context.scene, "fh_export_js", text="Browser JS (.js)")
+        if context.scene.fh_export_js:
+            sub = col.column(align=True)
+            sub.active = True
+            jsrow = sub.row(align=True)
+            jsrow.separator()
+            jsrow.prop(context.scene, "fh_export_js_dryrun", text="Dry run")
+            jsrow.prop(context.scene, "fh_export_js_loop", text="Loop")
 
         row = layout.row()
         row.enabled = bool(active)
@@ -2200,6 +2295,23 @@ def register():
         ),
         default=True,
     )
+    bpy.types.Scene.fh_export_js_loop = bpy.props.BoolProperty(
+        name="Loop (diagnostic)",
+        description=(
+            "Opt in to loop playback in the generated .js. Default is OFF: "
+            "play once, then hold the final pose (Phase-1/Phase-2 parity "
+            "with the firmware tickClip — see the on-board clip-player spec)"
+        ),
+        default=False,
+    )
+    bpy.types.Scene.fh_export_js_dryrun = bpy.props.BoolProperty(
+        name="Dry run (console echo)",
+        description=(
+            "Emit a .js variant that console.logs each {T:4,id,a} message "
+            "instead of opening a WebSocket — validate a clip without a robot"
+        ),
+        default=False,
+    )
     bpy.types.Scene.fh_export_clips = bpy.props.EnumProperty(
         name="Clips to export",
         description="Tick the clips that 'Export Selected Clips' should bake",
@@ -2238,6 +2350,8 @@ def unregister():
         "fh_export_csv",
         "fh_export_header",
         "fh_export_js",
+        "fh_export_js_loop",
+        "fh_export_js_dryrun",
         "fh_export_clips",
         "fh_heatmap_active",
     ):

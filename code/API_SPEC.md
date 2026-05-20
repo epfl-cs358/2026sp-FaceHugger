@@ -68,27 +68,6 @@ Direct angle control over a specific PCA9685 channel.
 
 **Example:** `{"T": 4, "id": 2, "servo_id": 2,"a": 90}` *(Move knee of leg id 2 (bottom right) to 90 degrees)*
 
-> ⚠️ **Implementation status — `T:4` is NOT consistent across components (unresolved).**
-> The table above is the *intended* design but does **not** match what
-> ships today:
-> - **Firmware** (`code/firmware/src/brain/network.cpp` →
->   `SpinalCord::applyCalibration(int channel, int angle)`) reads only
->   `id` and `a`, treats `id` as a **single flat PCA9685 channel**, and
->   **ignores `servo_id`**. Effective shape: `{"T":4,"id":<flat
->   channel>,"a":<0-180>}`.
-> - **Mobile app** (`code/remote-control-app/MyApp/api/api-types.tsx`)
->   sends `servo_id` per this table — i.e. it follows the spec, not the
->   firmware.
-> - **Blender clip export** (`animation/scripts/fh_clip_panel.py`
->   `to_js`) emits the **firmware** shape (flat `id` from
->   `convention.json`'s `channels`, no `servo_id`).
->
-> Net: the app and the firmware disagree about `T:4`. This is the same
-> unresolved servo-numbering gap tracked in
-> `animation/SERVO_ID_CONVENTION.md` (pending firmware `SERVO_CONFIG[]`
-> confirmation). **Decide leg+servo_id vs flat-channel with the firmware
-> team and reconcile all three before relying on `T:4` on hardware.**
-
 ### 5. Gait integration ('T: 5')
 Gait mode change
 | Key | Type | Description | Range |

@@ -324,6 +324,87 @@ saved set of control transforms** (independent of clips).
    *Export Active Clip* or tick clips in *Clips to export* and hit
    *Export Selected Clips* → `animation/exported_gaits/<clip>/`.
 
+### Running an exported `.js` clip in a browser
+
+The generated `.js` is the **Phase-1** way to play a clip on the robot
+without firmware changes — full design context in
+[`docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md`](../../docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md)
+(read §3 for the locked once-shot + hold-at-end semantics this `.js`
+mirrors).
+
+1. **Author + export.** Build the clip, tick **Browser JS (.js)**, hit
+   *Export Active Clip* → `animation/exported_gaits/<clip>/<clip>.js`.
+2. **Optional `.js` toggles** (under the Browser JS tick):
+   - *Dry run* — emits a variant that `console.log`s every
+     `{T:4,id,a}` message instead of sending it. **Validate the servo
+     stream with no robot needed; safe to paste on any page (even
+     https).**
+   - *Loop* — opt in to loop the clip for diagnostics. Off by default
+     so the exported `.js` matches the firmware's one-shot+hold
+     semantics (Phase-1 ↔ Phase-2 parity).
+3. **Connect.** Join the robot's Wi-Fi (`FaceHugger_Net`, robot at
+   `192.168.4.1`). Open a console on a **non-HTTPS** page (http://,
+   file://, or about:blank). `ws://` is blocked from `https://` —
+   this is the #1 reason "nothing happens".
+
+> **⚠️ Before you run: stop any active gait.** The exported `.js`
+> streams via `CMD_CALIBRATE` (`T:4`), which writes servo channels
+> directly regardless of FSM state. If a gait is active concurrently,
+> `tickGait()` overwrites all 12 servos every `update()` loop on
+> `STATE_WALK` and the clip won't show. Put the robot in IDLE with no
+> gait first:
+>
+> ```js
+> ws.send(JSON.stringify({"T": 5, "g": 0}));   // CMD_GAIT_MODE → GAIT_NONE
+> ws.send(JSON.stringify({"T": 2, "s": 0}));   // CMD_STATE     → STATE_IDLE
+> ```
+>
+> Either one is enough on its own (firmware `update()` skips
+> `tickGait` if `currentGait_ == GAIT_NONE` *or* state isn't
+> `STATE_WALK`); both is belt-and-suspenders. Verified against
+> `origin/main`: `data.h` enums (`CMD_STATE=2`, `CMD_GAIT_MODE=5`,
+> `STATE_IDLE=0`, `GAIT_NONE=0`), `network.cpp` handlers, and
+> `spinal_cord.cpp` `rest()`/`setGait()`. **Phase-1-only concern:** the
+> future on-board clip player (spec [§3.5](../../docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md))
+> is mutually exclusive with the gait engine by construction.
+
+4. **Run.** Paste the `.js`. It opens `ws://192.168.4.1:81`, plays
+   each frame's pre-converted servo angles per joint as
+   `{T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}` — the
+   firmware's `CMD_CALIBRATE` shape on `origin/main`; the firmware
+   maps to a PCA channel via `LEG_SERVO_CHANNEL[id][servo_id]`. At
+   the last frame the player **keeps re-sending it every 30 ms** to
+   hold the pose — same as firmware `tickClip`.
+5. **Stop.** Call `fhStop()` in the console. It clears the interval
+   and closes the socket; the servos hold their last commanded
+   position. (This is the safe stop. Closing the tab works too.)
+
+**Pre-scale rule.** The `.js` carries already-converted servo angles
+(scale-from-N + per-leg `translateToServo` applied at bake by
+`_frame_to_servo`); the browser only clamps to `0..180` and sends. The
+upcoming bundled `clips_all.h` will instead carry **pre-scaled
+math-space joint degrees** and let the firmware do `translateToServo`
+at runtime — see the spec §3.2/§5.
+
+**Servo math + channel mapping** are both locked against
+`origin/main`:
+
+- **`translateToServo`** in `_frame_to_servo` is byte-identical to the
+  firmware `tickGait` switch (verified by
+  [`test_servo_parity.py`](test_servo_parity.py)) — this is the
+  *math* contract.
+- **The wire shape** `{T:4, id, servo_id, a}` matches the
+  `CMD_CALIBRATE` handler on `origin/main`; the firmware owns the
+  channel mapping via `LEG_SERVO_CHANNEL[id][servo_id]`
+  (`config.h:64`). `convention.json`'s `channels` is kept only as a
+  reference-only cross-check (also asserted by the parity test against
+  the firmware table) — see
+  [`animation/SERVO_ID_CONVENTION.md`](../SERVO_ID_CONVENTION.md) for
+  the broader convention.
+
+Run `uv run python animation/scripts/test_servo_parity.py` to verify
+both contracts in CI.
+
 **Activity Heatmap** (Display, collapsed) colours the servo meshes by
 per-frame motion to spot busy/jerky joints. A future *gravity-torque*
 mode is sketched in
@@ -409,18 +490,17 @@ so a no-op re-run leaves the file's mtime untouched.
    [doc/animation-pipeline/](../../doc/animation-pipeline/)) — it slots
    in as another Layer-2 converter alongside `to_csv` / `to_c_header` /
    `to_js`.
-4. **Confirm the servo channel/translate convention.** The exported
-   `.js` `T:4` message shape (`{T:4, id:<flat channel>, a}`) **matches
-   the firmware** (`code/firmware/src/brain/network.cpp` →
-   `applyCalibration(channel, angle)`, which ignores `servo_id`) — it
-   is [code/API_SPEC.md](../../code/API_SPEC.md) §4 and the mobile app
-   that still carry the old `id`+`servo_id` form; that cross-component
-   discrepancy is flagged in API_SPEC.md and unresolved. Separately,
-   `convention.json`'s `channels` + the per-leg `translateToServo` are
-   still a proposal pending firmware `SERVO_CONFIG[]` confirmation
-   (see [animation/SERVO_ID_CONVENTION.md](../SERVO_ID_CONVENTION.md)) —
-   servos will move but possibly the wrong joint/direction until
-   validated on hardware.
+4. **Servo channel/translate convention — converged on `main`.** The
+   exported `.js` `T:4` message shape now matches the `origin/main`
+   firmware (`code/firmware/src/brain/network.cpp` `CMD_CALIBRATE` →
+   `applyCalibration(LEG_SERVO_CHANNEL[id][servo_id], a)`):
+   `{T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}`. The exporter,
+   the spec ([code/API_SPEC.md](../../code/API_SPEC.md) §4), the mobile
+   app, and the firmware all agree on this shape. The math
+   (`_frame_to_servo` ↔ firmware `tickGait` `translateToServo`) and the
+   channel table (`convention.json` `channels` ↔ firmware
+   `LEG_SERVO_CHANNEL`) are both locked by
+   [`test_servo_parity.py`](test_servo_parity.py).
 5. **Torque heatmap.** Gravity-hold torque mode for the Display
    heatmap — scoped (incl. the ground-contact caveat) in
    [torque-heatmap.md](torque-heatmap.md).

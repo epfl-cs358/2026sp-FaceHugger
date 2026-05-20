@@ -193,6 +193,19 @@ keyframes at every frame — that's what the export script reads.
 
 ## 6. Angle conversion (Blender → servo)
 
+> 📌 **Current implementation lives in `fh_clip_panel.py` `_frame_to_servo`** —
+> scale-from-N (2/3, from `animation/convention.json`) + per-leg
+> `translateToServo` (matches firmware `tickGait`, locked by the
+> [parity test](../../../animation/scripts/test_servo_parity.py)). The
+> `offset_deg + direction*degrees(blender_z)` model below describes the
+> earlier `servo_mapping.yaml`/`.gait` pipeline; it is retained for
+> reference and is being superseded by the design in
+> [`docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md`](../../../docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md)
+> (see §3.2 for the pre-scaled math-space rule, §3.1 for one-shot +
+> hold-at-end semantics, §6 for the firmware contract). Phase-1 path
+> (today) is the `.js` browser console; Phase-2 will be the bundled
+> `clips_all.h` + `playClip(id)` over WS.
+
 The export script reads `pose.bones["{leg}_link{N}"].rotation_euler[2]`
 for each frame and converts to servo PWM degrees:
 
