@@ -357,6 +357,35 @@ def _rescue_existing_clip_actions():
     return rescued
 
 
+@bpy.app.handlers.persistent
+def _on_save_pre(*_args, **_kwargs):
+    """Re-sweep clip-pattern actions for fake_user RIGHT BEFORE Blender
+    serialises to disk. This is the final guard against the inactive-
+    clip-vanishes bug: even if some other code path (rig rebuild's
+    restore_actions, a misbehaving extension, a fresh-Action creation
+    site that bypasses `_keep_action`) clears use_fake_user mid-session,
+    save_pre flips it back on the way to disk. Persistent so the
+    handler survives .blend loads."""
+    n = _rescue_existing_clip_actions()
+    if n:
+        print(
+            f"[fh_clip_panel] save_pre: re-set fake_user on {n} clip"
+            f" Action(s) to prevent orphan-purge during save"
+        )
+
+
+@bpy.app.handlers.persistent
+def _on_load_post(*_args, **_kwargs):
+    """Re-sweep clip-pattern actions after every .blend load — covers
+    the case where the user opens a second file in the same Blender
+    session (register() only runs once per addon lifetime, so the
+    register-time sweep wouldn't fire). Persistent so the handler
+    survives .blend loads."""
+    n = _rescue_existing_clip_actions()
+    if n:
+        print(f"[fh_clip_panel] load_post: re-set fake_user on {n} clip Action(s)")
+
+
 def assign_clip(clip):
     """Wire each of the 5 Actions onto its target object via the layered API.
 
@@ -2447,6 +2476,16 @@ def register():
     if n:
         print(f"[fh_clip_panel] rescued {n} clip Action(s) (fake-user set)")
 
+    # Belt-and-suspenders against the inactive-clip-vanishes bug:
+    # save_pre re-sweeps fake_user right before Blender serialises, so
+    # even if any code path clears the flag mid-session the save still
+    # preserves the clip. load_post handles second-file-opened-in-same-
+    # session (register() only ran for the first file).
+    if _on_save_pre not in bpy.app.handlers.save_pre:
+        bpy.app.handlers.save_pre.append(_on_save_pre)
+    if _on_load_post not in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.append(_on_load_post)
+
 
 def unregister():
     # Clean up heatmap state before class removal.
@@ -2455,6 +2494,12 @@ def unregister():
         handlers.remove(_heatmap_handler)
     _reset_servo_heatmap()
     _heatmap_prev_angles.clear()
+
+    # Remove our save_pre / load_post guards.
+    if _on_save_pre in bpy.app.handlers.save_pre:
+        bpy.app.handlers.save_pre.remove(_on_save_pre)
+    if _on_load_post in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(_on_load_post)
 
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)

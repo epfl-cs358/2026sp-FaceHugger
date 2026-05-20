@@ -45,7 +45,13 @@ def _stub_bpy() -> None:
         EnumProperty=lambda **kw: None,
     )
     bpy.app = types.SimpleNamespace(
-        handlers=types.SimpleNamespace(frame_change_post=[])
+        handlers=types.SimpleNamespace(
+            frame_change_post=[],
+            save_pre=[],
+            load_post=[],
+            # @persistent decorator — pass through unchanged in the stub.
+            persistent=lambda fn: fn,
+        )
     )
     bpy.data = types.SimpleNamespace(
         objects=types.SimpleNamespace(get=lambda *a, **kw: None),

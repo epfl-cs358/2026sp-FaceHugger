@@ -457,8 +457,30 @@ def stash_actions():
 def restore_actions(stash):
     """Rebind each stashed Action to its now-recreated Object by name,
     explicitly setting `action_slot` from the stashed identifier (with
-    `action_suitable_slots[0]` as fallback). Drop use_fake_user after
-    binding — the assigned animation_data is now a real user."""
+    `action_suitable_slots[0]` as fallback).
+
+    Keep `use_fake_user=True` on every clip-pattern Action after rebind
+    — clip-pattern Actions (`<clip>__<target>`) belong to the
+    multi-clip persistence model in `fh_clip_panel`, where inactive
+    clips must survive .blend save/load with zero real users. The
+    previous behaviour of clearing fake_user here was the root of a
+    silent data-loss bug:
+
+      1. user opens rig via `python facehugger.py blender --rigged`
+         → rig builder stashes + rebuilds + restores the active clip
+         and clears fake_user.
+      2. user switches to a different clip in the same session
+         → previously-active clip becomes inactive with fake_user=False.
+      3. user saves → Blender's orphan-purge drops the inactive clip's
+         actions (0 real users + no fake user).
+      4. user reopens → the previously-active clip is gone.
+
+    `fh_clip_panel._keep_action` keeps fake_user=True at every Action
+    creation/copy site; this restore now preserves that invariant. For
+    non-clip Actions (the few that go through the rig stash path in
+    practice are clip-pattern, but be defensive), only the
+    clip-pattern Actions are kept; everything else returns to its
+    pre-stash fake-user state (False)."""
     n_restored = 0
     for obj_name, action_name, slot_identifier in stash:
         obj = bpy.data.objects.get(obj_name)
@@ -485,11 +507,31 @@ def restore_actions(stash):
             slot = ad.action_suitable_slots[0]
         if slot is not None:
             ad.action_slot = slot
-        action.use_fake_user = False
+        # Heuristic clip-pattern check: `<clip>__<target>` where target
+        # is body_ctrl or a foot_target_* — defined in fh_clip_panel.
+        # Importing the panel here would create a circular dependency,
+        # so inline the check.
+        is_clip_action = "__" in action_name and any(
+            action_name.endswith(f"__{tgt}")
+            for tgt in (
+                "body_ctrl",
+                "foot_target_fl",
+                "foot_target_fr",
+                "foot_target_bl",
+                "foot_target_br",
+            )
+        )
+        if is_clip_action:
+            # Keep alive across save — the user's clip model expects
+            # both active AND inactive clips to persist.
+            action.use_fake_user = True
+        else:
+            action.use_fake_user = False
         bound_id = slot.identifier if slot is not None else None
         print(
             f"[urdf_to_blender_rigged] restore: {obj_name!r} <- "
             f"action={action_name!r} slot={bound_id!r}"
+            f" fake_user={action.use_fake_user}"
         )
         n_restored += 1
     print(f"[urdf_to_blender_rigged] restored {n_restored}/{len(stash)} action(s)")
