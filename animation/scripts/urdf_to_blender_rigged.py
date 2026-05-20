@@ -28,29 +28,39 @@ Architecture:
        - Parent in chain via `EditBone.parent`, `use_connect=False`.
 
 Constraints, applied in this order so the constraint stack evaluates as
-[IK / DAMPED_TRACK first, then LIMIT_ROTATION] (LIMIT_ROTATION clamps
-the IK-or-track-solved pose, never the other way around):
+[IK first, then LIMIT_ROTATION] (LIMIT_ROTATION clamps the IK-solved
+pose, never the other way around). link1 yaw is driven analytically (no
+constraint stack involvement) via a scripted driver, see (3c).
 
-  3. Per leg, two foot Empties + IK + Damped Track:
-       - `foot_target_{leg}` (visible, sphere): at the actual CAD foot
-         tip in world. Foot tip per leg: `Link3TipAxis` in
-         `fusion_export.json` (falls back to
-         `FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M`). For R-side legs
-         (FR, BL), the X component is negated to match the mirrored
-         `leg_lower.stl` visual (`<visual rpy="0 π 0">`). Animator
-         drags this.
-       - `foot_ik_{leg}` (hidden, plain axes): `COPY_LOCATION` from
-         `foot_target` with `use_offset=False` — tracks foot_target
-         exactly. Kept as a separate Empty so the animator-facing
-         handle is decoupled from the IK target.
-       - IK constraint on `*_link3` pose bone: `target=foot_ik`,
-         `chain_count=2` (covers link3 + link2), `use_tail=True`,
-         `use_rotation=False`, `use_stretch=False`.
-       - Damped Track on `*_link1` pose bone: `target=foot_target`,
-         `track_axis='TRACK_Y'`. Combined with `LIMIT_ROTATION`'s X/Y
-         locks (below), this becomes a yaw-only aim — link1 yaws around
-         bone-local Z (= world +Z) so its bone-Y horizontal projection
-         points at the foot.
+  3. Per leg:
+       a. `foot_target_{leg}` (visible, sphere): at the actual CAD foot
+          tip in world. Foot tip per leg: `Link3TipAxis` in
+          `fusion_export.json` (falls back to
+          `FOOT_TIP_FALLBACK_IN_LINK3_FRAME_M`). For R-side legs
+          (FR, BL), the X component is negated to match the mirrored
+          `leg_lower.stl` visual (`<visual rpy="0 π 0">`). Animator
+          drags this.
+       b. `foot_ik_{leg}` (hidden, plain axes): `COPY_LOCATION` from
+          `foot_target` with `use_offset=False` — tracks foot_target
+          exactly. Kept as a separate Empty so the animator-facing
+          handle is decoupled from the IK target.
+       c. `shoulder_pivot_{leg}` (hidden, plain axes): bone-parented to
+          `*_link1` at zero local offset at the bone HEAD, so its world
+          XY tracks the shoulder pivot in every pose. Used by the link1
+          yaw driver to read the live shoulder world XY position.
+       d. IK constraint on `*_link3` pose bone: `target=foot_ik`,
+          `chain_count=2` (covers link3 + link2), `use_tail=True`,
+          `use_rotation=False`, `use_stretch=False`.
+       e. Scripted driver on `*_link1` pose bone's `rotation_euler[2]`:
+              atan2(foot_y - pivot_y, foot_x - pivot_x)
+              - body_rot - REST_ANGLE_<leg>
+          REST_ANGLE per leg is the Z component of the URDF
+          `*_link1_joint`'s `<origin rpy>`. Variables read world-space
+          LOC_X/LOC_Y from `foot_target_<leg>` and
+          `shoulder_pivot_<leg>` plus world-space ROT_Z from `body_ctrl`.
+          Replaces the legacy DAMPED_TRACK, which aimed in world space
+          and ignored body_ctrl rotation — so the legs would twist
+          against the body whenever body_ctrl yawed.
 
      Known limitation: bone tail is the projected foot tip (drops the
      joint-axis component of the foot tip in link3 frame, ≈ −Y in link3
@@ -66,11 +76,15 @@ the IK-or-track-solved pose, never the other way around):
      Restricts the IK solver to bone-local Z rotation (= URDF joint
      axis) within the URDF range. link1 isn't in the IK chain so it
      doesn't get IK locks.
-  5. `LIMIT_ROTATION` on every joint bone: `use_limit_x=use_limit_y=True`
-     with `min=max=0` (forces 1-DOF around bone-local Z), and
-     `use_limit_z=True` with `min_z/max_z` from URDF `<limit>`. On link1
-     this enforces yaw-only motion under Damped Track; on link2/link3
-     it's belt-and-suspenders for the IK locks.
+  5. `LIMIT_ROTATION` on every joint bone:
+     - link2/link3: `use_limit_x=use_limit_y=True` with `min=max=0`
+       (belt-and-suspenders for the IK locks), and `use_limit_z=True`
+       with `min_z/max_z` from URDF `<limit>`.
+     - link1: Z-only clamp (`use_limit_z=True`, `min_z/max_z` from
+       URDF). X/Y are left UNLOCKED — the driver writes
+       `rotation_euler[2]` directly and the X/Y lock from the
+       Damped-Track era is no longer needed (it was only there to fight
+       the world-space track).
   6. Mesh attach: `<visual>` STLs imported, parented to their link's
      bone, then `obj.matrix_world = link_world @ visual_origin` to
      match `visualize_urdf.py` byte-for-byte at rest.
@@ -140,6 +154,7 @@ LEG_IDS = ("fl", "fr", "bl", "br")
 R_SIDE_LEGS = ("fr", "bl")  # legs whose link3 visual has rpy=(0, π, 0)
 FOOT_TARGET_FMT = "foot_target_{leg}"
 FOOT_IK_FMT = "foot_ik_{leg}"
+SHOULDER_PIVOT_FMT = "shoulder_pivot_{leg}"
 SHOULDER_BONE_FMT = "{leg}_link1"
 KNEE_BONE_FMT = "{leg}_link3"
 
@@ -679,18 +694,19 @@ def build_armature(robot, link_world, collection, foot_tip_in_link3_m):
 
 def add_limit_rotation_constraints(robot, arm_obj):
     """`LIMIT_ROTATION` per joint bone:
-    - X and Y rotation locked to 0 — forces 1-DOF around bone-local Z
-      (= URDF joint axis after the bone-tail projection in
-      `_bone_endpoints_world_mm`).
-    - Z rotation limited to URDF `<limit lower upper>`.
 
-    On link1 this enforces yaw-only motion under Damped Track. On
-    link2/link3 it's belt-and-suspenders for the IK locks; the IK
-    solver should only produce Z rotation anyway, but the constraint
-    guarantees nothing slips through.
+    - link2 / link3 (in the IK chain): X and Y rotation locked to 0
+      (belt-and-suspenders for the IK locks); Z limited to URDF
+      `<limit lower upper>`.
+    - link1 (driven analytically by a scripted driver — see
+      `add_link1_yaw_drivers`): Z-only clamp. X/Y are deliberately
+      LEFT UNLOCKED. The X/Y=0 lock used to exist to keep
+      Damped Track from leaking pitch/roll into link1, but the
+      driver writes `rotation_euler[2]` directly and the constraint
+      stack no longer needs to fight a world-space track.
 
-    Added LAST in the constraint stack so it clamps after IK / Damped
-    Track. Owner space = LOCAL throughout (bone-local axes).
+    Added LAST in the constraint stack so it clamps after IK. Owner
+    space = LOCAL throughout (bone-local axes).
     """
     bpy.context.view_layer.objects.active = arm_obj
     bpy.ops.object.mode_set(mode="POSE")
@@ -702,11 +718,12 @@ def add_limit_rotation_constraints(robot, arm_obj):
         if pb is None:
             print(f"[warn] no pose bone for joint child link {child_link!r}")
             continue
+        is_link1 = child_link.endswith("_link1")
         c = pb.constraints.new("LIMIT_ROTATION")
-        c.use_limit_x = True
+        c.use_limit_x = not is_link1
         c.min_x = 0.0
         c.max_x = 0.0
-        c.use_limit_y = True
+        c.use_limit_y = not is_link1
         c.min_y = 0.0
         c.max_y = 0.0
         c.use_limit_z = True
@@ -828,7 +845,7 @@ def _add_empty(name, location_mm, target_collection, kind="SPHERE", size_mm=8.0)
 def place_ik_targets_and_constraints(
     robot, link_world, arm_obj, collection, foot_tip_in_link3_m, world_origin
 ):
-    """Per leg, set up the two-empty foot target + IK + Damped Track:
+    """Per leg, set up the foot targets, the shoulder pivot, and the IK:
 
     `foot_target_{leg}` (visible, blue ball) — placed at the actual CAD
     foot tip in world. Per-leg foot tip from `_foot_tip_for_leg(leg, …)`
@@ -839,6 +856,12 @@ def place_ik_targets_and_constraints(
     `use_offset=False` and zero stored offset, so foot_ik tracks
     foot_target exactly. Kept as a separate Empty for clarity (animator
     handle vs IK target are decoupled — easy to retarget later).
+
+    `shoulder_pivot_{leg}` (hidden) — PLAIN_AXES empty bone-parented to
+    `*_link1` at zero local offset at the bone HEAD. Bone parenting
+    rides body_ctrl AND the link1 pre-driver transform, so the empty's
+    world XY always equals the shoulder pivot's world XY. Read by the
+    link1 yaw driver as `pivot_x` / `pivot_y`.
 
     Known limitation: bone tail is the projected foot tip (= drop the
     joint-axis component of `foot_tip_in_link3_m`), which sits ~13 mm
@@ -853,14 +876,10 @@ def place_ik_targets_and_constraints(
     IK on `*_link3` pose bone: `target=foot_ik`, `chain_count=2`,
     `use_tail=True`, `use_rotation=False`, `use_stretch=False`.
 
-    Damped Track on `*_link1` pose bone: `target=foot_target`,
-    `track_axis='TRACK_Y'`. With LIMIT_ROTATION's X/Y locks added
-    afterwards, this becomes yaw-only — link1 rotates around
-    bone-local Z (= world +Z) so its bone-Y horizontal projection
-    aims at the foot. `TRACK_Y` works for all four legs because each
-    link1's bone-Y after the tail projection points outward from the
-    chassis (toward its own foot direction) at rest, regardless of
-    L/R-side mesh mirroring.
+    The link1 yaw driver (replacing the legacy DAMPED_TRACK constraint)
+    is wired in a separate pass — `add_link1_yaw_drivers` — once
+    `body_ctrl` has been created, since the driver reads `body_ctrl`
+    ROT_Z to subtract the chassis yaw.
 
     foot_target is parented to `world_origin` with
     matrix_parent_inverse=Identity, so it rides the anchor as a rigid
@@ -876,7 +895,7 @@ def place_ik_targets_and_constraints(
     bpy.ops.object.mode_set(mode="OBJECT")
     n_targets = 0
     n_ik = 0
-    n_track = 0
+    n_pivots = 0
 
     for leg in LEG_IDS:
         link3 = KNEE_BONE_FMT.format(leg=leg)
@@ -945,7 +964,7 @@ def place_ik_targets_and_constraints(
         cop.owner_space = "WORLD"
         cop.use_offset = True
 
-        # IK on link3, Damped Track on link1.
+        # IK on link3.
         bpy.context.view_layer.objects.active = arm_obj
         bpy.ops.object.mode_set(mode="POSE")
         knee_pb = arm_obj.pose.bones.get(link3)
@@ -957,15 +976,172 @@ def place_ik_targets_and_constraints(
             ik.use_tail = True
             ik.use_stretch = False
             n_ik += 1
-        shoulder_pb = arm_obj.pose.bones.get(link1)
-        if shoulder_pb is not None:
-            tk = shoulder_pb.constraints.new("DAMPED_TRACK")
-            tk.target = foot_target
-            tk.track_axis = "TRACK_Y"
-            n_track += 1
         bpy.ops.object.mode_set(mode="OBJECT")
 
-    return n_targets, n_ik, n_track
+        # `shoulder_pivot_<leg>`: hidden PLAIN_AXES Empty bone-parented
+        # to `*_link1` at zero local offset at the bone HEAD. Blender's
+        # bone-parent origin is the bone TAIL by default, so we set
+        # `matrix_parent_inverse = Translation((0, -bone.length, 0))` in
+        # bone-local space to land at HEAD. With `location=(0,0,0)` the
+        # empty sits at the shoulder pivot in every pose — the link1
+        # yaw driver reads its world LOC_X/LOC_Y as `pivot_x`/`pivot_y`.
+        link1_bone = arm_obj.data.bones.get(link1)
+        if link1_bone is not None:
+            pivot = _add_empty(
+                SHOULDER_PIVOT_FMT.format(leg=leg),
+                (0.0, 0.0, 0.0),  # overwritten by matrix_parent_inverse below
+                collection,
+                kind="PLAIN_AXES",
+                size_mm=4.0,
+            )
+            pivot.parent = arm_obj
+            pivot.parent_type = "BONE"
+            pivot.parent_bone = link1
+            pivot.matrix_parent_inverse = Matrix.Translation(
+                (0.0, -link1_bone.length, 0.0)
+            )
+            pivot.location = (0.0, 0.0, 0.0)
+            pivot.rotation_euler = (0.0, 0.0, 0.0)
+            pivot.hide_viewport = True
+            n_pivots += 1
+
+    return n_targets, n_ik, n_pivots
+
+
+def add_link1_yaw_drivers(robot, link_world, foot_tip_in_link3_m, arm_obj, body_ctrl):
+    """Scripted driver on each `*_link1` pose bone's `rotation_euler[2]`:
+
+        axis_sign * (
+            atan2(foot_y - pivot_y, foot_x - pivot_x)
+            - body_rot
+            - REST_ANGLE
+        )
+
+    Variables (all `transform_space='WORLD_SPACE'`):
+      * `foot_x`, `foot_y`   — `foot_target_<leg>` LOC_X / LOC_Y
+      * `pivot_x`, `pivot_y` — `shoulder_pivot_<leg>` LOC_X / LOC_Y
+      * `body_rot`           — `body_ctrl` ROT_Z
+
+    Per-leg numeric literals baked into each expression:
+
+    * `REST_ANGLE` is the world-frame angle from the rest shoulder
+      pivot to the rest foot target, computed analytically from
+      `link_world` (the URDF rest-pose forward-kinematics solution in
+      metres) rather than from depsgraph-evaluated empties — reading
+      the live empties at build time can drift by ~1° because of the
+      `Target -> Driver` depsgraph cycle (shoulder_pivot is
+      bone-parented to link1 which has a driver reading
+      shoulder_pivot). The analytical form sidesteps the depsgraph
+      and matches the steady-state evaluated geometry. The driver
+      evaluates to 0 at rest by construction, regardless of URDF rpy
+      choice or per-side mesh conventions — it is NOT the URDF
+      `<origin rpy>` Z component (those values differ from the
+      world-frame foot direction by π for FL/BR on FaceHugger).
+
+    * `axis_sign = sign(joint.axis.z)` absorbs the per-side joint axis
+      flip. For L-side legs (FL, BR) the URDF axis is `+Z` and
+      `EditBone.align_roll` makes bone-local +Z = world +Z, so
+      `rotation_euler[2]` = world yaw rotation — sign +1. For R-side
+      legs (FR, BL) the axis is `-Z`, bone-local +Z = world -Z, so a
+      positive `rotation_euler[2]` rotates the bone clockwise in
+      world — sign -1 keeps the analytical formula consistent across
+      all four legs without per-leg branching of the driver
+      structure (only the literal `axis_sign` differs).
+
+    Because `shoulder_pivot_<leg>` is bone-parented to `*_link1` (and
+    the armature is parented to `body_ctrl`), its world XY moves
+    rigidly with body_ctrl — `atan2(foot - pivot) − body_rot` is the
+    link1's local yaw regardless of where the body is in world.
+
+    Replaces the legacy DAMPED_TRACK constraint on link1, which aimed
+    in world space and ignored body_ctrl rotation: with the rig
+    parented under body_ctrl, the armature's local frame rotated with
+    body_ctrl but Damped Track kept aiming at the world-space foot, so
+    the legs twisted relative to the body instead of staying on their
+    targets.
+
+    Called AFTER `add_body_control` so `body_ctrl` exists as a driver
+    target, AND after `place_ik_targets_and_constraints` so the
+    `foot_target_*` / `shoulder_pivot_*` empties exist with their rest
+    world positions. Returns the number of drivers installed.
+    """
+    import math as _math
+
+    n = 0
+    for leg in LEG_IDS:
+        link1 = SHOULDER_BONE_FMT.format(leg=leg)
+        link3 = KNEE_BONE_FMT.format(leg=leg)
+        pb = arm_obj.pose.bones.get(link1)
+        if pb is None:
+            continue
+        joint = robot["joints"].get(link1)
+        foot = bpy.data.objects.get(FOOT_TARGET_FMT.format(leg=leg))
+        pivot = bpy.data.objects.get(SHOULDER_PIVOT_FMT.format(leg=leg))
+        if (
+            joint is None
+            or foot is None
+            or pivot is None
+            or link1 not in link_world
+            or link3 not in link_world
+        ):
+            print(f"[warn] link1 driver: missing joint/foot/pivot for leg {leg!r}")
+            continue
+
+        # REST_ANGLE — world yaw from rest shoulder pivot to rest foot
+        # target. Computed analytically from `link_world` (the URDF rest
+        # pose forward-kinematics solution) rather than from depsgraph-
+        # evaluated empties, because in some Blender 5.x cycle-resolution
+        # orderings the bone-parented `shoulder_pivot_<leg>` is not yet
+        # at its bone-HEAD world position when this function runs (off
+        # by ~1°, see `Target -> Driver` cycle warnings on rig build).
+        # Reading link_world (a numpy/mathutils Matrix in metres,
+        # populated by `compute_link_world` at build start) sidesteps the
+        # depsgraph entirely and matches the steady-state geometry by
+        # construction.
+        pivot_rest_m = link_world[link1].to_translation()
+        foot_rest_m = link_world[link3] @ _foot_tip_for_leg(leg, foot_tip_in_link3_m)
+        rest_yaw = _math.atan2(
+            foot_rest_m.y - pivot_rest_m.y,
+            foot_rest_m.x - pivot_rest_m.x,
+        )
+
+        # Per-side joint-axis sign.
+        axis_sign = 1 if joint["axis"].z >= 0 else -1
+
+        # Driver writes rotation_euler[2] directly, so enforce XYZ Euler
+        # rotation mode (Blender default; defensive in case earlier code
+        # changed it).
+        pb.rotation_mode = "XYZ"
+
+        fc = pb.driver_add("rotation_euler", 2)
+        drv = fc.driver
+        drv.type = "SCRIPTED"
+        # Clear pre-existing variables (idempotent on rebuild).
+        for v in list(drv.variables):
+            drv.variables.remove(v)
+
+        def _add_xform_var(name, target_obj, transform_type):
+            v = drv.variables.new()
+            v.name = name
+            v.type = "TRANSFORMS"
+            t = v.targets[0]
+            t.id = target_obj
+            t.transform_type = transform_type
+            t.transform_space = "WORLD_SPACE"
+
+        _add_xform_var("foot_x", foot, "LOC_X")
+        _add_xform_var("foot_y", foot, "LOC_Y")
+        _add_xform_var("pivot_x", pivot, "LOC_X")
+        _add_xform_var("pivot_y", pivot, "LOC_Y")
+        _add_xform_var("body_rot", body_ctrl, "ROT_Z")
+
+        drv.expression = (
+            f"({axis_sign:+d}) * ("
+            f"atan2(foot_y - pivot_y, foot_x - pivot_x)"
+            f" - body_rot - ({rest_yaw!r}))"
+        )
+        n += 1
+    return n
 
 
 # ---------------------------------------------------------------------------
@@ -1402,10 +1578,12 @@ def main():
         "(world, where foot_target_fl will be placed)"
     )
 
-    # Constraint stack order: IK / Damped Track first, LIMIT_ROTATION
-    # last (so it clamps the IK-or-track-solved pose, not the other way).
-    # New constraints append to the stack, so call order = stack order.
-    n_targets, n_ik, n_track = place_ik_targets_and_constraints(
+    # Constraint stack order: IK first, LIMIT_ROTATION last (so it clamps
+    # the IK-solved pose, not the other way). New constraints append to
+    # the stack, so call order = stack order. link1 yaw is driven
+    # analytically — no constraint stack involvement — so the driver
+    # pass happens after body_ctrl exists (driver target).
+    n_targets, n_ik, n_pivots = place_ik_targets_and_constraints(
         robot,
         link_world,
         arm_obj,
@@ -1426,25 +1604,30 @@ def main():
     )
 
     _diagnose_foot_target_placement(robot, link_world, arm_obj)
-    _verify_auto_yaw(arm_obj)
     body_ctrl = add_body_control(
         arm_obj, collections[CONTROLS_COLLECTION], body_bottom_m
     )
     body_ctrl.parent = world_origin
     body_ctrl.parent_type = "OBJECT"
     body_ctrl.matrix_parent_inverse = Matrix.Identity(4)
+    n_drivers = add_link1_yaw_drivers(
+        robot, link_world, foot_tip_in_link3_m, arm_obj, body_ctrl
+    )
+    _verify_auto_yaw(arm_obj, robot, link_world, foot_tip_in_link3_m)
     restore_actions(stash)
 
     max_err_deg = _check_bone_z_alignment(robot, link_world, arm_obj)
     print(
         f"[urdf_to_blender_rigged] armature: {n_bones} bones, "
-        f"{n_lim} LIMIT_ROTATION (X/Y locked, Z = URDF range), "
-        f"{n_ik} IK (chain=2, no stretch), {n_track} Damped Track, "
+        f"{n_lim} LIMIT_ROTATION (link2/3 X/Y locked, Z = URDF range; "
+        f"link1 Z-only), {n_ik} IK (chain=2, no stretch), "
+        f"{n_drivers} link1 yaw drivers, "
         f"{n_locked} bones with IK X/Y locked"
     )
     print(
         f"[urdf_to_blender_rigged] targets : {n_targets} foot_target "
-        f"+ {n_targets} foot_ik (hidden, COPY_LOCATION exact)"
+        f"+ {n_targets} foot_ik (hidden, COPY_LOCATION exact) "
+        f"+ {n_pivots} shoulder_pivot (hidden, bone-parented to link1)"
     )
     print(
         f"[urdf_to_blender_rigged] controls: {body_ctrl.name} "
@@ -1501,40 +1684,139 @@ def main():
         print(f"[urdf_to_blender_rigged] saved: {args.save}")
 
 
-def _verify_auto_yaw(arm_obj):
-    """Dynamic check: translate foot_target_fl by +50 mm in world X,
-    eval dep graph, measure how much fl_link1's resolved bone-Y
-    direction rotated in the world XY plane (yaw). Constraint-resolved
-    pose lives in `pose_bone.matrix`, not `rotation_euler` (which is the
-    pre-constraint keyed value). A non-zero yaw delta confirms Damped
-    Track is firing on foot_target movement. Restores foot_target
-    afterward so the saved blend keeps the rest pose.
+def _verify_auto_yaw(arm_obj, robot, link_world, foot_tip_in_link3_m):
+    """Dynamic check of the per-leg link1 yaw driver:
+
+    1. REST sign check — with `body_ctrl` at identity rotation and
+       every `foot_target_<leg>` at its rest position, evaluate the
+       depsgraph and assert
+           link1.rotation_euler[2] ≈ 0
+       per leg (≤ 1e-4 rad). A failure here means REST_ANGLE has the
+       wrong sign for that leg (typically an atan2-vs-axis convention
+       mismatch in `add_link1_yaw_drivers`).
+
+    2. Behavioural check — rotate `body_ctrl` by +30° around Z, bump
+       every `foot_target_<leg>` by (+30, −20) mm in world XY, evaluate
+       the depsgraph, and assert each link1's resolved
+       `rotation_euler[2]` equals the analytical
+           axis_sign * (atan2(fy − py, fx − px) − body_rot − REST_ANGLE)
+       within ≤ 1e-4 rad. REST_ANGLE comes from `link_world` (the same
+       analytical source `add_link1_yaw_drivers` bakes — matches the
+       driver expression by construction; reading the empties' live
+       matrix_world here can drift by ~1° because of the
+       `Target → Driver` depsgraph cycle).
+
+    Restores body_ctrl and every foot_target afterwards so the saved
+    blend keeps the rest pose. Print-only: a warning is logged if any
+    leg fails — the rebuild itself is left to complete so the saved
+    blend can be inspected.
     """
     import math as _math3
 
-    target = bpy.data.objects.get(FOOT_TARGET_FMT.format(leg="fl"))
-    pb = arm_obj.pose.bones.get(SHOULDER_BONE_FMT.format(leg="fl"))
-    if target is None or pb is None:
+    body_ctrl = bpy.data.objects.get("body_ctrl")
+    if body_ctrl is None:
+        print("[urdf_to_blender_rigged] auto-yaw : body_ctrl missing, skipping")
         return
 
-    def _yaw_from_matrix():
-        bpy.context.view_layer.update()
-        m = pb.matrix
-        return _math3.atan2(m.col[1].y, m.col[1].x)
-
-    saved = target.location.copy()
-    yaw_before = _yaw_from_matrix()
-    target.location = saved + Vector((50.0, 0.0, 0.0))
-    yaw_after = _yaw_from_matrix()
-    target.location = saved
     bpy.context.view_layer.update()
+    legs = []
+    for leg in LEG_IDS:
+        link1 = SHOULDER_BONE_FMT.format(leg=leg)
+        link3 = KNEE_BONE_FMT.format(leg=leg)
+        pb = arm_obj.pose.bones.get(link1)
+        foot = bpy.data.objects.get(FOOT_TARGET_FMT.format(leg=leg))
+        pivot = bpy.data.objects.get(SHOULDER_PIVOT_FMT.format(leg=leg))
+        joint = robot["joints"].get(link1)
+        if (
+            pb is None
+            or foot is None
+            or pivot is None
+            or joint is None
+            or link1 not in link_world
+            or link3 not in link_world
+        ):
+            print(f"[warn] auto-yaw : missing handles for leg {leg!r}, skipping")
+            continue
+        # Analytical REST_ANGLE — same source `add_link1_yaw_drivers` bakes.
+        pivot_rest_m = link_world[link1].to_translation()
+        foot_rest_m = link_world[link3] @ _foot_tip_for_leg(leg, foot_tip_in_link3_m)
+        rest_yaw = _math3.atan2(
+            foot_rest_m.y - pivot_rest_m.y, foot_rest_m.x - pivot_rest_m.x
+        )
+        axis_sign = 1 if joint["axis"].z >= 0 else -1
+        legs.append((leg, pb, foot, pivot, rest_yaw, axis_sign))
+    if not legs:
+        return
 
-    delta_deg = _math3.degrees(yaw_after - yaw_before)
+    def _eval():
+        bpy.context.view_layer.update()
+        bpy.context.evaluated_depsgraph_get().update()
+
+    # Save scene state we are about to perturb.
+    saved_body_loc = body_ctrl.location.copy()
+    saved_body_rot = Vector(body_ctrl.rotation_euler)
+    saved_foot = {leg: foot.location.copy() for leg, _, foot, _, _, _ in legs}
+
+    # --- REST sign check -------------------------------------------------
+    # body_ctrl identity rotation + foot targets at their rest positions
+    # (already in place — saved_foot is the rest snapshot).
+    body_ctrl.rotation_euler = (0.0, 0.0, 0.0)
+    _eval()
+    rest_errs = [(leg, pb.rotation_euler[2]) for leg, pb, _, _, _, _ in legs]
+
+    # --- Behavioural check ----------------------------------------------
+    BODY_ROT = _math3.radians(30.0)
+    body_ctrl.rotation_euler = (0.0, 0.0, BODY_ROT)
+    for leg, _, foot, _, _, _ in legs:
+        s = saved_foot[leg]
+        foot.location = (s[0] + 30.0, s[1] - 20.0, s[2])
+    _eval()
+
+    drive_results = []
+    for leg, pb, foot, pivot, rest_yaw, axis_sign in legs:
+        fx, fy, _ = foot.matrix_world.translation
+        px, py, _ = pivot.matrix_world.translation
+        expected = axis_sign * (_math3.atan2(fy - py, fx - px) - BODY_ROT - rest_yaw)
+        actual = pb.rotation_euler[2]
+        delta = (actual - expected + _math3.pi) % (2 * _math3.pi) - _math3.pi
+        drive_results.append((leg, actual, expected, delta))
+
+    # Restore.
+    body_ctrl.location = saved_body_loc
+    body_ctrl.rotation_euler = saved_body_rot
+    for leg, _, foot, _, _, _ in legs:
+        foot.location = saved_foot[leg]
+    _eval()
+
+    TOL = 1e-4
     print(
-        f"[urdf_to_blender_rigged] auto-yaw : foot_target_fl +50 mm in X → "
-        f"fl_link1 yaw changed by {delta_deg:+.3f}° "
-        f"(non-zero = Damped Track firing through LIMIT_ROTATION X/Y locks)"
+        "[urdf_to_blender_rigged] auto-yaw : REST sign check "
+        + ", ".join(f"{leg}={z:+.2e}" for leg, z in rest_errs)
+        + " rad"
     )
+    bad_rest = [leg for leg, z in rest_errs if abs(z) > TOL]
+    if bad_rest:
+        print(
+            f"[urdf_to_blender_rigged] WARNING: REST_ANGLE sign mismatch on "
+            f"{bad_rest} — link1.rotation_euler[2] should be ≈ 0 at rest"
+        )
+
+    print(
+        "[urdf_to_blender_rigged] auto-yaw : driver check (body=+30°, "
+        "foot=(+30,−20) mm)"
+    )
+    worst = 0.0
+    for leg, actual, expected, delta in drive_results:
+        print(
+            f"                              {leg}: actual={actual:+.6f}, "
+            f"expected={expected:+.6f}, |Δ|={abs(delta):.2e} rad"
+        )
+        worst = max(worst, abs(delta))
+    if worst > TOL:
+        print(
+            f"[urdf_to_blender_rigged] WARNING: driver worst error "
+            f"{worst:.2e} rad > {TOL:.0e} — driver math may be off"
+        )
 
 
 def _check_bone_z_alignment(robot, link_world, arm_obj):
