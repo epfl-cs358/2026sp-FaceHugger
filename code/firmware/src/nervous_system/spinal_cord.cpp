@@ -60,6 +60,8 @@ SpinalCord::SpinalCord(uint8_t pwm):
 void SpinalCord::begin() {
     driver.begin();
     driver.setPWMFreq(60);
+    Serial.printf("%d", isInverted);
+    isInverted = false;
     leg1.returnToDefaultAngles();
     leg2.returnToDefaultAngles();
     leg3.returnToDefaultAngles();
