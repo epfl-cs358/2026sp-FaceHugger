@@ -2,7 +2,7 @@
 FaceHugger Fusion Export
 Document        : FullBodyAssembly
 Physics         : True
-Cpoint whitelist: LegMountPointFL, LegMountPointFR, LegMountPointBR, LegMountPointBL, BodyToLink1Point, Link1ToLink2Point, Link2ToLink3Point, LegMountFixedPoint, ServoMountPoint, Link3TipPoint
+Cpoint whitelist: LegMountPointFL, LegMountPointFR, LegMountPointBR, LegMountPointBL, BodyBottomPoint, BodyToLink1Point, Link1ToLink2Point, Link2ToLink3Point, LegMountFixedPoint, ServoMountPoint, Link3TipPoint
 Caxis whitelist : BodyToLink1Axis, Link1ToLink2Axis, Link2ToLink3Axis
 Joint whitelist : Link1Revolute, Link2Revolute, Link3Revolute
 ============================================================
@@ -22,6 +22,7 @@ FlexibleSkeleton:1 [xref]
   cpoint: LegMountPointBL | local pos_mm: (-34.0, -46.0, 26.0) | world pos_mm: (-34.0, -46.0, 26.0)
   cpoint: LegMountPointFR | local pos_mm: (34.0, 46.0, 26.0) | world pos_mm: (34.0, 46.0, 26.0)
   cpoint: LegMountPointBR | local pos_mm: (34.0, -46.0, 26.0) | world pos_mm: (34.0, -46.0, 26.0)
+  cpoint: BodyBottomPoint | local pos_mm: (0.0, 0.0, -17.0) | world pos_mm: (0.0, 0.0, -17.0)
   mass: 0.565732 kg | com local: (0.516, 2.896, 9.502) | com world: (0.516, 2.896, 9.502)
   QuadrupedBody:1
     parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (0.0, 0.0, 0.0)
@@ -1655,9 +1656,9 @@ FaceHuggerLegAssembly:1 [xref]
   parent_origin_mm: (-50.401, 31.251, -5.0)  world_origin_mm: (-50.401, 31.251, -5.0)
   cpoint: BodyToLink1Point | local pos_mm: (11.97, 0.0, 41.844) | world pos_mm: (-50.401, 43.222, 36.844)
   cpoint: Link1ToLink2Point | local pos_mm: (34.365, 46.92, 10.246) | world pos_mm: (-97.321, 65.616, 5.246)
-  cpoint: Link2ToLink3Point | local pos_mm: (34.57, 106.62, 10.246) | world pos_mm: (-157.021, 65.822, 5.246)
-  cpoint: Link3TipPoint | local pos_mm: (13.507, 187.84, 10.246) | world pos_mm: (-238.241, 44.759, 5.246)
-  mass: 2.810264 kg | com local: (-70.163, 60.882, 24.693) | com world: (-70.163, 60.882, 24.693)
+  cpoint: Link2ToLink3Point | local pos_mm: (34.57, 121.62, 10.246) | world pos_mm: (-172.021, 65.822, 5.246)
+  cpoint: Link3TipPoint | local pos_mm: (14.06, 199.84, 10.246) | world pos_mm: (-250.241, 45.311, 5.246)
+  mass: 2.82279 kg | com local: (-72.78, 63.482, 0.24) | com world: (-72.78, 63.482, 0.24)
   LegBaseServoEnclosure:1 [xref]
     parent_origin_mm: (1.85, 0.0, 0.0)  world_origin_mm: (-50.401, 33.101, -5.0)
     body: ServoBase | bbox_center_mm: (2.375, 0.0, 20.922)
@@ -1670,6 +1671,10 @@ FaceHuggerLegAssembly:1 [xref]
     BallBearingBodiesPin:1 [xref] [hidden]
       parent_origin_mm: (10.2, 0.0, -0.2)  world_origin_mm: (-50.401, 43.301, -5.2)
       mass: 0.009462 kg | com local: (10.2, -0.0, -6.356) | com world: (-50.401, 43.301, -11.356)
+      BallBearingPillowBlock:1
+        parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-50.401, 43.301, -5.2)
+        body: BallBearingPillow | bbox_center_mm: (0.0, 0.0, 7.0)
+        mass: 0.005197 kg | com local: (0.0, 0.0, 7.178) | com world: (-50.401, 43.301, -12.378)
       BallBearingBase:1
         parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-50.401, 43.301, -5.2)
         body: Base | bbox_center_mm: (0.0, 0.0, 2.0)
@@ -1683,10 +1688,6 @@ FaceHuggerLegAssembly:1 [xref]
         body: ScrewBody | bbox_center_mm: (0.0, 0.0, 4.0)
         body: ScrewHead | bbox_center_mm: (0.0, 0.0, 9.5)
         mass: 0.000983 kg | com local: (-0.0, 0.0, 7.017) | com world: (-50.401, 43.301, -12.217)
-      BallBearingPillowBlock:1
-        parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-50.401, 43.301, -5.2)
-        body: BallBearingPillow | bbox_center_mm: (0.0, 0.0, 7.0)
-        mass: 0.005197 kg | com local: (0.0, 0.0, 7.178) | com world: (-50.401, 43.301, -12.378)
     HornFit:1 [hidden]
       parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-50.401, 33.101, -5.0)
       body: Horn | bbox_center_mm: (10.12, 0.0, 45.575)
@@ -1703,6 +1704,10 @@ FaceHuggerLegAssembly:1 [xref]
     BallBearingBodiesPin:1 [xref] [hidden]
       parent_origin_mm: (10.2, 0.0, -0.2)  world_origin_mm: (-97.321, 23.572, 5.166)
       mass: 0.009462 kg | com local: (10.2, -0.0, -6.356) | com world: (-97.321, 17.416, 5.166)
+      BallBearingPillowBlock:1
+        parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-97.321, 23.572, 5.166)
+        body: BallBearingPillow | bbox_center_mm: (0.0, 0.0, 7.0)
+        mass: 0.005197 kg | com local: (0.0, 0.0, 7.178) | com world: (-97.321, 16.394, 5.166)
       BallBearingBase:1
         parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-97.321, 23.572, 5.166)
         body: Base | bbox_center_mm: (0.0, 0.0, 2.0)
@@ -1716,62 +1721,62 @@ FaceHuggerLegAssembly:1 [xref]
         body: ScrewBody | bbox_center_mm: (0.0, 0.0, 4.0)
         body: ScrewHead | bbox_center_mm: (0.0, 0.0, 9.5)
         mass: 0.000983 kg | com local: (-0.0, 0.0, 7.017) | com world: (-97.321, 16.555, 5.166)
-      BallBearingPillowBlock:1
-        parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-97.321, 23.572, 5.166)
-        body: BallBearingPillow | bbox_center_mm: (0.0, 0.0, 7.0)
-        mass: 0.005197 kg | com local: (0.0, 0.0, 7.178) | com world: (-97.321, 16.394, 5.166)
     HornFit:1 [hidden]
       parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-97.321, 23.772, 15.366)
       body: Horn | bbox_center_mm: (10.12, 0.0, 45.575)
       mass: 0.026882 kg | com local: (10.12, -0.0, 45.165) | com world: (-97.321, 68.937, 5.246)
   LegBaseServoEnclosure:3 [xref]
-    parent_origin_mm: (-7.48, 116.74, 10.246)  world_origin_mm: (-167.141, 23.772, 5.246)
+    parent_origin_mm: (-7.48, 131.74, 10.246)  world_origin_mm: (-182.141, 23.772, 5.246)
     body: ServoBase | bbox_center_mm: (2.375, 0.0, 20.922)
     body: ServoHorn [hidden] | bbox_center_mm: (10.12, 0.0, 44.672)
     body: ServoMountEnclosure [hidden] | bbox_center_mm: (-0.0, 0.0, 12.425)
     body: ServoBottomLink [hidden] | bbox_center_mm: (10.12, 0.0, -6.55)
     body: ServoTopLink [hidden] | bbox_center_mm: (11.228, -0.0, 45.575)
-    cpoint: ServoMountPoint | local pos_mm: (10.12, 0.0, 41.844) | world pos_mm: (-157.021, 65.616, 5.246)
-    mass: 0.431423 kg | com local: (13.325, 114.881, 10.247) | com world: (-165.281, 44.577, 5.247)
+    cpoint: ServoMountPoint | local pos_mm: (10.12, 0.0, 41.844) | world pos_mm: (-172.021, 65.616, 5.246)
+    mass: 0.431423 kg | com local: (13.325, 129.881, 10.247) | com world: (-180.281, 44.577, 5.247)
     BallBearingBodiesPin:1 [xref] [hidden]
-      parent_origin_mm: (10.2, 0.0, -0.2)  world_origin_mm: (-156.941, 23.572, 5.246)
-      mass: 0.009462 kg | com local: (10.2, -0.0, -6.356) | com world: (-156.941, 17.416, 5.246)
+      parent_origin_mm: (10.2, 0.0, -0.2)  world_origin_mm: (-171.941, 23.572, 5.246)
+      mass: 0.009462 kg | com local: (10.2, -0.0, -6.356) | com world: (-171.941, 17.416, 5.246)
+      BallBearingPillowBlock:1
+        parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-171.941, 23.572, 5.246)
+        body: BallBearingPillow | bbox_center_mm: (0.0, 0.0, 7.0)
+        mass: 0.005197 kg | com local: (0.0, 0.0, 7.178) | com world: (-171.941, 16.394, 5.246)
       BallBearingBase:1
-        parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-156.941, 23.572, 5.246)
+        parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-171.941, 23.572, 5.246)
         body: Base | bbox_center_mm: (0.0, 0.0, 2.0)
-        mass: 0.001312 kg | com local: (-0.0, 0.0, 1.697) | com world: (-156.941, 21.875, 5.246)
+        mass: 0.001312 kg | com local: (-0.0, 0.0, 1.697) | com world: (-171.941, 21.875, 5.246)
       BallBearing:1 [hidden]
-        parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-156.941, 23.572, 5.246)
+        parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-171.941, 23.572, 5.246)
         body: BallBearing | bbox_center_mm: (0.0, 0.0, 6.0)
-        mass: 0.00197 kg | com local: (0.0, 0.0, 6.0) | com world: (-156.941, 17.572, 5.246)
+        mass: 0.00197 kg | com local: (0.0, 0.0, 6.0) | com world: (-171.941, 17.572, 5.246)
       BallBearingScrew:1 [hidden]
-        parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-156.941, 23.572, 5.246)
+        parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-171.941, 23.572, 5.246)
         body: ScrewBody | bbox_center_mm: (0.0, 0.0, 4.0)
         body: ScrewHead | bbox_center_mm: (0.0, 0.0, 9.5)
-        mass: 0.000983 kg | com local: (-0.0, 0.0, 7.017) | com world: (-156.941, 16.555, 5.246)
-      BallBearingPillowBlock:1
-        parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-156.941, 23.572, 5.246)
-        body: BallBearingPillow | bbox_center_mm: (0.0, 0.0, 7.0)
-        mass: 0.005197 kg | com local: (0.0, 0.0, 7.178) | com world: (-156.941, 16.394, 5.246)
+        mass: 0.000983 kg | com local: (-0.0, 0.0, 7.017) | com world: (-171.941, 16.555, 5.246)
     HornFit:1 [hidden]
-      parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-167.141, 23.772, 5.246)
+      parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-182.141, 23.772, 5.246)
       body: Horn | bbox_center_mm: (10.12, 0.0, 45.575)
-      mass: 0.026882 kg | com local: (10.12, -0.0, 45.165) | com world: (-157.021, 68.937, 5.246)
+      mass: 0.026882 kg | com local: (10.12, -0.0, 45.165) | com world: (-172.021, 68.937, 5.246)
   Link2L:1
     parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-50.401, 31.251, -5.0)
-    body: Link2 | bbox_center_mm: (11.97, 76.77, 10.246)
+    body: Link2 | bbox_center_mm: (11.97, 84.27, 10.246)
     caxis: Link1ToLink2Axis | local origin_mm: (34.365, 46.92, 10.246) dir: (1.0, 0.0, -0.0) | world origin_mm: (-97.321, 65.616, 5.246) dir: (0.0, 1.0, -0.0)
-    caxis: Link2ToLink3Axis | local origin_mm: (34.57, 106.62, 10.246) dir: (1.0, 0.0, -0.0) | world origin_mm: (-157.021, 65.822, 5.246) dir: (0.0, 1.0, -0.0)
-    mass: 0.134863 kg | com local: (20.749, 76.779, 10.25) | com world: (-127.18, 52.0, 5.25)
+    caxis: Link2ToLink3Axis | local origin_mm: (34.57, 121.62, 10.246) dir: (1.0, 0.0, -0.0) | world origin_mm: (-172.021, 65.822, 5.246) dir: (0.0, 1.0, -0.0)
+    mass: 0.151342 kg | com local: (20.1, 84.174, 10.25) | com world: (-134.575, 51.352, 5.25)
   Link1L:1
     parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-50.401, 31.251, -5.0)
     body: Link1L | bbox_center_mm: (4.945, 18.56, 19.45)
     caxis: BodyToLink1Axis | local origin_mm: (12.05, 0.0, -2.7) dir: (0.0, 0.0, -1.0) | world origin_mm: (-50.401, 43.301, -7.7) dir: (-0.0, 0.0, -1.0)
     mass: 0.132968 kg | com local: (10.004, 30.536, 23.471) | com world: (-80.936, 41.255, 18.471)
+  Link1R:1 [hidden]
+    parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-50.401, 31.251, -5.0)
+    body: Link1R | bbox_center_mm: (4.945, 18.56, -19.45)
+    mass: 0.149876 kg | com local: (8.937, -32.384, 23.721) | com world: (-18.017, 40.188, 18.721)
   Link3L:1
     parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-50.401, 31.251, -5.0)
-    body: Link3 | bbox_center_mm: (4.945, 137.99, 10.246)
-    mass: 0.131103 kg | com local: (8.593, 135.263, 10.246) | com world: (-185.664, 39.844, 5.246)
+    body: Link3 | bbox_center_mm: (4.945, 151.49, 10.246)
+    mass: 0.12715 kg | com local: (8.503, 148.726, 10.246) | com world: (-199.127, 39.755, 5.246)
   MotorMount:1 [xref]
     parent_origin_mm: (1.749, -16.401, 15.0)  world_origin_mm: (-34.0, 33.0, 10.0)
     body: LegMountL | bbox_center_mm: (13.0, 0.0, 1.65)
@@ -1789,6 +1794,10 @@ FaceHuggerLegAssembly:1 [xref]
       BallBearingBodiesPin:1 [xref] [hidden]
         parent_origin_mm: (10.2, 0.0, -0.2)  world_origin_mm: (-50.401, 43.301, -5.2)
         mass: 0.009462 kg | com local: (10.2, -0.0, -6.356) | com world: (-50.401, 43.301, -11.356)
+        BallBearingPillowBlock:1
+          parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-50.401, 43.301, -5.2)
+          body: BallBearingPillow | bbox_center_mm: (0.0, 0.0, 7.0)
+          mass: 0.005197 kg | com local: (0.0, 0.0, 7.178) | com world: (-50.401, 43.301, -12.378)
         BallBearingBase:1
           parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-50.401, 43.301, -5.2)
           body: Base | bbox_center_mm: (0.0, 0.0, 2.0)
@@ -1802,10 +1811,6 @@ FaceHuggerLegAssembly:1 [xref]
           body: ScrewBody | bbox_center_mm: (0.0, 0.0, 4.0)
           body: ScrewHead | bbox_center_mm: (0.0, 0.0, 9.5)
           mass: 0.000983 kg | com local: (-0.0, 0.0, 7.017) | com world: (-50.401, 43.301, -12.217)
-        BallBearingPillowBlock:1
-          parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-50.401, 43.301, -5.2)
-          body: BallBearingPillow | bbox_center_mm: (0.0, 0.0, 7.0)
-          mass: 0.005197 kg | com local: (0.0, 0.0, 7.178) | com world: (-50.401, 43.301, -12.378)
       HornFit:1 [hidden]
         parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-50.401, 33.101, -5.0)
         body: Horn | bbox_center_mm: (10.12, 0.0, 45.575)
@@ -1848,20 +1853,16 @@ FaceHuggerLegAssembly:1 [xref]
         parent_origin_mm: (0.0, 0.0, -0.0)  world_origin_mm: (-50.401, 33.101, -5.0)
         body: Horn | bbox_center_mm: (10.12, 0.0, -45.575)
         mass: 0.026882 kg | com local: (10.12, -0.0, -45.165) | com world: (-50.401, 43.222, 40.165)
-  Link1R:1 [hidden]
-    parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (-50.401, 31.251, -5.0)
-    body: Link1R | bbox_center_mm: (4.945, 18.56, -19.45)
-    mass: 0.149876 kg | com local: (8.937, -32.384, 23.721) | com world: (-18.017, 40.188, 18.721)
 
 === Joints ===
 Link3Revolute (revolute) [asbuilt]
-  axis: (principal axis)  dir=(+0.000, +1.000, +0.000)  origin: (implicit origin)  local_mm=(-106.62, +34.57, +10.25)
+  axis: (principal axis)  dir=(+0.000, +1.000, +0.000)  origin: (implicit origin)  local_mm=(-121.62, +34.57, +10.25)
   limits: rest=+0.0deg  [-90.0deg, +90.0deg]
   parent: Link2L:1 (Link2)
   child:  Link3L:1 (Link3)
 Link2Revolute (revolute) [asbuilt]
   axis: (principal axis)  dir=(+0.000, +1.000, +0.000)  origin: (implicit origin)  local_mm=(-46.92, +34.37, +10.25)
-  limits: rest=+0.0deg  [-45.0deg, +45.0deg]
+  limits: rest=+0.0deg  [-60.0deg, +60.0deg]
   parent: Link1L:1 (Link1L)
   child:  Link2L:1 (Link2)
 Link1Revolute (revolute) [asbuilt]
