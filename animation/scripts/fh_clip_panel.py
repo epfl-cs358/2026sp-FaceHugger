@@ -293,10 +293,20 @@ def _toggle_heatmap(self, context):
 
 
 def _action_clip_name(action_name):
+    """Strip a `__<target>` suffix from an Action name to recover the
+    clip prefix. Returns None for anything that doesn't look like a
+    well-formed clip action — including the cascading-suffix case
+    (e.g. an orphan Action literally named "__foot_target_fl__foot_target_fl"
+    that would otherwise leak the would-be prefix "__foot_target_fl"
+    into list_clips() and the export UI). Legitimate clip names don't
+    start with "__"."""
     for target in CLIP_TARGETS:
         suffix = f"__{target}"
         if action_name.endswith(suffix):
-            return action_name[: -len(suffix)]
+            clip = action_name[: -len(suffix)]
+            if not clip or clip.startswith("__"):
+                return None  # malformed / phantom
+            return clip
     return None
 
 
@@ -423,6 +433,46 @@ def _redraw_view3d(context):
     for area in context.screen.areas:
         if area.type == "VIEW_3D":
             area.tag_redraw()
+
+
+# ---------------------------------------------------------------------------
+# Per-clip export-include state (Option A: inline checkbox in the Clips list)
+# ---------------------------------------------------------------------------
+#
+# The set of clips ticked for "Export Selected Clips" is stored as a
+# newline-joined string on the scene (`fh_export_selected_clips`).
+# Clip names can contain spaces ("Lie flat and stand up") but never
+# newlines, so '\n' is the safe delimiter. Reads always intersect with
+# the live clip set so stale entries (clip deleted/renamed elsewhere)
+# auto-prune; writes always sort for stable diffs.
+
+
+def _export_selected_set():
+    """Return the set of clip names currently ticked for selective export,
+    intersected with `list_clips()` so stale entries auto-prune."""
+    raw = bpy.context.scene.fh_export_selected_clips
+    if not raw:
+        return set()
+    return {n for n in raw.split("\n") if n} & set(list_clips())
+
+
+def _write_export_selected(names):
+    """Persist `names` (an iterable of clip names) to the scene prop.
+    Sorted + newline-joined for stable diffs."""
+    bpy.context.scene.fh_export_selected_clips = "\n".join(sorted(set(names)))
+
+
+def _rename_export_selected(old, new):
+    """If `old` is currently ticked, swap it for `new`. Called when a
+    clip is renamed so the export-selection follows the rename."""
+    raw = bpy.context.scene.fh_export_selected_clips
+    if not raw:
+        return
+    names = {n for n in raw.split("\n") if n}
+    if old in names:
+        names.discard(old)
+        names.add(new)
+        _write_export_selected(names)
 
 
 # ---------------------------------------------------------------------------
@@ -985,6 +1035,36 @@ class FH_OT_overwrite_clip(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class FH_OT_toggle_export_clip(bpy.types.Operator):
+    """Toggle a clip's inclusion in the 'Export Selected Clips' set.
+    Per-row icon button in the Clips sub-panel; flips the named clip
+    in/out of the scene-level set (fh_export_selected_clips)."""
+
+    bl_idname = "fh.toggle_export_clip"
+    bl_label = "Include In Export"
+    bl_options = {"REGISTER", "UNDO"}
+
+    clip_name: bpy.props.StringProperty(name="Clip Name")
+
+    def execute(self, context):
+        clip = self.clip_name.strip()
+        if not clip:
+            self.report({"ERROR"}, "No clip name supplied")
+            return {"CANCELLED"}
+        raw = context.scene.fh_export_selected_clips
+        names = {n for n in raw.split("\n") if n} if raw else set()
+        if clip in names:
+            names.discard(clip)
+            action = "excluded from"
+        else:
+            names.add(clip)
+            action = "included in"
+        _write_export_selected(names)
+        self.report({"INFO"}, f"Clip '{clip}' {action} selected-clips export")
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
 class FH_OT_rename_clip(bpy.types.Operator):
     """Rename all 5 Actions of the active clip in one step."""
 
@@ -1015,6 +1095,9 @@ class FH_OT_rename_clip(bpy.types.Operator):
                 continue
             action.name = f"{new_name}__{target}"
             renamed += 1
+        # If this clip was ticked for export, move the tick to the new
+        # name so the user's selection follows the rename.
+        _rename_export_selected(src, new_name)
         self.report(
             {"INFO"},
             f"Renamed '{src}' → '{new_name}' ({renamed}/{len(CLIP_TARGETS)} Actions)",
@@ -1814,35 +1897,6 @@ function playFrame() {{
 # Operators — export (active clip / a ticked selection of clips)
 # ---------------------------------------------------------------------------
 
-# Dynamic ENUM_FLAG items for the per-clip export checklist. Blender
-# can garbage-collect enum-item strings returned by a callback unless
-# we keep a reference, so cache the list at module scope. The cache is
-# rebuilt ONLY when the underlying clip set changes — rebuilding on
-# every panel redraw causes the toggle widgets to visibly twitch as
-# Blender re-renders the (logically-identical) item list.
-_export_clip_enum_cache: list[tuple] = []
-_export_clip_enum_signature: tuple = ()
-
-
-def _export_clip_items(self, context):
-    """ENUM_FLAG items = every clip in the scene (capped at 32 — the
-    flag bit budget; clips beyond that just won't be tick-selectable,
-    which is far more clips than this project will ever have).
-
-    Content-cached: returns the same list object on consecutive calls
-    when the clip set is unchanged, so Blender's ENUM_FLAG widget
-    doesn't twitch on every panel redraw."""
-    global _export_clip_enum_signature
-    clips = tuple(list_clips()[:32])
-    if clips != _export_clip_enum_signature:
-        _export_clip_enum_cache.clear()
-        for i, clip in enumerate(clips):
-            _export_clip_enum_cache.append(
-                (clip, clip, f"Include '{clip}' in the selected-clips export", 1 << i)
-            )
-        _export_clip_enum_signature = clips
-    return _export_clip_enum_cache
-
 
 def _bake_and_write(clip, context, convention):
     """Bake one clip (Layer 1) then run the scene's enabled converters
@@ -1940,10 +1994,10 @@ class FH_OT_export_clip(bpy.types.Operator):
 
 
 class FH_OT_export_selected(bpy.types.Operator):
-    """Bake + export every clip ticked in the Export panel's checklist
-    (fh_export_clips), each into its own animation/exported_gaits/<clip>/
-    with the enabled formats. A clip that fails to bake is skipped and
-    reported; the rest still export."""
+    """Bake + export every clip ticked via the per-row checkbox in the
+    Clips sub-panel (fh_export_selected_clips), each into its own
+    animation/exported_gaits/<clip>/ with the enabled formats. A clip
+    that fails to bake is skipped and reported; the rest still export."""
 
     bl_idname = "fh.export_selected"
     bl_label = "Export Selected Clips"
@@ -1954,10 +2008,10 @@ class FH_OT_export_selected(bpy.types.Operator):
         if not bpy.data.filepath:
             self.report({"ERROR"}, "Save the .blend file before exporting")
             return {"CANCELLED"}
-        # Intersect with list_clips() so the order is stable and any
-        # stale tick (clip renamed/deleted since) is ignored.
-        ticked = set(scene.fh_export_clips)
-        chosen = [c for c in list_clips() if c in ticked]
+        # _export_selected_set() already intersects with list_clips(),
+        # so stale ticks (clip renamed/deleted since) are auto-pruned.
+        # Sort for stable per-clip iteration order.
+        chosen = sorted(_export_selected_set())
         if not chosen:
             self.report({"ERROR"}, "No clips ticked — select clips to export")
             return {"CANCELLED"}
@@ -2106,6 +2160,9 @@ class FH_PT_clips(_FH_PT_child, bpy.types.Panel):
         if not clips:
             layout.label(text="(no clips found)", icon="INFO")
         else:
+            # Compute the export-selection set once per draw (not per row)
+            # so each row checkbox is just a cheap membership test.
+            selected = _export_selected_set()
             col = layout.column(align=True)
             for clip in clips:
                 row = col.row(align=True)
@@ -2119,6 +2176,15 @@ class FH_PT_clips(_FH_PT_child, bpy.types.Panel):
                 # (confirm dialog; destructive to the clip's old content).
                 row.operator(
                     FH_OT_overwrite_clip.bl_idname, text="", icon="FILE_REFRESH"
+                ).clip_name = clip
+                # Include-in-export checkbox: drives Export Selected Clips.
+                in_export = clip in selected
+                chk_icon = "CHECKBOX_HLT" if in_export else "CHECKBOX_DEHLT"
+                row.operator(
+                    FH_OT_toggle_export_clip.bl_idname,
+                    text="",
+                    icon=chk_icon,
+                    depress=in_export,
                 ).clip_name = clip
 
         layout.separator()
@@ -2193,14 +2259,16 @@ class FH_PT_export(_FH_PT_child, bpy.types.Panel):
             FH_OT_export_clip.bl_idname, text="Export Active Clip", icon="EXPORT"
         )
 
-        # Selective multi-clip export: tick any subset, then one button.
+        # Selective multi-clip export. Selection lives on the per-row
+        # checkbox in the Clips sub-panel; this button just consumes it.
+        # Disabled when nothing is ticked so the action is unambiguous.
         if list_clips():
-            box = layout.box()
-            box.label(text="Clips to export:")
-            box.prop(context.scene, "fh_export_clips", expand=True)
-            box.operator(
+            sel_count = len(_export_selected_set())
+            sel_row = layout.row()
+            sel_row.enabled = sel_count > 0
+            sel_row.operator(
                 FH_OT_export_selected.bl_idname,
-                text="Export Selected Clips",
+                text=f"Export Selected Clips ({sel_count})",
                 icon="EXPORT",
             )
 
@@ -2240,6 +2308,7 @@ CLASSES = (
     FH_OT_select_controls,
     FH_OT_duplicate_clip,
     FH_OT_overwrite_clip,
+    FH_OT_toggle_export_clip,
     FH_OT_rename_clip,
     FH_OT_export_clip,
     FH_OT_export_selected,
@@ -2323,11 +2392,15 @@ def register():
         ),
         default=False,
     )
-    bpy.types.Scene.fh_export_clips = bpy.props.EnumProperty(
-        name="Clips to export",
-        description="Tick the clips that 'Export Selected Clips' should bake",
-        items=_export_clip_items,
-        options={"ENUM_FLAG"},
+    bpy.types.Scene.fh_export_selected_clips = bpy.props.StringProperty(
+        name="Selected clips for export",
+        description=(
+            "Internal: newline-joined set of clip names ticked via the "
+            "per-row checkbox in the Clips sub-panel. Read by "
+            "'Export Selected Clips'; intersected with list_clips() on "
+            "read so stale entries auto-prune."
+        ),
+        default="",
     )
     bpy.types.Scene.fh_heatmap_active = bpy.props.BoolProperty(
         name="Activity Heatmap",
@@ -2363,7 +2436,7 @@ def unregister():
         "fh_export_js",
         "fh_export_js_loop",
         "fh_export_js_dryrun",
-        "fh_export_clips",
+        "fh_export_selected_clips",
         "fh_heatmap_active",
     ):
         if hasattr(bpy.types.Scene, prop):
