@@ -457,3 +457,19 @@ void SpinalCord::invertRobot() {
 
     gaitPhaseStartMs_ = millis();
 }
+
+SpinalCord::Snapshot SpinalCord::snapshot() const {
+    Snapshot s;
+    s.robot_state     = (uint8_t)robotState;
+    s.gait            = (uint8_t)currentGait_;
+    s.is_moving       = isMovingRequested;
+    s.is_inverted     = isInverted;
+    s.last_cmd_ms     = lastCommandMs;
+    s.target_x = targetX; s.target_y = targetY; s.target_yaw = targetYaw;
+    s.active_x = activeX; s.active_y = activeY; s.active_yaw = activeYaw;
+    leg1.getJointAngles(s.servo_angles[0], s.servo_angles[1],  s.servo_angles[2]);
+    leg2.getJointAngles(s.servo_angles[3], s.servo_angles[4],  s.servo_angles[5]);
+    leg3.getJointAngles(s.servo_angles[6], s.servo_angles[7],  s.servo_angles[8]);
+    leg4.getJointAngles(s.servo_angles[9], s.servo_angles[10], s.servo_angles[11]);
+    return s;
+}

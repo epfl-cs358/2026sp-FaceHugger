@@ -14,6 +14,7 @@ class Leg {
     void setJointAngles(double hip, double thigh, double knee);
     void returnToDefaultAngles();
     void identifyAndMove(uint8_t channel, double angle);
+    void getJointAngles(float& hip, float& thigh, float& knee) const;
   private:
     int id;
     Servo hipServo;
