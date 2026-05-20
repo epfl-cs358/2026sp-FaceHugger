@@ -45,22 +45,40 @@ constraint stack involvement) via a scripted driver, see (3c).
           exactly. Kept as a separate Empty so the animator-facing
           handle is decoupled from the IK target.
        c. `shoulder_pivot_{leg}` (hidden, plain axes): bone-parented to
-          `*_link1` at zero local offset at the bone HEAD, so its world
-          XY tracks the shoulder pivot in every pose. Used by the link1
-          yaw driver to read the live shoulder world XY position.
-       d. IK constraint on `*_link3` pose bone: `target=foot_ik`,
+          `*_link1` at zero local offset at the bone HEAD. Originally
+          a driver input (world-space iteration); now retained only
+          as a visual landmark for the shoulder pivot.
+       d. `foot_local_{leg}` (hidden, plain axes): parented to
+          `body_ctrl` (OBJECT, identity parent_inverse) with a
+          `COPY_LOCATION` constraint (`target=foot_target_<leg>`,
+          `target_space=WORLD`, `owner_space=LOCAL`). The constraint
+          writes the foot's world XY into this empty's LOCAL location
+          = the foot expressed in body_ctrl's frame. The link1 yaw
+          driver reads its LOCAL_SPACE LOC_X/Y so its math runs in
+          body_ctrl's local frame — invariant to body pitch / roll /
+          yaw / translation.
+       e. IK constraint on `*_link3` pose bone: `target=foot_ik`,
           `chain_count=2` (covers link3 + link2), `use_tail=True`,
           `use_rotation=False`, `use_stretch=False`.
-       e. Scripted driver on `*_link1` pose bone's `rotation_euler[2]`:
-              atan2(foot_y - pivot_y, foot_x - pivot_x)
-              - body_rot - REST_ANGLE_<leg>
-          REST_ANGLE per leg is the Z component of the URDF
-          `*_link1_joint`'s `<origin rpy>`. Variables read world-space
-          LOC_X/LOC_Y from `foot_target_<leg>` and
-          `shoulder_pivot_<leg>` plus world-space ROT_Z from `body_ctrl`.
-          Replaces the legacy DAMPED_TRACK, which aimed in world space
-          and ignored body_ctrl rotation — so the legs would twist
-          against the body whenever body_ctrl yawed.
+       f. Scripted driver on `*_link1` pose bone's `rotation_euler[2]`:
+              axis_sign * (
+                  atan2(foot_local_y - SHOULDER_CONST_Y,
+                        foot_local_x - SHOULDER_CONST_X)
+                  - REST_ANGLE_<leg>)
+          Two `LOCAL_SPACE` `TRANSFORMS` variables read LOC_X / LOC_Y
+          from `foot_local_<leg>`. `SHOULDER_CONST` (link1 HEAD in
+          body_ctrl LOCAL frame at rest), `REST_ANGLE` (rest foot
+          direction in body-local XY), and `axis_sign`
+          (`sign(joint.axis.z)` — +1 L-side, −1 R-side) are baked
+          per-leg into each expression.
+
+          Replaces the previous WORLD-space form, which subtracted
+          `body_ctrl` ROT_Z: correct under chassis yaw but wrong
+          under any pitch / roll because world XY is no longer the
+          body's plane. Also eliminates the four `Target → Driver`
+          depsgraph cycles on `shoulder_pivot ↔ link1 driver`:
+          the new driver doesn't read shoulder_pivot, so the cycle
+          is gone.
 
      Known limitation: bone tail is the projected foot tip (drops the
      joint-axis component of the foot tip in link3 frame, ≈ −Y in link3
@@ -154,6 +172,7 @@ LEG_IDS = ("fl", "fr", "bl", "br")
 R_SIDE_LEGS = ("fr", "bl")  # legs whose link3 visual has rpy=(0, π, 0)
 FOOT_TARGET_FMT = "foot_target_{leg}"
 FOOT_IK_FMT = "foot_ik_{leg}"
+FOOT_LOCAL_FMT = "foot_local_{leg}"
 SHOULDER_PIVOT_FMT = "shoulder_pivot_{leg}"
 SHOULDER_BONE_FMT = "{leg}_link1"
 KNEE_BONE_FMT = "{leg}_link3"
@@ -1008,64 +1027,81 @@ def place_ik_targets_and_constraints(
     return n_targets, n_ik, n_pivots
 
 
-def add_link1_yaw_drivers(robot, link_world, foot_tip_in_link3_m, arm_obj, body_ctrl):
-    """Scripted driver on each `*_link1` pose bone's `rotation_euler[2]`:
+def add_link1_yaw_drivers(
+    robot,
+    link_world,
+    foot_tip_in_link3_m,
+    arm_obj,
+    body_ctrl,
+    body_bottom_m,
+    target_collection,
+):
+    """Body-local scripted driver on each `*_link1.rotation_euler[2]`:
 
         axis_sign * (
-            atan2(foot_y - pivot_y, foot_x - pivot_x)
-            - body_rot
+            atan2(foot_local_y - SHOULDER_CONST_Y,
+                  foot_local_x - SHOULDER_CONST_X)
             - REST_ANGLE
         )
 
-    Variables (all `transform_space='WORLD_SPACE'`):
-      * `foot_x`, `foot_y`   — `foot_target_<leg>` LOC_X / LOC_Y
-      * `pivot_x`, `pivot_y` — `shoulder_pivot_<leg>` LOC_X / LOC_Y
-      * `body_rot`           — `body_ctrl` ROT_Z
+    Two `TRANSFORMS` variables per driver, both `LOCAL_SPACE`:
+      * `foot_local_x`, `foot_local_y` — `foot_local_<leg>` LOC_X / LOC_Y
 
     Per-leg numeric literals baked into each expression:
 
-    * `REST_ANGLE` is the world-frame angle from the rest shoulder
-      pivot to the rest foot target, computed analytically from
-      `link_world` (the URDF rest-pose forward-kinematics solution in
-      metres) rather than from depsgraph-evaluated empties — reading
-      the live empties at build time can drift by ~1° because of the
-      `Target -> Driver` depsgraph cycle (shoulder_pivot is
-      bone-parented to link1 which has a driver reading
-      shoulder_pivot). The analytical form sidesteps the depsgraph
-      and matches the steady-state evaluated geometry. The driver
-      evaluates to 0 at rest by construction, regardless of URDF rpy
-      choice or per-side mesh conventions — it is NOT the URDF
-      `<origin rpy>` Z component (those values differ from the
-      world-frame foot direction by π for FL/BR on FaceHugger).
-
+    * `SHOULDER_CONST_X`, `SHOULDER_CONST_Y` — the link1 HEAD position
+      expressed in `body_ctrl` LOCAL frame at rest, in millimetres. At
+      rest body_ctrl has identity rotation and is positioned at
+      `body_bottom_m * M_TO_MM`, so the body-local shoulder XY equals
+      the world XY of the URDF `*_link1_joint`'s `<origin xyz>`
+      (translation only — `body_bottom_m` is along world Z, so XY is
+      unchanged).
+    * `REST_ANGLE` — world-frame angle from rest shoulder to rest foot
+      target, derived from `link_world`. Same per-leg value as the
+      previous (world-space) iteration of this driver: in body-local
+      math at rest, `(foot_local − SHOULDER_CONST)` reduces to
+      `(foot_world − shoulder_world)` since both XY are shifted by
+      the same body_bottom XY (=0); the atan2 of that is the world
+      yaw of the rest foot direction.
     * `axis_sign = sign(joint.axis.z)` absorbs the per-side joint axis
-      flip. For L-side legs (FL, BR) the URDF axis is `+Z` and
-      `EditBone.align_roll` makes bone-local +Z = world +Z, so
-      `rotation_euler[2]` = world yaw rotation — sign +1. For R-side
-      legs (FR, BL) the axis is `-Z`, bone-local +Z = world -Z, so a
-      positive `rotation_euler[2]` rotates the bone clockwise in
-      world — sign -1 keeps the analytical formula consistent across
-      all four legs without per-leg branching of the driver
-      structure (only the literal `axis_sign` differs).
+      flip: bone-local +Z = world +Z for L-side legs (FL, BR;
+      axis_sign +1) and = world −Z for R-side legs (FR, BL;
+      axis_sign −1).
 
-    Because `shoulder_pivot_<leg>` is bone-parented to `*_link1` (and
-    the armature is parented to `body_ctrl`), its world XY moves
-    rigidly with body_ctrl — `atan2(foot - pivot) − body_rot` is the
-    link1's local yaw regardless of where the body is in world.
+    To get the foot position in `body_ctrl` LOCAL space, the function
+    creates a `foot_local_<leg>` PLAIN_AXES Empty per leg, parented
+    to `body_ctrl` (OBJECT, `matrix_parent_inverse=Identity`), with a
+    `COPY_LOCATION` constraint: `target=foot_target_<leg>`,
+    `target_space='WORLD'`, `owner_space='LOCAL'`,
+    `use_offset=False`. The constraint writes the foot's world XY
+    into `foot_local`'s LOCAL location (= `body_ctrl`-relative
+    position). The driver reads that LOCAL_SPACE position, so the
+    math runs in body_ctrl's frame — invariant to body pitch / roll
+    / yaw / translation.
 
-    Replaces the legacy DAMPED_TRACK constraint on link1, which aimed
-    in world space and ignored body_ctrl rotation: with the rig
-    parented under body_ctrl, the armature's local frame rotated with
-    body_ctrl but Damped Track kept aiming at the world-space foot, so
-    the legs twisted relative to the body instead of staying on their
-    targets.
+    This replaces the previous world-XY driver (which subtracted
+    `body_ctrl` ROT_Z) — that formula only corrected for chassis
+    YAW; under any body pitch or roll the world-XY plane no longer
+    matched the body's plane and link1 yaw drifted visibly. The
+    body-local form is correct under arbitrary body orientation.
 
-    Called AFTER `add_body_control` so `body_ctrl` exists as a driver
-    target, AND after `place_ik_targets_and_constraints` so the
-    `foot_target_*` / `shoulder_pivot_*` empties exist with their rest
-    world positions. Returns the number of drivers installed.
+    As a bonus, this also eliminates the four `Target -> Driver`
+    depsgraph cycles on `shoulder_pivot_<leg> ↔ link1 driver`:
+    the new driver does NOT read `shoulder_pivot_<leg>` (those
+    empties remain in the rig as visual landmarks, but are no longer
+    in the dependency chain).
+
+    Called AFTER `add_body_control` so `body_ctrl` exists, AND after
+    `place_ik_targets_and_constraints` so the `foot_target_*` empties
+    exist. Returns the number of drivers installed.
     """
     import math as _math
+
+    body_bottom_mm = (
+        Vector(body_bottom_m) * M_TO_MM
+        if body_bottom_m is not None
+        else Vector((0.0, 0.0, 0.0))
+    )
 
     n = 0
     for leg in LEG_IDS:
@@ -1076,41 +1112,69 @@ def add_link1_yaw_drivers(robot, link_world, foot_tip_in_link3_m, arm_obj, body_
             continue
         joint = robot["joints"].get(link1)
         foot = bpy.data.objects.get(FOOT_TARGET_FMT.format(leg=leg))
-        pivot = bpy.data.objects.get(SHOULDER_PIVOT_FMT.format(leg=leg))
         if (
             joint is None
             or foot is None
-            or pivot is None
             or link1 not in link_world
             or link3 not in link_world
         ):
-            print(f"[warn] link1 driver: missing joint/foot/pivot for leg {leg!r}")
+            print(f"[warn] link1 driver: missing joint/foot/link_world for {leg!r}")
             continue
 
-        # REST_ANGLE — world yaw from rest shoulder pivot to rest foot
-        # target. Computed analytically from `link_world` (the URDF rest
-        # pose forward-kinematics solution) rather than from depsgraph-
-        # evaluated empties, because in some Blender 5.x cycle-resolution
-        # orderings the bone-parented `shoulder_pivot_<leg>` is not yet
-        # at its bone-HEAD world position when this function runs (off
-        # by ~1°, see `Target -> Driver` cycle warnings on rig build).
-        # Reading link_world (a numpy/mathutils Matrix in metres,
-        # populated by `compute_link_world` at build start) sidesteps the
-        # depsgraph entirely and matches the steady-state geometry by
-        # construction.
-        pivot_rest_m = link_world[link1].to_translation()
+        # foot_local_<leg> — body-local view of the foot, via
+        # COPY_LOCATION(WORLD→LOCAL) on a body_ctrl-parented empty.
+        foot_local_name = FOOT_LOCAL_FMT.format(leg=leg)
+        foot_local = bpy.data.objects.get(foot_local_name)
+        if foot_local is None:
+            foot_local = _add_empty(
+                foot_local_name,
+                (0.0, 0.0, 0.0),
+                target_collection,
+                kind="PLAIN_AXES",
+                size_mm=3.0,
+            )
+        foot_local.hide_viewport = True
+        foot_local.parent = body_ctrl
+        foot_local.parent_type = "OBJECT"
+        foot_local.matrix_parent_inverse = Matrix.Identity(4)
+        # Replace any pre-existing constraints (idempotent on rebuild).
+        for c in list(foot_local.constraints):
+            foot_local.constraints.remove(c)
+        cop = foot_local.constraints.new("COPY_LOCATION")
+        cop.target = foot
+        cop.target_space = "WORLD"
+        # owner_space='WORLD' (not LOCAL) is required: with LOCAL the
+        # constraint writes the target's WORLD coords directly into the
+        # owner's local transform, so matrix_local ends up being the
+        # foot's WORLD XY (invariant to body rotation) and the driver
+        # ends up doing world-frame math again. With owner_space='WORLD',
+        # matrix_world is pinned to the target's world location, and
+        # `matrix_local = body_ctrl.matrix_world.inverted() @ matrix_world`
+        # = foot in body_ctrl-local frame — which is what we need for
+        # the driver's LOCAL_SPACE variable.
+        cop.owner_space = "WORLD"
+        cop.use_offset = False
+
+        # SHOULDER_CONST per leg — link1 HEAD in body_ctrl LOCAL frame
+        # at rest. body_ctrl at rest = Translation(body_bottom_mm) with
+        # identity rotation, so body-local = world − body_bottom_mm.
+        link1_world_m = link_world[link1].to_translation()
+        link1_world_mm = link1_world_m * M_TO_MM
+        shoulder_const = link1_world_mm - body_bottom_mm
+
+        # REST_ANGLE — world yaw of (foot_rest − shoulder_rest), same
+        # per-leg value as the previous driver iteration.
         foot_rest_m = link_world[link3] @ _foot_tip_for_leg(leg, foot_tip_in_link3_m)
         rest_yaw = _math.atan2(
-            foot_rest_m.y - pivot_rest_m.y,
-            foot_rest_m.x - pivot_rest_m.x,
+            foot_rest_m.y - link1_world_m.y,
+            foot_rest_m.x - link1_world_m.x,
         )
 
         # Per-side joint-axis sign.
         axis_sign = 1 if joint["axis"].z >= 0 else -1
 
-        # Driver writes rotation_euler[2] directly, so enforce XYZ Euler
-        # rotation mode (Blender default; defensive in case earlier code
-        # changed it).
+        # Driver writes rotation_euler[2] directly — enforce XYZ Euler
+        # rotation mode defensively.
         pb.rotation_mode = "XYZ"
 
         fc = pb.driver_add("rotation_euler", 2)
@@ -1120,25 +1184,23 @@ def add_link1_yaw_drivers(robot, link_world, foot_tip_in_link3_m, arm_obj, body_
         for v in list(drv.variables):
             drv.variables.remove(v)
 
-        def _add_xform_var(name, target_obj, transform_type):
+        def _add_local_var(name, target_obj, transform_type):
             v = drv.variables.new()
             v.name = name
             v.type = "TRANSFORMS"
             t = v.targets[0]
             t.id = target_obj
             t.transform_type = transform_type
-            t.transform_space = "WORLD_SPACE"
+            t.transform_space = "LOCAL_SPACE"
 
-        _add_xform_var("foot_x", foot, "LOC_X")
-        _add_xform_var("foot_y", foot, "LOC_Y")
-        _add_xform_var("pivot_x", pivot, "LOC_X")
-        _add_xform_var("pivot_y", pivot, "LOC_Y")
-        _add_xform_var("body_rot", body_ctrl, "ROT_Z")
+        _add_local_var("foot_local_x", foot_local, "LOC_X")
+        _add_local_var("foot_local_y", foot_local, "LOC_Y")
 
         drv.expression = (
             f"({axis_sign:+d}) * ("
-            f"atan2(foot_y - pivot_y, foot_x - pivot_x)"
-            f" - body_rot - ({rest_yaw!r}))"
+            f"atan2(foot_local_y - ({shoulder_const.y!r}),"
+            f" foot_local_x - ({shoulder_const.x!r}))"
+            f" - ({rest_yaw!r}))"
         )
         n += 1
     return n
@@ -1226,7 +1288,7 @@ def _diagnose_foot_target_placement(robot, link_world, arm_obj):
 
     Uses URDF rest matrices (`link_world[link3] @ visual_origin`) to
     compute the rest-pose mesh world; Blender's `mesh_obj.matrix_world`
-    reflects the LIVE pose after Damped Track + IK fire on the
+    reflects the LIVE pose after the link1 driver + IK fire on the
     placeholder rest, which is misleading for placement diagnosis.
 
     Expected: mesh tip and foot_target agree to within sub-mm. If they
@@ -1241,13 +1303,16 @@ def _diagnose_foot_target_placement(robot, link_world, arm_obj):
     that's rig-internal and documented in
     `place_ik_targets_and_constraints`.
     """
-    # Damped Track rest-identity check: per leg, compare each link1's
-    # bone-Y (in armature space, from matrix_local) to the direction
-    # from link1's head to foot_target. If they align at rest, Damped
-    # Track applies zero rotation at the URDF rest pose; only when the
-    # animator drags foot_target does it rotate link1 — preserving
-    # auto-yaw on movement while eliminating the 88 mm rest contortion.
-    print("[urdf_to_blender_rigged] Damped Track rest-identity check (link1):")
+    # link1 bone-Y vs shoulder→foot_target direction (at rest pose,
+    # before the driver fires). The link1 bone-Y was aimed at the foot
+    # tip during armature build via the per-link1 bone-tail projection
+    # in `_bone_endpoints_world_mm`, so the yaw-only delta should be
+    # ~0° per leg — confirming the auto-yaw driver's REST_ANGLE matches
+    # the geometric rest direction. The 3D angle is non-zero because
+    # the bone-Y also has a Z component (knee elevation) that the
+    # horizontal projection drops; rest-yaw alignment is the
+    # quantity the driver cares about.
+    print("[urdf_to_blender_rigged] link1 bone-Y vs foot direction (rest pose):")
     import math as _math2
 
     for leg in LEG_IDS:
@@ -1261,14 +1326,12 @@ def _diagnose_foot_target_placement(robot, link_world, arm_obj):
         head_world = Vector(ml.col[3][:3])
         target_world = target.matrix_world.translation
         dir_to_target = (target_world - head_world).normalized()
-        # Full 3D angle includes elevation; LIMIT_ROTATION X/Y locks
-        # block elevation rotation, so it doesn't matter for rest pose.
         cos_3d = max(-1.0, min(1.0, bone_y.dot(dir_to_target)))
         angle_3d_deg = _math2.degrees(_math2.acos(cos_3d))
-        # Yaw-only angle (horizontal projection) IS what Damped Track
-        # can actually apply through the X/Y locks. ~0° at rest means
-        # no rest-pose contortion; auto-yaw still fires when the
-        # animator drags foot_target horizontally.
+        # Yaw-only angle (XY projection) IS what the driver writes into
+        # link1.rotation_euler[2]; ~0° at rest means the bone-Y already
+        # points at the foot horizontally, so the driver applies 0 rad
+        # at rest.
         bone_y_h = Vector((bone_y.x, bone_y.y, 0.0))
         target_h = Vector((dir_to_target.x, dir_to_target.y, 0.0))
         if bone_y_h.length > 1e-9 and target_h.length > 1e-9:
@@ -1282,7 +1345,7 @@ def _diagnose_foot_target_placement(robot, link_world, arm_obj):
         print(
             f"  [{leg}_link1] 3D={angle_3d_deg:6.3f}° "
             f"yaw-only={angle_yaw_deg:6.3f}° "
-            f"(yaw-only is what passes through LIMIT_ROTATION's X/Y locks; "
+            f"(yaw-only is what the driver writes to rotation_euler[2]; "
             f"~0° = no rest contortion)"
         )
 
@@ -1611,9 +1674,15 @@ def main():
     body_ctrl.parent_type = "OBJECT"
     body_ctrl.matrix_parent_inverse = Matrix.Identity(4)
     n_drivers = add_link1_yaw_drivers(
-        robot, link_world, foot_tip_in_link3_m, arm_obj, body_ctrl
+        robot,
+        link_world,
+        foot_tip_in_link3_m,
+        arm_obj,
+        body_ctrl,
+        body_bottom_m,
+        collections[TARGETS_COLLECTION],
     )
-    _verify_auto_yaw(arm_obj, robot, link_world, foot_tip_in_link3_m)
+    _verify_auto_yaw(arm_obj, robot, link_world, foot_tip_in_link3_m, body_bottom_m)
     restore_actions(stash)
 
     max_err_deg = _check_bone_z_alignment(robot, link_world, arm_obj)
@@ -1627,7 +1696,9 @@ def main():
     print(
         f"[urdf_to_blender_rigged] targets : {n_targets} foot_target "
         f"+ {n_targets} foot_ik (hidden, COPY_LOCATION exact) "
-        f"+ {n_pivots} shoulder_pivot (hidden, bone-parented to link1)"
+        f"+ {n_pivots} shoulder_pivot (hidden, bone-parented to link1) "
+        f"+ {n_drivers} foot_local (hidden, COPY_LOCATION WORLD→LOCAL"
+        f" on body_ctrl)"
     )
     print(
         f"[urdf_to_blender_rigged] controls: {body_ctrl.name} "
@@ -1684,31 +1755,33 @@ def main():
         print(f"[urdf_to_blender_rigged] saved: {args.save}")
 
 
-def _verify_auto_yaw(arm_obj, robot, link_world, foot_tip_in_link3_m):
-    """Dynamic check of the per-leg link1 yaw driver:
+def _verify_auto_yaw(arm_obj, robot, link_world, foot_tip_in_link3_m, body_bottom_m):
+    """Dynamic check of the per-leg body-local link1 yaw driver:
 
-    1. REST sign check — with `body_ctrl` at identity rotation and
-       every `foot_target_<leg>` at its rest position, evaluate the
-       depsgraph and assert
-           link1.rotation_euler[2] ≈ 0
-       per leg (≤ 1e-4 rad). A failure here means REST_ANGLE has the
-       wrong sign for that leg (typically an atan2-vs-axis convention
-       mismatch in `add_link1_yaw_drivers`).
+    1. REST sign check — body_ctrl identity + feet at rest →
+       link1.rotation_euler[2] ≈ 0 per leg (≤ 1e-4 rad). A failure
+       here means REST_ANGLE or SHOULDER_CONST has the wrong sign /
+       value for that leg.
 
-    2. Behavioural check — rotate `body_ctrl` by +30° around Z, bump
-       every `foot_target_<leg>` by (+30, −20) mm in world XY, evaluate
-       the depsgraph, and assert each link1's resolved
-       `rotation_euler[2]` equals the analytical
-           axis_sign * (atan2(fy − py, fx − px) − body_rot − REST_ANGLE)
-       within ≤ 1e-4 rad. REST_ANGLE comes from `link_world` (the same
-       analytical source `add_link1_yaw_drivers` bakes — matches the
-       driver expression by construction; reading the empties' live
-       matrix_world here can drift by ~1° because of the
-       `Target → Driver` depsgraph cycle).
+    2. Behavioural Z=+30° — rotates body_ctrl around Z by 30°, bumps
+       every foot_target by (+30, −20) mm in world XY, asserts each
+       link1.rotation_euler[2] matches the analytical formula
+           axis_sign * (atan2(foot_local_y − SHOULDER_CONST_Y,
+                              foot_local_x − SHOULDER_CONST_X)
+                        − REST_ANGLE)
+       within ≤ 1e-4 rad. `foot_local_<leg>` is read from the
+       depsgraph-evaluated empty's basis after the constraint fires
+       (= foot in body_ctrl LOCAL frame).
+
+    3. Behavioural X=+15° (tilt regression) — same form with body
+       pitched 15° around X and feet at rest. The previous
+       world-space driver passed (1) and (2) but FAILED this case —
+       it subtracted `body_ctrl` ROT_Z, which only corrects for yaw
+       and ignored pitch / roll. The body-local form must hold here.
 
     Restores body_ctrl and every foot_target afterwards so the saved
-    blend keeps the rest pose. Print-only: a warning is logged if any
-    leg fails — the rebuild itself is left to complete so the saved
+    blend keeps the rest pose. Print-only: a WARNING is logged if any
+    case fails — the rebuild itself is left to complete so the saved
     blend can be inspected.
     """
     import math as _math3
@@ -1718,6 +1791,12 @@ def _verify_auto_yaw(arm_obj, robot, link_world, foot_tip_in_link3_m):
         print("[urdf_to_blender_rigged] auto-yaw : body_ctrl missing, skipping")
         return
 
+    body_bottom_mm = (
+        Vector(body_bottom_m) * M_TO_MM
+        if body_bottom_m is not None
+        else Vector((0.0, 0.0, 0.0))
+    )
+
     bpy.context.view_layer.update()
     legs = []
     for leg in LEG_IDS:
@@ -1725,26 +1804,30 @@ def _verify_auto_yaw(arm_obj, robot, link_world, foot_tip_in_link3_m):
         link3 = KNEE_BONE_FMT.format(leg=leg)
         pb = arm_obj.pose.bones.get(link1)
         foot = bpy.data.objects.get(FOOT_TARGET_FMT.format(leg=leg))
-        pivot = bpy.data.objects.get(SHOULDER_PIVOT_FMT.format(leg=leg))
+        foot_local = bpy.data.objects.get(FOOT_LOCAL_FMT.format(leg=leg))
         joint = robot["joints"].get(link1)
         if (
             pb is None
             or foot is None
-            or pivot is None
+            or foot_local is None
             or joint is None
             or link1 not in link_world
             or link3 not in link_world
         ):
             print(f"[warn] auto-yaw : missing handles for leg {leg!r}, skipping")
             continue
-        # Analytical REST_ANGLE — same source `add_link1_yaw_drivers` bakes.
-        pivot_rest_m = link_world[link1].to_translation()
+        # Analytical REST_ANGLE + SHOULDER_CONST — same source the
+        # driver bakes, so the harness predicts the literal-baked
+        # expression byte-for-byte.
+        link1_world_m = link_world[link1].to_translation()
+        link1_world_mm = link1_world_m * M_TO_MM
+        shoulder_const = link1_world_mm - body_bottom_mm
         foot_rest_m = link_world[link3] @ _foot_tip_for_leg(leg, foot_tip_in_link3_m)
         rest_yaw = _math3.atan2(
-            foot_rest_m.y - pivot_rest_m.y, foot_rest_m.x - pivot_rest_m.x
+            foot_rest_m.y - link1_world_m.y, foot_rest_m.x - link1_world_m.x
         )
         axis_sign = 1 if joint["axis"].z >= 0 else -1
-        legs.append((leg, pb, foot, pivot, rest_yaw, axis_sign))
+        legs.append((leg, pb, foot, foot_local, shoulder_const, rest_yaw, axis_sign))
     if not legs:
         return
 
@@ -1755,40 +1838,54 @@ def _verify_auto_yaw(arm_obj, robot, link_world, foot_tip_in_link3_m):
     # Save scene state we are about to perturb.
     saved_body_loc = body_ctrl.location.copy()
     saved_body_rot = Vector(body_ctrl.rotation_euler)
-    saved_foot = {leg: foot.location.copy() for leg, _, foot, _, _, _ in legs}
+    saved_foot = {leg: foot.location.copy() for leg, _, foot, _, _, _, _ in legs}
 
-    # --- REST sign check -------------------------------------------------
-    # body_ctrl identity rotation + foot targets at their rest positions
-    # (already in place — saved_foot is the rest snapshot).
-    body_ctrl.rotation_euler = (0.0, 0.0, 0.0)
-    _eval()
-    rest_errs = [(leg, pb.rotation_euler[2]) for leg, pb, _, _, _, _ in legs]
-
-    # --- Behavioural check ----------------------------------------------
-    BODY_ROT = _math3.radians(30.0)
-    body_ctrl.rotation_euler = (0.0, 0.0, BODY_ROT)
-    for leg, _, foot, _, _, _ in legs:
-        s = saved_foot[leg]
-        foot.location = (s[0] + 30.0, s[1] - 20.0, s[2])
-    _eval()
-
-    drive_results = []
-    for leg, pb, foot, pivot, rest_yaw, axis_sign in legs:
-        fx, fy, _ = foot.matrix_world.translation
-        px, py, _ = pivot.matrix_world.translation
-        expected = axis_sign * (_math3.atan2(fy - py, fx - px) - BODY_ROT - rest_yaw)
-        actual = pb.rotation_euler[2]
-        delta = (actual - expected + _math3.pi) % (2 * _math3.pi) - _math3.pi
-        drive_results.append((leg, actual, expected, delta))
-
-    # Restore.
-    body_ctrl.location = saved_body_loc
-    body_ctrl.rotation_euler = saved_body_rot
-    for leg, _, foot, _, _, _ in legs:
-        foot.location = saved_foot[leg]
-    _eval()
+    def _predict_and_check(label):
+        _eval()
+        body_inv = body_ctrl.matrix_world.inverted()
+        worst = 0.0
+        per_leg = []
+        for (
+            leg,
+            pb,
+            foot,
+            _foot_local,
+            shoulder_const,
+            rest_yaw,
+            axis_sign,
+        ) in legs:
+            # foot in body_ctrl LOCAL frame — same value the
+            # COPY_LOCATION(WORLD→LOCAL) constraint writes to
+            # foot_local's matrix_local, which the driver reads via
+            # the LOCAL_SPACE TRANSFORMS variable. (foot_local's
+            # matrix_basis stays at (0,0,0) — constraints don't write
+            # to basis, so the predictor must compute the body-local
+            # foot directly.)
+            local = body_inv @ foot.matrix_world.translation
+            fx, fy = local.x, local.y
+            expected = axis_sign * (
+                _math3.atan2(fy - shoulder_const.y, fx - shoulder_const.x) - rest_yaw
+            )
+            actual = pb.rotation_euler[2]
+            delta = (actual - expected + _math3.pi) % (2 * _math3.pi) - _math3.pi
+            per_leg.append((leg, actual, expected, delta))
+            worst = max(worst, abs(delta))
+        print(
+            f"[urdf_to_blender_rigged] auto-yaw : {label}: "
+            + ", ".join(f"{leg}|Δ|={abs(d):.1e}" for leg, _, _, d in per_leg)
+            + f" rad (worst={worst:.2e})"
+        )
+        return worst
 
     TOL = 1e-4
+
+    # --- (1) REST sign check ---------------------------------------------
+    body_ctrl.location = saved_body_loc
+    body_ctrl.rotation_euler = (0.0, 0.0, 0.0)
+    for leg, _, foot, _, _, _, _ in legs:
+        foot.location = saved_foot[leg]
+    _eval()
+    rest_errs = [(leg, pb.rotation_euler[2]) for leg, pb, _, _, _, _, _ in legs]
     print(
         "[urdf_to_blender_rigged] auto-yaw : REST sign check "
         + ", ".join(f"{leg}={z:+.2e}" for leg, z in rest_errs)
@@ -1797,21 +1894,34 @@ def _verify_auto_yaw(arm_obj, robot, link_world, foot_tip_in_link3_m):
     bad_rest = [leg for leg, z in rest_errs if abs(z) > TOL]
     if bad_rest:
         print(
-            f"[urdf_to_blender_rigged] WARNING: REST_ANGLE sign mismatch on "
-            f"{bad_rest} — link1.rotation_euler[2] should be ≈ 0 at rest"
+            f"[urdf_to_blender_rigged] WARNING: REST_ANGLE/SHOULDER_CONST "
+            f"mismatch on {bad_rest} — link1.rotation_euler[2] should be ≈ 0"
         )
 
-    print(
-        "[urdf_to_blender_rigged] auto-yaw : driver check (body=+30°, "
-        "foot=(+30,−20) mm)"
-    )
-    worst = 0.0
-    for leg, actual, expected, delta in drive_results:
-        print(
-            f"                              {leg}: actual={actual:+.6f}, "
-            f"expected={expected:+.6f}, |Δ|={abs(delta):.2e} rad"
-        )
-        worst = max(worst, abs(delta))
+    # --- (2) Behavioural Z=+30° + foot perturbation -----------------------
+    body_ctrl.rotation_euler = (0.0, 0.0, _math3.radians(30.0))
+    for leg, _, foot, _, _, _, _ in legs:
+        s = saved_foot[leg]
+        foot.location = (s[0] + 30.0, s[1] - 20.0, s[2])
+    worst_z = _predict_and_check("Z=+30°, foot=(+30,−20) mm")
+
+    # --- (3) Behavioural X=+15° (TILT regression) -------------------------
+    # Body pitched 15° around X with feet at REST world positions:
+    # the previous world-space driver drifted here, the body-local
+    # driver must match the analytical formula exactly.
+    body_ctrl.rotation_euler = (_math3.radians(15.0), 0.0, 0.0)
+    for leg, _, foot, _, _, _, _ in legs:
+        foot.location = saved_foot[leg]
+    worst_tilt = _predict_and_check("X=+15° (tilt regression)")
+
+    # Restore.
+    body_ctrl.location = saved_body_loc
+    body_ctrl.rotation_euler = saved_body_rot
+    for leg, _, foot, _, _, _, _ in legs:
+        foot.location = saved_foot[leg]
+    _eval()
+
+    worst = max(worst_z, worst_tilt)
     if worst > TOL:
         print(
             f"[urdf_to_blender_rigged] WARNING: driver worst error "
