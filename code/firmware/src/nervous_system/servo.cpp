@@ -25,3 +25,8 @@ void Servo::returnToDefaultAngle(){
     setServoAngle(this->servoDefaultAngle);
 }
 
+double Servo::getServoAngle() const {
+    // Whole-degree precision: setServoAngle() truncates double → uint16_t storage.
+    return (double)servoAngle;
+}
+

@@ -22,6 +22,21 @@ class SpinalCord{
         void setGait(GaitType g);
         GaitType currentGait() const;
         void processCommand(String dir);
+
+        // POD bundle of read-only state for the diagnostics CSV logger.
+        // Field names match CSV column names (snake_case is intentional).
+        struct Snapshot {
+            uint8_t  robot_state;
+            uint8_t  gait;
+            bool     is_moving;
+            bool     is_inverted;
+            uint32_t last_command_ms;
+            float    target_x, target_y, target_yaw;
+            float    active_x, active_y, active_yaw;
+            float    servo_angles[12]; // FR(h,t,k), FL(h,t,k), BR(h,t,k), BL(h,t,k)
+                                       // Whole-degree precision; see Servo::getServoAngle.
+        };
+        Snapshot snapshot() const;
     private:
         volatile RobotState robotState;
         Adafruit_PWMServoDriver driver;

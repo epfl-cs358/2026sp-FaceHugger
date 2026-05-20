@@ -84,3 +84,9 @@ void Leg::identifyAndMove(uint8_t channel, double angle){
     if (thighServo.getChannel() == channel) thighServo.setServoAngle(angle);
     if (kneeServo.getChannel()  == channel) kneeServo.setServoAngle(angle);
 }
+
+void Leg::getJointAngles(float& hip, float& thigh, float& knee) const {
+    hip   = (float)hipServo.getServoAngle();
+    thigh = (float)thighServo.getServoAngle();
+    knee  = (float)kneeServo.getServoAngle();
+}
