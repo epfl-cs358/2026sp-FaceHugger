@@ -80,7 +80,7 @@ def main() -> int:
 
     # JS export wire-contract checks (semantic — robust to template formatting).
     rows = mod.bake_clip("wave", ctx)
-    js = mod.to_js(rows, "wave", conv, dry_run=True)
+    js = mod.to_js(rows, "wave", conv, write=False)
     fps = ctx.scene.render.fps / ctx.scene.render.fps_base
     expected_frame_ms = round(1000.0 / fps)
 

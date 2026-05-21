@@ -1849,7 +1849,7 @@ def _frame_to_servo(row, convention):
     return out
 
 
-def to_js(frames, clip_name, convention, loop=False, dry_run=False):
+def to_js(frames, clip_name, convention, loop=False, dry_run=False, write=True):
     """Self-contained browser-console JS that plays the clip.
 
     Spec: doc/animation-pipeline/onboard-clip-player-design.md
@@ -1863,6 +1863,10 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False):
     Lets you validate a clip's servo stream without a robot. Stop
     semantics, hold-at-end behaviour, and the clamp are identical to
     the live version.
+
+    `write=False` returns the generated JS string without touching the
+    filesystem (useful for tests/validation). Default (`write=True`) writes
+    the file to `animation/exported_gaits/<clip_name>/` and returns its path.
 
     Math: applies the full hardware conversion (scale-from-NEUTRAL +
     per-leg translateToServo + round) at bake time via
@@ -2024,10 +2028,7 @@ function playFrame() {{
 
 {starter}
 """
-    if dry_run:
-        # Return the JS string so callers can validate contents without
-        # touching the filesystem (no robot, no exported_gaits/ directory
-        # needed). Normal mode writes the file and returns its path.
+    if not write:
         return js
     with open(path, "w") as fh:
         fh.write(js)
