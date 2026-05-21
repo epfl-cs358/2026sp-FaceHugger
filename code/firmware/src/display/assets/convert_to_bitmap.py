@@ -2,81 +2,40 @@
 """Convert images to Adafruit GFX bitmap format for SSD1306 OLED"""
 
 from PIL import Image
-import sys
 import os
 
-def image_to_bitmap(img_path, output_name):
-    """Convert image to 128x64 bitmap for SSD1306"""
-    img = Image.open(img_path).convert('1')  # 1-bit black/white
-    img = img.resize((128, 64))
+WIDTH = 128
+HEIGHT = 64
 
-    # Bitmap: 128x64 = 1024 bytes
-    # Each byte = 8 vertical pixels (bit 0 at top)
-    bitmap = bytearray(1024)
+
+def image_to_bitmap(img_path, output_name):
+    img = Image.open(img_path).convert('1')
+    img = img.resize((WIDTH, HEIGHT))
+
+    # Adafruit GFX drawBitmap expects row-major, 1 bit/pixel, MSB-leftmost.
+    row_bytes = (WIDTH + 7) // 8
+    bitmap = bytearray(row_bytes * HEIGHT)
     pixels = img.load()
 
-    for y in range(64):
-        for x in range(128):
-            if pixels[x, y]:  # White pixel
-                byte_idx = (y // 8) * 128 + x
-                bit_idx = y % 8
+    for y in range(HEIGHT):
+        for x in range(WIDTH):
+            if pixels[x, y]:
+                byte_idx = y * row_bytes + (x // 8)
+                bit_idx = 7 - (x % 8)
                 bitmap[byte_idx] |= (1 << bit_idx)
 
-    # Generate C++ header
     header = f"// Auto-generated bitmap for {output_name}\n"
-    header += f"// Size: 128x64 pixels\n\n"
+    header += f"// Size: {WIDTH}x{HEIGHT} pixels\n\n"
     header += f"const uint8_t {output_name}[] PROGMEM = {{\n"
 
     for i in range(0, len(bitmap), 16):
         header += "    "
         header += ", ".join(f"0x{b:02x}" for b in bitmap[i:i+16])
-        if i + 16 < len(bitmap):
-            header += ",\n"
-        else:
-            header += "\n"
+        header += ",\n" if i + 16 < len(bitmap) else "\n"
 
     header += "};\n"
     return header
 
-#!/usr/bin/env python3
-"""Convert images to Adafruit GFX bitmap format for SSD1306 OLED"""
-
-from PIL import Image
-import sys
-import os
-
-def image_to_bitmap(img_path, output_name):
-    """Convert image to 128x64 bitmap for SSD1306"""
-    img = Image.open(img_path).convert('1')  # 1-bit black/white
-    img = img.resize((128, 64))
-
-    # Bitmap: 128x64 = 1024 bytes
-    # Each byte = 8 vertical pixels (bit 0 at top)
-    bitmap = bytearray(1024)
-    pixels = img.load()
-
-    for y in range(64):
-        for x in range(128):
-            if pixels[x, y]:  # White pixel
-                byte_idx = (y // 8) * 128 + x
-                bit_idx = y % 8
-                bitmap[byte_idx] |= (1 << bit_idx)
-
-    # Generate C++ header
-    header = f"// Auto-generated bitmap for {output_name}\n"
-    header += f"// Size: 128x64 pixels\n\n"
-    header += f"const uint8_t {output_name}[] PROGMEM = {{\n"
-
-    for i in range(0, len(bitmap), 16):
-        header += "    "
-        header += ", ".join(f"0x{b:02x}" for b in bitmap[i:i+16])
-        if i + 16 < len(bitmap):
-            header += ",\n"
-        else:
-            header += "\n"
-
-    header += "};\n"
-    return header
 
 if __name__ == "__main__":
     # 1. Get the directory where this script is located
