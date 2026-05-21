@@ -2013,6 +2013,11 @@ function playFrame() {{
 
 {starter}
 """
+    if dry_run:
+        # Return the JS string so callers can validate contents without
+        # touching the filesystem (no robot, no exported_gaits/ directory
+        # needed). Normal mode writes the file and returns its path.
+        return js
     with open(path, "w") as fh:
         fh.write(js)
     return path

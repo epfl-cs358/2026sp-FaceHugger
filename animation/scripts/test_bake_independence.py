@@ -76,6 +76,41 @@ def main() -> int:
         print("RESULT RED: frame-delta warning did not fire as expected")
         return 1
 
+    import re
+
+    # JS export wire-contract checks (semantic — robust to template formatting).
+    rows = mod.bake_clip("wave", ctx)
+    js = mod.to_js(rows, "wave", conv, dry_run=True)
+    fps = ctx.scene.render.fps / ctx.scene.render.fps_base
+    expected_frame_ms = round(1000.0 / fps)
+
+    def _leg_ids_ok(s):
+        m = re.search(r"LEG_IDS\s*=\s*\{([^}]*)\}", s)
+        if not m:
+            return False
+        body = m.group(1)
+        return all(
+            re.search(rf"\b{leg}\s*:\s*{idx}\b", body)
+            for leg, idx in (("fr", 0), ("fl", 1), ("br", 2), ("bl", 3))
+        )
+
+    def _frame_ms_ok(s, expected):
+        m = re.search(r"FRAME_MS\s*=\s*(\d+)", s)
+        return m is not None and int(m.group(1)) == expected
+
+    checks = {
+        "LEG_IDS contains fr:0 fl:1 br:2 bl:3": _leg_ids_ok(js),
+        "defensive upper clamp present": "Math.min(180" in js,
+        f"FRAME_MS == round(1000/fps) ({expected_frame_ms})": _frame_ms_ok(
+            js, expected_frame_ms
+        ),
+    }
+    for name, ok in checks.items():
+        print(("PASS " if ok else "FAIL ") + name)
+        if not ok:
+            print("RESULT RED: JS export contract violated")
+            return 1
+
     print("RESULT GREEN")
     return 0
 
