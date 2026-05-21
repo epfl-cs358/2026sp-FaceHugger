@@ -106,11 +106,12 @@ frame:
 | BL  | R       | R     | L (rotated 180° about own Y) | L (rotated 180° about own Y) | 180° |
 
 The "rotated 180° about own Y" for Link2/Link3 of the R-pair is the
-`mesh_rpy = (0, π, 0)` block in
-[`generate_urdf.py:1054-1057`](../../code/simulation/generate_urdf.py#L1054-L1057).
-It is applied to the visual mesh **and** to the inertial CoM so the
-leg geometry extends in the right direction on the right side of
-the body.
+`link_mesh_rpy` dict in
+[`generate_urdf.py`](../../code/simulation/generate_urdf.py) (search for
+`link_mesh_rpy` — it sets `mesh_rpy = (0, π, 0)` on link2/link3 when
+`side == "R"`). It is applied to the visual mesh **and** to the
+inertial CoM so the leg geometry extends in the right direction on the
+right side of the body.
 
 Restating the geometric reasoning that justifies this part reuse:
 

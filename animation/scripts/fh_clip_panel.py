@@ -1792,7 +1792,7 @@ def _frame_to_servo(row, convention):
 def to_js(frames, clip_name, convention, loop=False, dry_run=False):
     """Self-contained browser-console JS that plays the clip.
 
-    Spec: docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md
+    Spec: doc/animation-pipeline/onboard-clip-player-design.md
     §3.1 — by default play **once** and **hold the final pose** by
     continuously re-sending the last frame's servo angles each tick
     (Phase-1 ↔ Phase-2 parity with firmware `tickClip`). `loop=True` is
@@ -1904,7 +1904,7 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False):
 {header_block}
 //
 // PLAYBACK SEMANTICS (Phase-1 parity with firmware tickClip, see spec
-// docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md §3.1):
+// doc/animation-pipeline/onboard-clip-player-design.md §3.1):
 //   - DEFAULT: play the clip ONCE, then HOLD the final pose by
 //     re-sending the last frame's servo angles every FRAME_MS — the
 //     same as the firmware's hold-at-end behaviour.

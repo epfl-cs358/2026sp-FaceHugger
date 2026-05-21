@@ -200,7 +200,7 @@ keyframes at every frame — that's what the export script reads.
 > `offset_deg + direction*degrees(blender_z)` model below describes the
 > earlier `servo_mapping.yaml`/`.gait` pipeline; it is retained for
 > reference and is being superseded by the design in
-> [`docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md`](../../../docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md)
+> [`doc/animation-pipeline/onboard-clip-player-design.md`](../../../doc/animation-pipeline/onboard-clip-player-design.md)
 > (see §3.2 for the pre-scaled math-space rule, §3.1 for one-shot +
 > hold-at-end semantics, §6 for the firmware contract). Phase-1 path
 > (today) is the `.js` browser console; Phase-2 will be the bundled

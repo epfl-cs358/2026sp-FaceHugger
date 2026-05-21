@@ -71,7 +71,15 @@ Loads `generated/facehugger.urdf` into Blender. Requires **Blender 5.0+**. Two m
 | `--rigged` | off | Use the rigged armature scene instead of placement-only. |
 | `--blender-version VERSION` | `5.1` | Major.minor of the Blender to launch (e.g. `5.1`, `5.2`). Drives the `/Applications` search; ignored if `BLENDER_BIN` is set. |
 | `--headless` | off | Run Blender in `--background` mode — no GUI window. Pair with `--save` for CI / batch use. |
-| `--save PATH` | — | Save the built scene to `PATH` (passed as `-- --save PATH` to the inner script). Works with or without `--headless`. |
+| `--save PATH` | mode-dependent (see below) | Save the built scene to `PATH` (passed as `-- --save PATH` to the inner script). Works with or without `--headless`. |
+| `--reset` | off | Start from a blank scene, discarding any existing animations (rigged mode only — placement-only always starts blank). |
+
+**Default save target.** If `--save` is omitted:
+
+- **`--rigged`** defaults to `animation/fh_rigged_latest.blend` — the animation **library** (rig + all authored clips). The rigged builder reopens it (unless `--reset`) and stash/restores your clips across the rebuild, so re-running `blender --rigged` is safe and keeps your work.
+- **placement-only** (no `--rigged`) does **not** save anywhere — it opens a blank scene for viewing and discards on exit. This is deliberate: `visualize_urdf.py` clears the scene with **no** stash/restore, so it must never write over the rigged library and destroy clips. Pass an explicit `--save PATH` if you want to keep a placement-only scene (use a path other than the library).
+
+⚠️ **Do not point a placement-only `--save` at `animation/fh_rigged_latest.blend`** — it would overwrite the library with a clip-less placement scene.
 
 The CLI resolves the Blender executable in this order: `BLENDER_BIN` env var → macOS `/Applications` candidates for the requested `--blender-version` (`Blender-{V}-LTS.app`, `Blender {V}.app` with a space, `Blender-{V}.app`, `Blender{V}.app`) → `blender{V}` on `$PATH` → plain `blender` on `$PATH`. If nothing matches, the CLI prints every path it tried and exits non-zero. Set `BLENDER_BIN=/path/to/blender` to bypass the search entirely.
 

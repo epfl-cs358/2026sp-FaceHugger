@@ -137,19 +137,34 @@ def cmd_view(_args):
 def cmd_blender(args):
     blender = _resolve_blender_bin(args.blender_version)
 
-    save_path = (
-        Path(args.save)
-        if args.save
-        else (REPO_ROOT / "animation" / "fh_rigged_latest.blend")
-    )
+    # `fh_rigged_latest.blend` is the animation LIBRARY — it holds the
+    # rig + all authored clips, and only the rigged builder
+    # (`urdf_to_blender_rigged.py`) has the stash/restore logic that
+    # preserves those clips across a rebuild. Placement-only
+    # (`visualize_urdf.py`) clears the scene with no stash/restore, so
+    # it must NEVER default-save over the library — doing so would
+    # silently destroy every clip. So:
+    #   --save PATH        → save there (either mode, explicit intent)
+    #   --rigged, no --save → default to the library
+    #   placement-only, no --save → don't persist at all (GUI view only)
+    if args.save:
+        save_path = Path(args.save)
+    elif args.rigged:
+        save_path = REPO_ROOT / "animation" / "fh_rigged_latest.blend"
+    else:
+        save_path = None
 
     cli = [blender]
-    if not args.reset and save_path.exists():
+    # Only reopen the existing library in rigged mode, where stash/restore
+    # protects the clips. Placement-only always starts from a blank scene.
+    if args.rigged and not args.reset and save_path is not None and save_path.exists():
         cli.append(str(save_path))
     if args.headless:
         cli.append("--background")
     script = VISUALIZE_RIGGED if args.rigged else VISUALIZE
-    cli += ["--python", str(script), "--", "--save", str(save_path)]
+    cli += ["--python", str(script)]
+    if save_path is not None:
+        cli += ["--", "--save", str(save_path)]
     return _run(cli)
 
 

@@ -239,17 +239,24 @@ Two core data models, kept deliberately separate:
   are restored losslessly on toggle-off.
 
 **Default poses ship in `animation/poses.json`** (committed, like
-`convention.json`). A fresh checkout already has:
+`convention.json`). A fresh checkout ships two poses in
+`animation/poses.json`:
 
 - `flat` — body on the BodyBottomPoint (`z=-17`), legs splayed flat
   (URDF θ=0 rest).
-- `neutral` — body at identity, the convention-N hardware stance.
 - `standing` — body raised (`z=+100`), feet tucked under.
 
-Just **Apply** them from the Poses panel. The old Set N / Set Flat
-buttons were removed (they were redundant once the poses ship as
-defaults). The seeding machinery still exists as a **console re-seed**
-path if you ever delete `flat`/`neutral` from the library:
+A third pose, `neutral` (body at identity, the convention-N hardware
+stance), is **not** shipped in `poses.json` — it is seeded on demand by
+the console re-seed path below (the convention-N joint angles exceed the
+rig's URDF `LIMIT_ROTATION` on some joints, so it isn't kept as a
+default library entry).
+
+Just **Apply** the shipped poses from the Poses panel. The old Set N /
+Set Flat buttons were removed (they were redundant once the poses ship
+as defaults). The seeding machinery still exists as a **console re-seed**
+path if you ever delete `flat` from the library or want to (re)create
+`neutral`:
 
 ```python
 bpy.ops.fh.set_rest_pose()   # re-seed + apply 'flat'
@@ -328,7 +335,7 @@ saved set of control transforms** (independent of clips).
 
 The generated `.js` is the **Phase-1** way to play a clip on the robot
 without firmware changes — full design context in
-[`docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md`](../../docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md)
+[`doc/animation-pipeline/onboard-clip-player-design.md`](../../doc/animation-pipeline/onboard-clip-player-design.md)
 (read §3 for the locked once-shot + hold-at-end semantics this `.js`
 mirrors).
 
@@ -365,7 +372,7 @@ mirrors).
 > `origin/main`: `data.h` enums (`CMD_STATE=2`, `CMD_GAIT_MODE=5`,
 > `STATE_IDLE=0`, `GAIT_NONE=0`), `network.cpp` handlers, and
 > `spinal_cord.cpp` `rest()`/`setGait()`. **Phase-1-only concern:** the
-> future on-board clip player (spec [§3.5](../../docs/superpowers/specs/2026-05-19-onboard-clip-player-design.md))
+> future on-board clip player (spec [§3.5](../../doc/animation-pipeline/onboard-clip-player-design.md))
 > is mutually exclusive with the gait engine by construction.
 
 4. **Run.** Paste the `.js`. It opens `ws://192.168.4.1:81`, plays
