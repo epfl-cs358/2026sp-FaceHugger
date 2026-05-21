@@ -1,0 +1,102 @@
+site_name: FaceHugger — Quadruped Robot
+site_description: Documentation for the FaceHugger quadruped robot (EPFL MIT course 2026)
+site_url: https://epfl-cs358.github.io/2026sp-FaceHugger/
+repo_url: https://github.com/epfl-cs358/2026sp-FaceHugger
+repo_name: 2026sp-FaceHugger
+edit_uri: edit/main/wiki/
+
+docs_dir: wiki
+site_dir: site
+
+# Build strictly: broken links / missing files fail CI.
+strict: true
+
+# Exclude the verbatim reference copies from the built site. They stay
+# committed in the repo (readable on GitHub) but are never rendered, so
+# their stale relative links never reach the --strict link validator.
+# exclude_docs implies not_in_nav for the same files (MkDocs >= 1.6).
+exclude_docs: |
+  _context/
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: ignore
+    unrecognized_links: ignore
+
+theme:
+  name: material
+  font:
+    text: Inter          # clean, technical
+    code: JetBrains Mono
+  palette:
+    - scheme: default
+      primary: deep orange
+      accent: orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep orange
+      accent: orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - content.code.copy
+    - content.tabs.link
+    - search.suggest
+    - search.highlight
+    - search.share
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path: !relative $config_dir
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)'
+      lang: en
+  - awesome-pages
+  - glightbox
+  - mkdocs-jupyter:
+      execute: false
+      include_source: false
+
+# Nav is driven by awesome-pages via per-folder .pages files
+# (titles + ordering). The root wiki/.pages sets Home → Build Guide → Reference.

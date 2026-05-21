@@ -1,0 +1,4 @@
+title: Remote control
+nav:
+  - index.md
+  - websocket-api.md

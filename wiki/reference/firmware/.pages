@@ -1,0 +1,7 @@
+title: Firmware
+nav:
+  - index.md
+  - kinematics.md
+  - servo-conventions.md
+  - api.md
+  - csv-diagnostics.md
