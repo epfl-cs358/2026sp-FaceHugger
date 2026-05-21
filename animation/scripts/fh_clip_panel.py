@@ -1625,6 +1625,45 @@ _SELECTION_PRESETS = {
 _SELECTION_ORDER = ("ALL", "BODY", "FRONT", "BACK", "LEGS", "FL", "FR", "BL", "BR")
 
 
+class FH_OT_toggle_preview(bpy.types.Operator):
+    """Toggle the active clip's F-curves between BEZIER (authoring) and
+    LINEAR (exactly what the robot plays). Non-destructive: Bezier handles
+    are preserved on the keyframes and restored when toggled back."""
+
+    bl_idname = "fh.toggle_preview"
+    bl_label = "Preview Robot Motion"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        clip = active_clip()
+        if clip is None:
+            self.report({"WARNING"}, "No active clip")
+            return {"CANCELLED"}
+        going_linear = None  # decided from the first keyframe seen
+        touched = 0
+        for target in CLIP_TARGETS:
+            action = clip_action(clip, target)
+            if action is None:
+                continue
+            # Blender 5.x layered Action API: F-curves live in
+            # layer → strip → channelbag → fcurves (not action.fcurves).
+            for layer in action.layers:
+                for strip in layer.strips:
+                    for channelbag in strip.channelbags:
+                        for fcurve in channelbag.fcurves:
+                            for kp in fcurve.keyframe_points:
+                                if going_linear is None:
+                                    going_linear = kp.interpolation != "LINEAR"
+                                kp.interpolation = (
+                                    "LINEAR" if going_linear else "BEZIER"
+                                )
+                                touched += 1
+        mode = "LINEAR (robot preview)" if going_linear else "BEZIER (authoring)"
+        self.report({"INFO"}, f"{clip}: {touched} keyframes -> {mode}")
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
 class FH_OT_select_controls(bpy.types.Operator):
     """Select a preset group of rig control objects (replacing the
     current selection) and make one of them active. Selection only —
@@ -2355,6 +2394,14 @@ class FH_PT_clips(_FH_PT_child, bpy.types.Panel):
         row.operator(FH_OT_duplicate_clip.bl_idname, icon="DUPLICATE")
         row.operator(FH_OT_rename_clip.bl_idname, icon="FONT_DATA")
 
+        # Toggle the active clip's keyframe interpolation between BEZIER
+        # (authoring) and LINEAR (what the robot plays). Non-destructive:
+        # Bezier handles are preserved so toggling back restores the curves.
+        layout.separator()
+        preview_row = layout.row()
+        preview_row.enabled = bool(active)
+        preview_row.operator(FH_OT_toggle_preview.bl_idname, icon="PREVIEW_RANGE")
+
 
 class FH_PT_selection(_FH_PT_child, bpy.types.Panel):
     bl_idname = "VIEW3D_PT_fh_selection"
@@ -2468,6 +2515,7 @@ CLASSES = (
     FH_OT_rename_clip,
     FH_OT_export_clip,
     FH_OT_export_selected,
+    FH_OT_toggle_preview,
     # Panels: parent MUST be registered before its children so the
     # bl_parent_id link resolves.
     FH_PT_root,

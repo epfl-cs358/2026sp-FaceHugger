@@ -113,6 +113,38 @@ def main() -> int:
             print("RESULT RED: JS export contract violated")
             return 1
 
+    # Preview toggle: LINEAR flip is non-destructive to Bezier handles.
+    try:
+        mod.register()
+    except Exception as e:
+        print(f"(mod.register() failed: {e}; registering operator only)")
+        bpy.utils.register_class(mod.FH_OT_toggle_preview)
+    mod.assign_clip("wave")
+    ctx.view_layer.update()
+    act = mod.clip_action("wave", "body_ctrl")
+    # Blender 5.x layered Action API: F-curves live in
+    # layer → strip → channelbag → fcurves (not action.fcurves).
+    first_fcurve = act.layers[0].strips[0].channelbags[0].fcurves[0]
+    kp0 = first_fcurve.keyframe_points[0]
+    h_left_before = tuple(kp0.handle_left)
+    interp_before = kp0.interpolation
+    bpy.ops.fh.toggle_preview()
+    after1 = kp0.interpolation
+    handles_preserved = tuple(kp0.handle_left) == h_left_before
+    bpy.ops.fh.toggle_preview()
+    after2 = kp0.interpolation
+    # Assert: two toggles return to the original interpolation and the
+    # intermediate differs from both endpoints (flip + reversible).
+    # Also check that Bezier handle data is untouched throughout.
+    ok_toggle = after2 == interp_before and after1 != after2 and handles_preserved
+    print(
+        f"preview toggle: {interp_before} -> {after1} -> {after2}, "
+        f"handles_preserved={handles_preserved}"
+    )
+    if not ok_toggle:
+        print("RESULT RED: preview toggle did not flip/preserve as expected")
+        return 1
+
     print("RESULT GREEN")
     return 0
 
