@@ -12,9 +12,16 @@ Servo::Servo(Adafruit_PWMServoDriver &pwm, uint8_t pcaChannel, uint16_t servoDef
     }
 
 void Servo::setServoAngle(double angle){
-    uint16_t pulse = map(angle, 0, 180, MIN_PULSE, MAX_PULSE);
+    // Electrical backstop. Every motion path (IK, pose, calibrate, future clip player)
+    // funnels through here, and map() does NOT clamp — an out-of-range angle would drive
+    // the servo past MIN/MAX_PULSE. constrain here protects them all at one chokepoint.
+    double clamped = constrain(angle, 0.0, 180.0);
+    if (clamped != angle) {
+        Serial.printf("[WARN] servo %d clamped: %.1f -> %.1f\n", this->pcaChannel, angle, clamped);
+    }
+    uint16_t pulse = map(clamped, 0, 180, MIN_PULSE, MAX_PULSE);
     pwm.setPWM(this->pcaChannel, 0, pulse);
-    this->servoAngle = angle;
+    this->servoAngle = clamped;
 }
 
 uint8_t Servo::getChannel() const {
