@@ -4,9 +4,9 @@
   <!-- BASE LINK -->
   <link name="base_link">
     <inertial>
-      <origin xyz="0.000241 0.004394 0.008479" rpy="0 0 0"/>
-      <mass value="0.631194"/>
-      <inertia ixx="0.000956112" ixy="1.7235e-05" ixz="-5.969e-06" iyy="0.000609163" iyz="-4.9716e-05" izz="0.001286905"/>
+      <origin xyz="0.000516 0.002896 0.009502" rpy="0 0 0"/>
+      <mass value="0.565732"/>
+      <inertia ixx="0.000840047" ixy="2.2178e-05" ixz="-6.029e-06" iyy="0.000447112" iyz="-2.3545e-05" izz="0.000993824"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
@@ -15,51 +15,39 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.041500 0.049000 0.026000" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="-0.034000 0.046000 0.026000" rpy="0.000000 0.000000 0.000000"/>
       <geometry>
         <mesh filename="exported_meshes/leg_mount_L.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.057901 0.046222 0.036844" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="-0.050401 0.043222 0.036844" rpy="0.000000 0.000000 0.000000"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.041500 -0.049000 0.026000" rpy="0.000000 0.000000 3.141593"/>
+      <origin xyz="0.034000 -0.046000 0.026000" rpy="0.000000 0.000000 3.141593"/>
       <geometry>
         <mesh filename="exported_meshes/leg_mount_L.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.057901 -0.046222 0.036844" rpy="0.000000 0.000000 3.141593"/>
+      <origin xyz="0.050401 -0.043222 0.036844" rpy="0.000000 0.000000 3.141593"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.041500 0.049000 0.026000" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="0.034000 0.046000 0.026000" rpy="0.000000 0.000000 0.000000"/>
       <geometry>
         <mesh filename="exported_meshes/leg_mount_R.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.057901 0.046222 0.036844" rpy="0.000000 0.000000 0.000000"/>
-      <geometry>
-        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </visual>
-    <visual>
-      <origin xyz="-0.041500 -0.049000 0.026000" rpy="0.000000 0.000000 3.141593"/>
+      <origin xyz="-0.034000 -0.046000 0.026000" rpy="0.000000 0.000000 3.141593"/>
       <geometry>
         <mesh filename="exported_meshes/leg_mount_R.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    </visual>
-    <visual>
-      <origin xyz="-0.057901 -0.046222 0.036844" rpy="0.000000 0.000000 3.141593"/>
-      <geometry>
-        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <collision>
@@ -71,38 +59,38 @@
   </link>
 
   <!-- LEG ASSEMBLY METADATA (mm, leg-assembly-local frame)
-         BodyToLink1Point : 0.000 11.970 -4.200
-         Link1ToLink2Point: -55.920 34.565 10.246
-         Link2ToLink3Point: -145.620 34.570 10.246
-         FootTip (leg_lower.stl max +Y centroid, in link3 frame): -30.946 -13.000 0.024 -->
+         BodyToLink1Point : 0.000 11.970 41.844
+         Link1ToLink2Point: -46.920 34.365 10.246
+         Link2ToLink3Point: -121.620 34.570 10.246
+         FootTip (leg_lower.stl max +Y centroid, in link3 frame): -27.106 -13.000 -0.012 -->
 
-  <!-- LEG: FL  (side=L, shoulder_rest=-45.0°, limits=[-90.0°, +90.0°]) -->
+  <!-- LEG: FL  (side=L, shoulder_rest=-45.0°, limits=[-52.0°, +90.0°]) -->
   <joint name="fl_link1_joint" type="revolute">
     <parent link="base_link"/>
     <child link="fl_link1"/>
-    <origin xyz="-0.057901 0.046222 -0.009000" rpy="0 0 -0.785398"/>
-    <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
-    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+    <origin xyz="-0.050401 0.043222 0.036844" rpy="0 0 -0.785398"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit lower="-0.907571" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="fl_link2_joint" type="revolute">
     <parent link="fl_link1"/>
     <child link="fl_link2"/>
-    <origin xyz="-0.055920 0.022595 0.014446" rpy="0 0 0.0"/>
-    <axis xyz="1.1796119636642283e-16 1.000000000000004 2.428612866511427e-17"/>
-    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+    <origin xyz="-0.046920 0.022395 -0.031598" rpy="0 0 0.0"/>
+    <axis xyz="0.0 1.0 0.0"/>
+    <limit lower="-1.047198" upper="1.047198" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="fl_link3_joint" type="revolute">
     <parent link="fl_link2"/>
     <child link="fl_link3"/>
-    <origin xyz="-0.089700 0.000005 0.000000" rpy="0 0 0.0"/>
-    <axis xyz="1.1796119636642283e-16 1.000000000000004 2.428612866511427e-17"/>
+    <origin xyz="-0.074700 0.000205 0.000000" rpy="0 0 0.0"/>
+    <axis xyz="0.0 1.0 0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <link name="fl_link1">
     <inertial>
-      <origin xyz="0.068182 -0.009493 0.032834" rpy="0 0 0"/>
-      <mass value="0.150899"/>
-      <inertia ixx="0.000446113" ixy="-4.6219e-05" ixz="-4.113e-05" iyy="0.000175772" iyz="-0.000109907" izz="0.000330198"/>
+      <origin xyz="0.060405 -0.012686 -0.013373" rpy="0 0 0"/>
+      <mass value="0.132968"/>
+      <inertia ixx="0.000324055" ixy="-3.2124e-05" ixz="-3.4213e-05" iyy="0.000154626" iyz="-8.0642e-05" izz="0.00021993"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
@@ -111,7 +99,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.055920 0.022394 0.014446" rpy="-1.570796 0.000000 -0.000000"/>
+      <origin xyz="-0.046920 0.022394 -0.031598" rpy="-1.570796 0.000000 0.000000"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -125,9 +113,9 @@
   </link>
   <link name="fl_link2">
     <inertial>
-      <origin xyz="0.135081 0.034014 0.004627" rpy="0 0 0"/>
-      <mass value="0.162564"/>
-      <inertia ixx="0.001922036" ixy="-0.000355778" ixz="-3.4307e-05" iyy="0.000171691" iyz="-0.000168414" izz="0.0020496"/>
+      <origin xyz="0.117869 0.018736 0.005004" rpy="0 0 0"/>
+      <mass value="0.149366"/>
+      <inertia ixx="0.001224445" ixy="-0.000259539" ixz="-3.1438e-05" iyy="0.000166081" iyz="-0.000129141" izz="0.00134872"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
@@ -144,9 +132,9 @@
   </link>
   <link name="fl_link3">
     <inertial>
-      <origin xyz="0.211809 0.097994 0.004800" rpy="0 0 0"/>
-      <mass value="0.111653"/>
-      <inertia ixx="0.003205754" ixy="-0.000166056" ixz="-9.481e-06" iyy="4.2563e-05" iyz="-0.000190829" izz="0.00320303"/>
+      <origin xyz="0.180524 0.082904 0.005000" rpy="0 0 0"/>
+      <mass value="0.127150"/>
+      <inertia ixx="0.002933232" ixy="-0.000170197" ixz="-1.1078e-05" iyy="4.601e-05" iyz="-0.000193749" izz="0.002928129"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
@@ -168,33 +156,33 @@
     </collision>
   </link>
 
-  <!-- LEG: BR  (side=L, shoulder_rest=+135.0°, limits=[-90.0°, +90.0°]) -->
+  <!-- LEG: BR  (side=L, shoulder_rest=+135.0°, limits=[-52.0°, +90.0°]) -->
   <joint name="br_link1_joint" type="revolute">
     <parent link="base_link"/>
     <child link="br_link1"/>
-    <origin xyz="0.057901 -0.046222 -0.009000" rpy="0 0 2.356194"/>
-    <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
-    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+    <origin xyz="0.050401 -0.043222 0.036844" rpy="0 0 2.356194"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit lower="-0.907571" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="br_link2_joint" type="revolute">
     <parent link="br_link1"/>
     <child link="br_link2"/>
-    <origin xyz="-0.055920 0.022595 0.014446" rpy="0 0 0.0"/>
-    <axis xyz="1.1796119636642283e-16 1.000000000000004 2.428612866511427e-17"/>
-    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+    <origin xyz="-0.046920 0.022395 -0.031598" rpy="0 0 0.0"/>
+    <axis xyz="0.0 1.0 0.0"/>
+    <limit lower="-1.047198" upper="1.047198" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="br_link3_joint" type="revolute">
     <parent link="br_link2"/>
     <child link="br_link3"/>
-    <origin xyz="-0.089700 0.000005 0.000000" rpy="0 0 0.0"/>
-    <axis xyz="1.1796119636642283e-16 1.000000000000004 2.428612866511427e-17"/>
+    <origin xyz="-0.074700 0.000205 0.000000" rpy="0 0 0.0"/>
+    <axis xyz="0.0 1.0 0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <link name="br_link1">
     <inertial>
-      <origin xyz="0.068182 -0.009493 0.032834" rpy="0 0 0"/>
-      <mass value="0.150899"/>
-      <inertia ixx="0.000446113" ixy="-4.6219e-05" ixz="-4.113e-05" iyy="0.000175772" iyz="-0.000109907" izz="0.000330198"/>
+      <origin xyz="0.060405 -0.012686 -0.013373" rpy="0 0 0"/>
+      <mass value="0.132968"/>
+      <inertia ixx="0.000324055" ixy="-3.2124e-05" ixz="-3.4213e-05" iyy="0.000154626" iyz="-8.0642e-05" izz="0.00021993"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
@@ -203,7 +191,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.055920 0.022394 0.014446" rpy="-1.570796 0.000000 -0.000000"/>
+      <origin xyz="-0.046920 0.022394 -0.031598" rpy="-1.570796 0.000000 0.000000"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -217,9 +205,9 @@
   </link>
   <link name="br_link2">
     <inertial>
-      <origin xyz="0.135081 0.034014 0.004627" rpy="0 0 0"/>
-      <mass value="0.162564"/>
-      <inertia ixx="0.001922036" ixy="-0.000355778" ixz="-3.4307e-05" iyy="0.000171691" iyz="-0.000168414" izz="0.0020496"/>
+      <origin xyz="0.117869 0.018736 0.005004" rpy="0 0 0"/>
+      <mass value="0.149366"/>
+      <inertia ixx="0.001224445" ixy="-0.000259539" ixz="-3.1438e-05" iyy="0.000166081" iyz="-0.000129141" izz="0.00134872"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
@@ -236,9 +224,9 @@
   </link>
   <link name="br_link3">
     <inertial>
-      <origin xyz="0.211809 0.097994 0.004800" rpy="0 0 0"/>
-      <mass value="0.111653"/>
-      <inertia ixx="0.003205754" ixy="-0.000166056" ixz="-9.481e-06" iyy="4.2563e-05" iyz="-0.000190829" izz="0.00320303"/>
+      <origin xyz="0.180524 0.082904 0.005000" rpy="0 0 0"/>
+      <mass value="0.127150"/>
+      <inertia ixx="0.002933232" ixy="-0.000170197" ixz="-1.1078e-05" iyy="4.601e-05" iyz="-0.000193749" izz="0.002928129"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
@@ -260,33 +248,33 @@
     </collision>
   </link>
 
-  <!-- LEG: FR  (side=R, shoulder_rest=+45.0°, limits=[-90.0°, +90.0°]) -->
+  <!-- LEG: FR  (side=R, shoulder_rest=+45.0°, limits=[-90.0°, +52.0°]) -->
   <joint name="fr_link1_joint" type="revolute">
     <parent link="base_link"/>
     <child link="fr_link1"/>
-    <origin xyz="0.057901 0.046222 -0.009000" rpy="0 0 0.785398"/>
-    <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
-    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+    <origin xyz="0.050401 0.043222 0.036844" rpy="0 0 0.785398"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit lower="-1.570796" upper="0.907571" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="fr_link2_joint" type="revolute">
     <parent link="fr_link1"/>
     <child link="fr_link2"/>
-    <origin xyz="0.055920 0.022595 0.014446" rpy="0 0 0.0"/>
-    <axis xyz="-1.1796119636642283e-16 -1.000000000000004 -2.428612866511427e-17"/>
-    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+    <origin xyz="0.046920 0.022395 -0.031598" rpy="0 0 0.0"/>
+    <axis xyz="0.0 -1.0 0.0"/>
+    <limit lower="-1.047198" upper="1.047198" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="fr_link3_joint" type="revolute">
     <parent link="fr_link2"/>
     <child link="fr_link3"/>
-    <origin xyz="0.089700 0.000005 0.000000" rpy="0 0 0.0"/>
-    <axis xyz="-1.1796119636642283e-16 -1.000000000000004 -2.428612866511427e-17"/>
+    <origin xyz="0.074700 0.000205 0.000000" rpy="0 0 0.0"/>
+    <axis xyz="0.0 -1.0 0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <link name="fr_link1">
     <inertial>
-      <origin xyz="0.068182 -0.082951 0.032834" rpy="0 0 0"/>
-      <mass value="0.150899"/>
-      <inertia ixx="0.000446113" ixy="4.6219e-05" ixz="-4.113e-05" iyy="0.000175772" iyz="0.000109907" izz="0.000330198"/>
+      <origin xyz="0.059338 -0.075606 -0.013123" rpy="0 0 0"/>
+      <mass value="0.149876"/>
+      <inertia ixx="0.000377863" ixy="3.2556e-05" ixz="-3.445e-05" iyy="0.000169617" iyz="0.000101016" izz="0.00025936"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
@@ -295,7 +283,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.055920 0.022394 0.014446" rpy="-1.570796 0.000000 -0.000000"/>
+      <origin xyz="0.046920 0.022394 -0.031598" rpy="-1.570796 0.000000 0.000000"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -309,9 +297,9 @@
   </link>
   <link name="fr_link2">
     <inertial>
-      <origin xyz="-0.135081 0.034014 -0.004627" rpy="0 0 0"/>
-      <mass value="0.162564"/>
-      <inertia ixx="0.001922036" ixy="-0.000355778" ixz="-3.4307e-05" iyy="0.000171691" iyz="-0.000168414" izz="0.0020496"/>
+      <origin xyz="-0.117869 0.018736 -0.005004" rpy="0 0 0"/>
+      <mass value="0.149366"/>
+      <inertia ixx="0.001224445" ixy="-0.000259539" ixz="-3.1438e-05" iyy="0.000166081" iyz="-0.000129141" izz="0.00134872"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0.000000 3.141593 0.000000"/>
@@ -328,9 +316,9 @@
   </link>
   <link name="fr_link3">
     <inertial>
-      <origin xyz="-0.211809 0.097994 -0.004800" rpy="0 0 0"/>
-      <mass value="0.111653"/>
-      <inertia ixx="0.003205754" ixy="-0.000166056" ixz="-9.481e-06" iyy="4.2563e-05" iyz="-0.000190829" izz="0.00320303"/>
+      <origin xyz="-0.180524 0.082904 -0.005000" rpy="0 0 0"/>
+      <mass value="0.127150"/>
+      <inertia ixx="0.002933232" ixy="-0.000170197" ixz="-1.1078e-05" iyy="4.601e-05" iyz="-0.000193749" izz="0.002928129"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0.000000 3.141593 0.000000"/>
@@ -352,33 +340,33 @@
     </collision>
   </link>
 
-  <!-- LEG: BL  (side=R, shoulder_rest=-135.0°, limits=[-90.0°, +90.0°]) -->
+  <!-- LEG: BL  (side=R, shoulder_rest=-135.0°, limits=[-90.0°, +52.0°]) -->
   <joint name="bl_link1_joint" type="revolute">
     <parent link="base_link"/>
     <child link="bl_link1"/>
-    <origin xyz="-0.057901 -0.046222 -0.009000" rpy="0 0 -2.356194"/>
-    <axis xyz="2.774184853852289e-17 -2.9924197261652035e-17 1.0000000000000002"/>
-    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+    <origin xyz="-0.050401 -0.043222 0.036844" rpy="0 0 -2.356194"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit lower="-1.570796" upper="0.907571" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="bl_link2_joint" type="revolute">
     <parent link="bl_link1"/>
     <child link="bl_link2"/>
-    <origin xyz="0.055920 0.022595 0.014446" rpy="0 0 0.0"/>
-    <axis xyz="-1.1796119636642283e-16 -1.000000000000004 -2.428612866511427e-17"/>
-    <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
+    <origin xyz="0.046920 0.022395 -0.031598" rpy="0 0 0.0"/>
+    <axis xyz="0.0 -1.0 0.0"/>
+    <limit lower="-1.047198" upper="1.047198" effort="2.94" velocity="5.0"/>
   </joint>
   <joint name="bl_link3_joint" type="revolute">
     <parent link="bl_link2"/>
     <child link="bl_link3"/>
-    <origin xyz="0.089700 0.000005 0.000000" rpy="0 0 0.0"/>
-    <axis xyz="-1.1796119636642283e-16 -1.000000000000004 -2.428612866511427e-17"/>
+    <origin xyz="0.074700 0.000205 0.000000" rpy="0 0 0.0"/>
+    <axis xyz="0.0 -1.0 0.0"/>
     <limit lower="-1.570796" upper="1.570796" effort="2.94" velocity="5.0"/>
   </joint>
   <link name="bl_link1">
     <inertial>
-      <origin xyz="0.068182 -0.082951 0.032834" rpy="0 0 0"/>
-      <mass value="0.150899"/>
-      <inertia ixx="0.000446113" ixy="4.6219e-05" ixz="-4.113e-05" iyy="0.000175772" iyz="0.000109907" izz="0.000330198"/>
+      <origin xyz="0.059338 -0.075606 -0.013123" rpy="0 0 0"/>
+      <mass value="0.149876"/>
+      <inertia ixx="0.000377863" ixy="3.2556e-05" ixz="-3.445e-05" iyy="0.000169617" iyz="0.000101016" izz="0.00025936"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
@@ -387,7 +375,7 @@
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.055920 0.022394 0.014446" rpy="-1.570796 0.000000 -0.000000"/>
+      <origin xyz="0.046920 0.022394 -0.031598" rpy="-1.570796 0.000000 0.000000"/>
       <geometry>
         <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
@@ -401,9 +389,9 @@
   </link>
   <link name="bl_link2">
     <inertial>
-      <origin xyz="-0.135081 0.034014 -0.004627" rpy="0 0 0"/>
-      <mass value="0.162564"/>
-      <inertia ixx="0.001922036" ixy="-0.000355778" ixz="-3.4307e-05" iyy="0.000171691" iyz="-0.000168414" izz="0.0020496"/>
+      <origin xyz="-0.117869 0.018736 -0.005004" rpy="0 0 0"/>
+      <mass value="0.149366"/>
+      <inertia ixx="0.001224445" ixy="-0.000259539" ixz="-3.1438e-05" iyy="0.000166081" iyz="-0.000129141" izz="0.00134872"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0.000000 3.141593 0.000000"/>
@@ -420,9 +408,9 @@
   </link>
   <link name="bl_link3">
     <inertial>
-      <origin xyz="-0.211809 0.097994 -0.004800" rpy="0 0 0"/>
-      <mass value="0.111653"/>
-      <inertia ixx="0.003205754" ixy="-0.000166056" ixz="-9.481e-06" iyy="4.2563e-05" iyz="-0.000190829" izz="0.00320303"/>
+      <origin xyz="-0.180524 0.082904 -0.005000" rpy="0 0 0"/>
+      <mass value="0.127150"/>
+      <inertia ixx="0.002933232" ixy="-0.000170197" ixz="-1.1078e-05" iyy="4.601e-05" iyz="-0.000193749" izz="0.002928129"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0.000000 3.141593 0.000000"/>

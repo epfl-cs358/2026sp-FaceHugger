@@ -117,14 +117,20 @@ CONSTRUCTION_POINTS = [
     "LegMountPointFR",
     "LegMountPointBR",
     "LegMountPointBL",
+    # Body Z=0 datum (under the cage) — re-origins the URDF so this
+    # point sits at world z=0. Consumed by generate_urdf.py; harmless
+    # if absent.
+    "BodyBottomPoint",
     # Joint origins (FaceHuggerLegAssembly:1).
     "BodyToLink1Point",
     "Link1ToLink2Point",
     "Link2ToLink3Point",
     # Bracket-side mating point (MotorMount + MotorMountR).
     "LegMountFixedPoint",
-    # Servo seat (each Servo_Mouser_Model occurrence).
+    # Servo seat (each LegBaseServoEnclosure occurrence).
     "ServoMountPoint",
+    # Link3 tip defined as a vertex
+    "Link3TipPoint",
 ]
 
 CONSTRUCTION_AXES = [
@@ -147,7 +153,7 @@ JOINTS = [
 #     when you actually want everything in the subtree. Prefer `combined`
 #     when you need a precise body subset.
 #
-#   {"type": "body", "match": "Link1", "stl": "X.stl",
+#   {"type": "body", "match": "Link1L", "stl": "X.stl",
 #    "component": "Link1L",                 # optional, disambiguates same-named bodies
 #    "origin_landmark": "BodyToLink1Point"} # optional
 #     Export a single body by name. Without `component`, uses the FIRST
@@ -179,16 +185,17 @@ JOINTS = [
 # produced and how to place each mesh — they don't hardcode these rules.
 #
 # Per docs/ASSEMBLY_HIERARCHY.md and docs/PIPELINE_SPEC.md: shoulder servo
-# (Servo_Mouser_Model:1) is chassis-fixed (bolted to the bracket); hip
-# servo (Servo_Mouser_Model:2) is rigid with link1 via `Link1RigidGroup`;
-# knee servo (Servo_Mouser_Model:3) is rigid with link3 via
+# (LegBaseServoEnclosure:1) is chassis-fixed (bolted to the bracket); hip
+# servo (LegBaseServoEnclosure:2) is rigid with link1 via `Link1RigidGroup`;
+# knee servo (LegBaseServoEnclosure:3) is rigid with link3 via
 # `Link3RigidGroup`.
 EXPORT_RULES = [
-    # Chassis: explicit body list. QuadrupedBody (main frame) + LipoCage
-    # only — electronics (PCBs, OLED, MPU6050, …) are intentionally
-    # excluded by NOT being in this list, regardless of CAD visibility.
-    # Brackets (MotorMount{,R}) live in the leg assembly and are exported
-    # separately as leg_mount_{L,R}.stl.
+    # Chassis: explicit body list. QuadrupedBody main frame + the two
+    # structural bridges (MiddleBridge, BehindBridge) that share the
+    # QuadrupedBody:1 occurrence + LipoCage. Electronics (PCBs, OLED,
+    # MPU6050, …) are intentionally excluded by NOT being in this list,
+    # regardless of CAD visibility. Brackets (MotorMount{,R}) live in
+    # the leg assembly and are exported separately as leg_mount_{L,R}.stl.
     {
         "type": "combined",
         "stl": "QuadrupedBody.stl",
@@ -196,6 +203,14 @@ EXPORT_RULES = [
             {
                 "occurrence": "FlexibleSkeleton:1/QuadrupedBody:1",
                 "body": "QuadrupedBody",
+            },
+            {
+                "occurrence": "FlexibleSkeleton:1/QuadrupedBody:1",
+                "body": "MiddleBridge",
+            },
+            {
+                "occurrence": "FlexibleSkeleton:1/QuadrupedBody:1",
+                "body": "BehindBridge",
             },
             {"occurrence": "FlexibleSkeleton:1/LipoCage:1", "body": "LipoCage"},
         ],
@@ -236,7 +251,7 @@ EXPORT_RULES = [
         "stl": "leg_shoulder_L.stl",
         "origin_landmark": "BodyToLink1Point",
         "parts": [
-            {"occurrence": "FaceHuggerLegAssembly:1/Link1L:1", "body": "Link1"},
+            {"occurrence": "FaceHuggerLegAssembly:1/Link1L:1", "body": "Link1L"},
         ],
     },
     {
@@ -275,7 +290,7 @@ EXPORT_RULES = [
         "origin_landmark": "ServoMountPoint",
         "parts": [
             {
-                "occurrence": "FaceHuggerLegAssembly:1/Servo_Mouser_Model:1",
+                "occurrence": "FaceHuggerLegAssembly:1/LegBaseServoEnclosure:1",
                 "body": "ServoBase",
             },
         ],
@@ -796,7 +811,7 @@ def export_stls(design, root, occurrences_json):
                 # Every occurrence whose component contains a body with this
                 # name. Used to populate `source_occurrences` so consumers
                 # know all the places this STL is instanced (e.g. 3
-                # Servo_Mouser_Model:N for one leg). With `component`
+                # LegBaseServoEnclosure:N for one leg). With `component`
                 # specified, restrict to occurrences whose immediate parent
                 # component name matches — needed when two bodies share a
                 # name across components (Link1 in Link1L vs Link1R in
@@ -973,6 +988,40 @@ def export_stls(design, root, occurrences_json):
     return exported, failed
 
 
+def _migrate_stale_role_paths(preserved, servo_paths):
+    """Detect & repair stale occurrence paths in `_servo_role_assignment` after
+    the servo component is renamed in CAD.
+
+    When the export rule's servo component is renamed (e.g.
+    `LegBaseServoEnclosure` → `LegBaseServoEnclosure`), the preserved role
+    paths still reference the old name and silently break URDF servo-visual
+    placement. If every preserved role path's leaf component differs from
+    the new export's leaf component AND shares a single old name, rewrite
+    each path by component-name substitution. Returns the (possibly
+    migrated) assignment dict — values otherwise untouched.
+    """
+    if not preserved or not servo_paths:
+        return preserved
+    new_leaf = servo_paths[0].rsplit("/", 1)[-1]
+    new_comp = new_leaf.rsplit(":", 1)[0]
+    old_comps = set()
+    role_paths = []
+    for k, v in preserved.items():
+        if k == "comment" or not isinstance(v, str) or "/" not in v:
+            continue
+        leaf = v.rsplit("/", 1)[-1]
+        comp = leaf.rsplit(":", 1)[0]
+        role_paths.append((k, v, comp))
+        old_comps.add(comp)
+    if new_comp in old_comps or len(old_comps) != 1:
+        return preserved
+    (old_comp,) = old_comps
+    migrated = dict(preserved)
+    for role, path, _ in role_paths:
+        migrated[role] = path.replace(f"/{old_comp}:", f"/{new_comp}:")
+    return migrated
+
+
 def build_mesh_files_manifest(exported, preserved_role_assignment=None):
     """Turn the list of `exported` dicts from export_stls into the keyed
     `mesh_files` manifest section written to fusion_export.json.
@@ -992,7 +1041,9 @@ def build_mesh_files_manifest(exported, preserved_role_assignment=None):
             servo_paths = list(entry.get("source_occurrences", []))
 
     if preserved_role_assignment is not None:
-        manifest["_servo_role_assignment"] = preserved_role_assignment
+        manifest["_servo_role_assignment"] = _migrate_stale_role_paths(
+            preserved_role_assignment, servo_paths
+        )
     else:
         roles = ["shoulder", "hip", "knee"]
         assignment = {
@@ -1603,15 +1654,15 @@ _REQUIRED_FHLA_POINTS = (
     "Link2ToLink3Point",
 )
 _REQUIRED_FHLA_OCCS = {
-    "Link1L:1": {"body": "Link1"},
+    "Link1L:1": {"body": "Link1L"},
     "Link1R:1": {"body": "Link1R"},
     "Link2L:1": {"body": "Link2"},
     "Link3L:1": {"body": "Link3"},
     "MotorMount:1": {"body": "LegMountL", "point": "LegMountFixedPoint"},
     "MotorMountR:1": {"body": "LegMountR", "point": "LegMountFixedPoint"},
-    "Servo_Mouser_Model:1": {"body": "ServoBase"},
-    "Servo_Mouser_Model:2": {"body": "ServoBase"},
-    "Servo_Mouser_Model:3": {"body": "ServoBase"},
+    "LegBaseServoEnclosure:1": {"body": "ServoBase"},
+    "LegBaseServoEnclosure:2": {"body": "ServoBase"},
+    "LegBaseServoEnclosure:3": {"body": "ServoBase"},
 }
 _REQUIRED_JOINTS = ("Link1Revolute", "Link2Revolute", "Link3Revolute")
 
@@ -1693,6 +1744,41 @@ def _verify_against_assembly_hierarchy(occurrences_json, joints, mesh_files):
     rows.append(
         f"  {_mark(cross_ok)} MotorMount LegMountFixedPoint ≈ LegMountPointFL (≤ 1mm)"
     )
+
+    # 3b. Leg X-axis reach: world-frame |Δx| between the FHLA's Link3TipPoint
+    # (foot vertex) and MotorMount:1's LegMountFixedPoint (shoulder anchor).
+    # Informational — no pass/fail.
+    if fhla:
+        tip = next(
+            (p for p in (fhla.get("points") or []) if p.get("name") == "Link3TipPoint"),
+            None,
+        )
+        mm1 = next(
+            (
+                c
+                for c in (fhla.get("children") or [])
+                if c.get("name") == "MotorMount:1"
+            ),
+            None,
+        )
+        anchor = None
+        if mm1:
+            anchor = next(
+                (
+                    p
+                    for p in (mm1.get("points") or [])
+                    if p.get("name") == "LegMountFixedPoint"
+                ),
+                None,
+            )
+        if tip and anchor:
+            tw = tip.get("pos_world_mm") or [0, 0, 0]
+            aw = anchor.get("pos_world_mm") or [0, 0, 0]
+            dx = abs(tw[0] - aw[0])
+            rows.append(
+                f"    • leg X reach (|Δx| Link3TipPoint → MotorMount:1 "
+                f"LegMountFixedPoint) = {dx:.1f} mm"
+            )
 
     # 4. FaceHuggerLegAssembly occurrences + bodies. Visibility-tolerant:
     # an occurrence counts as "found" if it's either in the (visibility-

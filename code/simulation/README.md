@@ -50,15 +50,55 @@ python facehugger.py sim                  # GUI, standing pose
 python facehugger.py sim --walk           # walk gait
 python facehugger.py sim --trot           # trot gait
 python facehugger.py sim --headless       # no GUI — CI smoke-check
-python facehugger.py blender                          # URDF in Blender (default 5.1)
+python facehugger.py blender                          # URDF in Blender, placement-only
+python facehugger.py blender --rigged                 # animator-facing rig (armature + IK)
 python facehugger.py blender --blender-version 5.2    # specific Blender version
 python facehugger.py blender --headless --save /tmp/scene.blend
 python facehugger.py all                  # urdf → sim
 ```
 
-The `blender` subcommand loads `generated/facehugger.urdf` directly via [animation/scripts/visualize_urdf.py](../../animation/scripts/visualize_urdf.py): walks the joint chain at rest pose (the same math PyBullet uses on `loadURDF`) and places each of the 29 STL visuals at `link_world @ visual_origin`. Placement-only — no rig, no Empties, no parenting. The URDF is the single source of truth. Requires **Blender 5.0+**.
+### `blender` subcommand
 
-The CLI resolves the Blender executable in this order: `BLENDER_BIN` env var → macOS `/Applications` candidates for the requested `--blender-version` (`Blender-{V}-LTS.app`, `Blender {V}.app` with a space, `Blender-{V}.app`, `Blender{V}.app`) → `blender{V}` on `$PATH` → plain `blender` on `$PATH`. If nothing matches, the CLI prints what it tried and exits non-zero. Set `BLENDER_BIN=/path/to/blender` to bypass the search entirely.
+Loads `generated/facehugger.urdf` into Blender. Requires **Blender 5.0+**. Two modes selectable via `--rigged`:
+
+| Mode | Wrapped script | What you get | When to use |
+|---|---|---|---|
+| **placement-only** (default) | [animation/scripts/visualize_urdf.py](../../animation/scripts/visualize_urdf.py) | Walks the joint chain at rest pose (the same math PyBullet uses on `loadURDF`) and places each of the 29 STL visuals at `link_world @ visual_origin`. No armature, no Empties, no parenting. | Cross-check: does the URDF chain reproduce PyBullet's `loadURDF` rest pose? Spot bad joint origins / axes visually. |
+| **rigged** (`--rigged`) | [animation/scripts/urdf_to_blender_rigged.py](../../animation/scripts/urdf_to_blender_rigged.py) | Real Armature: 13 bones, FK shoulder + IK on hip+knee, foot-target Empties parented to each `link1`. URDF `<limit>` clamps applied per bone. Matches the placement-only baseline within 0.5 mm at zero pose. | Animator workflow — pose the rig in pose mode, drag foot targets, bake clips. |
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--rigged` | off | Use the rigged armature scene instead of placement-only. |
+| `--blender-version VERSION` | `5.1` | Major.minor of the Blender to launch (e.g. `5.1`, `5.2`). Drives the `/Applications` search; ignored if `BLENDER_BIN` is set. |
+| `--headless` | off | Run Blender in `--background` mode — no GUI window. Pair with `--save` for CI / batch use. |
+| `--save PATH` | mode-dependent (see below) | Save the built scene to `PATH` (passed as `-- --save PATH` to the inner script). Works with or without `--headless`. |
+| `--reset` | off | Start from a blank scene, discarding any existing animations (rigged mode only — placement-only always starts blank). |
+
+**Default save target.** If `--save` is omitted:
+
+- **`--rigged`** defaults to `animation/fh_rigged_latest.blend` — the animation **library** (rig + all authored clips). The rigged builder reopens it (unless `--reset`) and stash/restores your clips across the rebuild, so re-running `blender --rigged` is safe and keeps your work.
+- **placement-only** (no `--rigged`) does **not** save anywhere — it opens a blank scene for viewing and discards on exit. This is deliberate: `visualize_urdf.py` clears the scene with **no** stash/restore, so it must never write over the rigged library and destroy clips. Pass an explicit `--save PATH` if you want to keep a placement-only scene (use a path other than the library).
+
+⚠️ **Do not point a placement-only `--save` at `animation/fh_rigged_latest.blend`** — it would overwrite the library with a clip-less placement scene.
+
+The CLI resolves the Blender executable in this order: `BLENDER_BIN` env var → macOS `/Applications` candidates for the requested `--blender-version` (`Blender-{V}-LTS.app`, `Blender {V}.app` with a space, `Blender-{V}.app`, `Blender{V}.app`) → `blender{V}` on `$PATH` → plain `blender` on `$PATH`. If nothing matches, the CLI prints every path it tried and exits non-zero. Set `BLENDER_BIN=/path/to/blender` to bypass the search entirely.
+
+Examples:
+
+```bash
+python facehugger.py blender                                   # placement-only, Blender 5.1, GUI
+python facehugger.py blender --rigged                          # rigged scene, Blender 5.1, GUI
+python facehugger.py blender --rigged --headless \             # rig built in background, no GUI
+    --save /tmp/fh_rigged.blend
+python facehugger.py blender --blender-version 5.2 --rigged    # use Blender 5.2 instead
+BLENDER_BIN=/opt/blender/blender python facehugger.py blender  # explicit binary override
+```
+
+Common pitfalls:
+
+- **"Could not locate Blender 5.1"** — your install path isn't in the `/Applications` candidates. Set `BLENDER_BIN` or pass `--blender-version` matching what you actually have installed.
+- **STL imports silently fail in `--background`** — make sure you're on Blender 5.0+. The placement-only script's `clear_scene` works around a `wm.read_factory_settings(use_empty=True)` quirk that bricked STL import on older versions.
+- **Rigged scene drifts from placement baseline** — at all-zero pose the two should match within 0.5 mm. If they don't, the rig is composing transforms wrong; open both `.blend` outputs and overlay. See [animation/scripts/README.md](../../animation/scripts/README.md) for the rig-build details.
 
 `view` mouse controls:
 

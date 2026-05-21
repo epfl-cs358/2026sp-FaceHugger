@@ -56,7 +56,7 @@
   "tracks": [
     {
       "servo_id": 0,
-      "name": "FL_shoulder",
+      "name": "fl_link1",
       "keyframes": [
         {"t": 0,   "angle": 135.0},
         {"t": 200, "angle": 150.0},
@@ -66,7 +66,7 @@
     },
     {
       "servo_id": 1,
-      "name": "FL_hip",
+      "name": "fl_link2",
       "keyframes": [
         {"t": 0,   "angle": 135.0},
         {"t": 200, "angle": 90.0, "interp": "linear"},

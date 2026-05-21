@@ -135,6 +135,20 @@ def deg2rad(d):
     return round(math.radians(d), 6)
 
 
+def clean_axis(vec, tol=1e-10):
+    """Snap tiny components to 0.0 and renormalize to unit length.
+
+    Fusion-derived axis vectors carry FP dust on the should-be-zero columns
+    (e.g. [2.77e-17, -2.99e-17, 1.0000000000000002]). This produces a clean
+    [0.0, 0.0, 1.0] for the URDF <axis xyz=...> element.
+    """
+    cleaned = [0.0 if abs(c) < tol else c for c in vec]
+    norm = math.sqrt(sum(c * c for c in cleaned))
+    if norm == 0.0:
+        return cleaned
+    return [c / norm for c in cleaned]
+
+
 def fmt_xyz(mm_vec):
     """Format an mm vector as a URDF xyz string in meters."""
     return " ".join(f"{v * MM_TO_M:.6f}" for v in mm_vec)
@@ -351,7 +365,7 @@ class URDF:
     ):
         xyz = fmt_xyz(origin_mm)
         rpy = fmt_rpy(0, 0, rpy_z_deg)
-        ax = " ".join(str(v) for v in axis)
+        ax = " ".join(str(v) for v in clean_axis(axis))
         lo = deg2rad(lower_deg)
         hi = deg2rad(upper_deg)
         self.lines += [
@@ -728,25 +742,25 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # is the world position where ServoMountPoint should land.
     #
     # Source-CAD shoulder-servo positions: each bracket has a nested
-    # `Servo_Mouser_Model:1` with its own ServoMountPoint. Its world
+    # `LegBaseServoEnclosure:1` with its own ServoMountPoint. Its world
     # position is the place where that bracket's shoulder servo sits in
     # the source-FL placement (L bracket) or the mirror (R bracket).
     shoulder_servo_L_world = find_point_world_at_occurrence(
         occs,
-        f"{LEG_ASSEMBLY}/MotorMount:1/Servo_Mouser_Model:1",
+        f"{LEG_ASSEMBLY}/MotorMount:1/LegBaseServoEnclosure:1",
         "ServoMountPoint",
     )
     shoulder_servo_R_world = find_point_world_at_occurrence(
         occs,
-        f"{LEG_ASSEMBLY}/MotorMountR:1/Servo_Mouser_Model(Mirror):1",
+        f"{LEG_ASSEMBLY}/MotorMountR:1/LegBaseServoEnclosure(Mirror):1",
         "ServoMountPoint",
     )
     # Top-level hip / knee servos: shared (no L/R variants in CAD).
     hip_servo_world = find_point_world_at_occurrence(
-        occs, f"{LEG_ASSEMBLY}/Servo_Mouser_Model:2", "ServoMountPoint"
+        occs, f"{LEG_ASSEMBLY}/LegBaseServoEnclosure:2", "ServoMountPoint"
     )
     knee_servo_world = find_point_world_at_occurrence(
-        occs, f"{LEG_ASSEMBLY}/Servo_Mouser_Model:3", "ServoMountPoint"
+        occs, f"{LEG_ASSEMBLY}/LegBaseServoEnclosure:3", "ServoMountPoint"
     )
 
     shoulder_servo_L_offset = (
@@ -763,9 +777,9 @@ def generate(export: dict, cfg: dict, out_path: Path):
     )
 
     # Per-role servo orientations. The shared `servo.stl` was exported
-    # via combined-rule from `Servo_Mouser_Model:1` (the shoulder
+    # via combined-rule from `LegBaseServoEnclosure:1` (the shoulder
     # servo), which bakes vertices in WORLD frame using
-    # `Servo_Mouser_Model:1`'s `world_transform_rm_cm`. So mesh-local
+    # `LegBaseServoEnclosure:1`'s `world_transform_rm_cm`. So mesh-local
     # axes equal world axes for the SHOULDER placement — shaft along
     # `+Z`. The hip and knee servos in CAD have different world
     # rotations (shaft along `+Y`), so reusing the same mesh on link1
@@ -777,9 +791,9 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # Computed from JSON, this gives:
     #     M_hip  = Rx(-π/2)            →  rpy = (-π/2, 0, 0)
     #     M_knee = Rz(-π/2)·Ry(-π/2)   →  rpy = (0, -π/2, -π/2)
-    R_servo1 = _find_occ_rot(occs, "Servo_Mouser_Model:1")  # shoulder
-    R_servo2 = _find_occ_rot(occs, "Servo_Mouser_Model:2")  # hip
-    R_servo3 = _find_occ_rot(occs, "Servo_Mouser_Model:3")  # knee
+    R_servo1 = _find_occ_rot(occs, "LegBaseServoEnclosure:1")  # shoulder
+    R_servo2 = _find_occ_rot(occs, "LegBaseServoEnclosure:2")  # hip
+    R_servo3 = _find_occ_rot(occs, "LegBaseServoEnclosure:3")  # knee
 
     def _relative_rpy(R_target):
         if R_target is None or R_servo1 is None:
@@ -961,10 +975,28 @@ def generate(export: dict, cfg: dict, out_path: Path):
         shoulder_rest_rad = _shoulder_rest_for(leg_id, fl_rest_rad)
         shoulder_rest_deg = math.degrees(shoulder_rest_rad)
 
+        # R-side three-flip on the shoulder (matches hip/knee logic
+        # below). The bracket+Link1 are CAD-mirrored about the body's
+        # YZ plane for FR/BL, which reverses the servo-shaft direction
+        # in body frame. Keeping the same axis vector on every leg
+        # would make positive θ rotate FR/BL the wrong physical way
+        # and apply asymmetric limits on the wrong half of the sweep.
+        # Negating the axis and negate-swapping the limits restores
+        # "same θ → same physical motion" across all four legs and
+        # lets the FL Fusion limits be set arbitrarily-asymmetric
+        # without breaking the right side. The shoulder rpy_z (rest)
+        # does NOT change with the axis flip — it is a static rotation
+        # in body frame, independent of axis sign.
+        shoulder_axis = list(sj["axis_dir"])
+        sh_lo, sh_hi = shoulder_lower_deg, shoulder_upper_deg
+        if side == "R":
+            shoulder_axis = [-a for a in shoulder_axis]
+            sh_lo, sh_hi = -shoulder_upper_deg, -shoulder_lower_deg
+
         urdf.comment(
             f"LEG: {leg_id.upper()}  (side={side}, "
             f"shoulder_rest={shoulder_rest_deg:+.1f}°, "
-            f"limits=[{shoulder_lower_deg:+.1f}°, {shoulder_upper_deg:+.1f}°])"
+            f"limits=[{sh_lo:+.1f}°, {sh_hi:+.1f}°])"
         )
 
         # Shoulder joint: origin = world position of the rotation axis for
@@ -976,9 +1008,9 @@ def generate(export: dict, cfg: dict, out_path: Path):
             parent=base_cfg["name"],
             child=f"{leg_id}_link1",
             origin_mm=shoulder_origin_xyz,
-            axis=sj["axis_dir"],
-            lower_deg=shoulder_lower_deg,
-            upper_deg=shoulder_upper_deg,
+            axis=shoulder_axis,
+            lower_deg=sh_lo,
+            upper_deg=sh_hi,
             effort=effort,
             velocity=vel,
             rpy_z_deg=shoulder_rest_deg,

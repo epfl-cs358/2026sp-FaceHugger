@@ -1,0 +1,16 @@
+{
+  "_note": "channels is REFERENCE-ONLY since the JS wire shape moved to {T:4, id:<leg_id 0-3>, servo_id:<0-2>, a}; firmware does PCA mapping via LEG_SERVO_CHANNEL[id][servo_id] (config.h on origin/main). Kept here so test_servo_parity.py can cross-check that convention.json's channels still match the firmware table. neutral_joint_deg and scale ARE on the wire (baked into the .js by _frame_to_servo).",
+  "neutral_joint_deg": {
+    "fr": [45, -60, -37],
+    "fl": [75, -60, -40],
+    "br": [-45, -50, -50],
+    "bl": [-135, -60, -35]
+  },
+  "scale": 0.6667,
+  "channels": {
+    "fr": [8, 9, 10],
+    "fl": [12, 13, 14],
+    "br": [4, 5, 6],
+    "bl": [0, 1, 2]
+  }
+}

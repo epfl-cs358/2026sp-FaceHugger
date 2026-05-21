@@ -7,7 +7,15 @@
 
 ## 1. Fusion 360 → Blender Import
 
-### Export from Fusion 360
+> **In the automated pipeline this is handled by
+> [`animation/scripts/urdf_to_blender_rigged.py`](../../../animation/scripts/urdf_to_blender_rigged.py)**:
+> the URDF generator emits one STL per rigid body
+> (`code/simulation/generated/exported_meshes/`), the rigged importer
+> walks the URDF chain to position each mesh in Blender at the link
+> frame, and the rest of this section is automatic. The manual workflow
+> below is only relevant when working outside the pipeline.
+
+### Export from Fusion 360 (manual, fallback only)
 
 - Export each **rigid body part** as a separate STL (not one monolithic mesh)
   - Each link segment (upper leg, lower leg, foot)
@@ -15,7 +23,7 @@
   - The body/chassis
 - Use millimeters as the unit in Fusion 360 (Blender will import at 1 unit = 1mm, scale if needed)
 
-### Import into Blender
+### Import into Blender (manual, fallback only)
 
 - File → Import → STL
 - Import each part individually
@@ -28,47 +36,89 @@
 
 ### Bone placement
 
-Create an Armature object with **12 bones** — one per servo shaft:
+Create an Armature object with **12 leg bones + 1 body bone** — one per
+URDF link, named to match the URDF link names exactly (lowercase,
+`fl_link1` etc.):
 
 ```
 Armature
-├── FL_shoulder    (yaw,   Z rotation)
-│   └── FL_hip     (pitch, X rotation)
-│       └── FL_knee (pitch, X rotation)
-├── FR_shoulder
-│   └── FR_hip
-│       └── FR_knee
-├── BL_shoulder
-│   └── BL_hip
-│       └── BL_knee
-└── BR_shoulder
-    └── BR_hip
-        └── BR_knee
+├── base_link              (root, fixed — represents the chassis)
+├── fl_link1               (FL shoulder; head = BodyToLink1Point, tail = Link1ToLink2Point)
+│   └── fl_link2           (FL hip;      head = Link1ToLink2Point, tail = Link2ToLink3Point)
+│       └── fl_link3       (FL knee;     head = Link2ToLink3Point, tail = FootTip)
+├── fr_link1
+│   └── fr_link2
+│       └── fr_link3
+├── bl_link1
+│   └── bl_link2
+│       └── bl_link3
+└── br_link1
+    └── br_link2
+        └── br_link3
 ```
 
-Each bone's **head** (root) is placed exactly at the corresponding servo shaft center. The bone's **tail** points toward the next joint in the chain (or toward the foot for knee bones).
+The bone names match the URDF link names exactly so the export script can
+look up `pose.bones["fl_link1"]` without a translation table. Conventional
+labels like "shoulder/hip/knee" appear only in comments / debug output.
+
+Each bone's **head** sits at its parent joint's pivot (= the URDF link
+frame origin, computed by walking the joint chain at rest pose). The
+**tail** sits at the next joint's pivot (or the foot tip for `*_link3`
+bones, taken from the URDF comment-block landmark `FootTip` in link3 frame).
 
 ### Rotation axes
 
-| Joint type | Servo axis | Blender rotation channel | Euler order |
-|------------|-----------|-------------------------|-------------|
-| Shoulder (yaw) | Z | `rotation_euler[2]` | XYZ |
-| Hip (pitch) | X | `rotation_euler[0]` | XYZ |
-| Knee (pitch) | X | `rotation_euler[0]` | XYZ |
+After `EditBone.align_roll(joint.axis)` is applied at rig-build time,
+**bone-local Z is the joint axis for all 12 joints uniformly** —
+regardless of whether the URDF axis is `+Z` (shoulder) or `±Y` (hip/knee)
+in world frame. The per-side ±Y sign flip on hip/knee (URDF
+`<axis>0 -1 0</axis>` for FR/BL, `0 1 0` for FL/BR) is absorbed into the
+bone roll automatically.
 
-Set all bones to use **XYZ Euler** rotation mode (not quaternion — we need single-axis readability).
+This claim only holds because
+[`_bone_endpoints_world_mm`](../../../animation/scripts/urdf_to_blender_rigged.py)
+projects each bone's tail onto the plane perpendicular to that bone's
+joint axis at rig-build time. `align_roll(target)` is exact only when
+`target ⊥ bone-Y`; otherwise it projects internally and bone-local Z
+drifts from the URDF axis (≈13° on `*_link1`, where the joint origin
+has a Z lift; ≈23° on `*_link3`, where the foot tip has a Y component).
+The tail projection forces bone-Y ⊥ joint axis on every bone, making
+`align_roll` exact and the `rotation_euler[2] == joint angle` contract
+literal. The bone becomes a rotation control whose Y is not along the
+limb on `*_link1` / `*_link3`; mesh geometry is set independently via
+`matrix_world` in `attach_visuals` and is unaffected.
+
+| Joint type | URDF `<axis>` | Bone-local axis after `align_roll` | Blender channel |
+|---|---|---|---|
+| All 12 (shoulder + hip + knee) | per URDF | local Z | `rotation_euler[2]` |
+
+Set all bones to use **XYZ Euler** rotation mode (not quaternion — single-axis
+readability still matters even though only one channel is used). The export
+script reads `rotation_euler[2]` for every servo, no per-joint branching.
 
 ### Joint limits
 
-In Bone Properties → Inverse Kinematics (or via bone constraints):
+Joint limits are read from the URDF `<limit lower upper>` field per joint
+**at rig-build time**, not hardcoded in this spec or in `servo_mapping.yaml`.
+The URDF is regenerated whenever the Fusion joint motion is retuned, so any
+hardcoded numeric limits drift the moment the CAD changes.
 
-| Joint | Axis | Min | Max | Notes |
-|-------|------|-----|-----|-------|
-| Shoulder | Z | -125° | +125° | ~250° usable of 270° range |
-| Hip | X | -135° | +135° | Full 270° range |
-| Knee | X | -135° | +135° | Full 270° range |
+The `LIMIT_ROTATION` constraint on each bone uses `use_limit_z = True` and
+`min_z` / `max_z` populated from URDF `<limit>` (radians). Per-axis branching
+is unnecessary because of the uniform `align_roll` convention above.
 
-These limits map to servo degrees via: `servo_angle = offset_deg + direction * blender_degrees`
+Current values (informational only — may drift):
+
+| Joint | Range (relative to per-leg rest) |
+|---|---|
+| Shoulder (link1) | [-90°, +90°] — see [`MERGE_AND_CONVENTION.md` §0](../../../code/simulation/docs/MERGE_AND_CONVENTION.md) |
+| Hip (link2) | [-90°, +90°] |
+| Knee (link3) | [-90°, +90°] |
+
+The `min_deg` / `max_deg` fields in `servo_mapping.yaml` are a **separate**,
+post-conversion clamp — they're servo-side PWM safety bounds, not kinematic
+limits. The Blender rig itself is bound by the URDF limits; the yaml clamps
+catch numerical excursions during export → PWM conversion.
 
 ### Mesh parenting
 
@@ -88,7 +138,7 @@ For each leg, add an IK constraint to the knee bone:
 2. Add Constraint → Inverse Kinematics
 3. Set **Target** to an Empty object placed at the foot position
 4. Set **Chain Length** to 2 (knee + hip, shoulder is independent)
-5. Create one Empty per leg: `FL_foot_target`, `FR_foot_target`, etc.
+5. Create one Empty per leg: `fl_foot_target`, `fr_foot_target`, `bl_foot_target`, `br_foot_target`.
 
 ### Shoulder stays FK
 
@@ -132,25 +182,54 @@ After baking, every bone has explicit keyframes at every frame. The export scrip
 
 ## 4. Neutral Pose
 
-### Definition
+The neutral pose lives across **three coupled layers** — they describe
+the SAME physical state in three vocabularies. They MUST all agree, and
+the URDF is the single source of truth that ties them together.
 
-The neutral pose is the stance the robot assumes when:
-- All servos are at their mechanical zero (typically 135° = middle of 270° range)
-- The robot is standing stable
-- No gait is active
+| Layer | Value at neutral |
+|---|---|
+| Blender bones | every bone's `rotation_euler = (0, 0, 0)` |
+| URDF joint angles | every joint at θ=0 (= the Fusion rest pose) |
+| Servo PWM | every servo at `offset_deg` (typically 135° = mid of 0–270°) |
 
-### In Blender
+### Geometric appearance
 
-- The **rest pose** (Edit Mode bone positions) must match the physical neutral stance
-- Frame 1 and the last frame of every gait animation must be this pose
-- Apply as rest pose: Pose Mode → Pose → Apply Pose as Rest Pose
+The neutral pose is **not** "all bones zeroed and the robot standing
+straight along the body axes." It's the splayed standing stance from
+Convention A:
+
+- FL shoulder yaw = -45° (world frame)
+- FR shoulder yaw = +45°
+- BL shoulder yaw = -135°
+- BR shoulder yaw = +135°
+- All hips and knees at 0°
+
+The per-leg shoulder offset is **baked into the URDF** as
+`<joint><origin rpy="0 0 {rest_rad}"/>` per Convention A — so it does
+NOT appear as a non-zero rotation value in Blender. Blender's rest pose
+**is** the URDF θ=0 **is** the splayed stance — three views of the same
+configuration.
+
+If a reader is tempted to set Blender bones to 135° to "match the servo
+neutral," that's a misreading of the layered relationship. The 135° is
+the servo PWM angle, not the Blender bone angle. The conversion is
+`servo_deg = offset_deg + direction * degrees(blender_rad)`; with
+Blender at 0 rad and `offset_deg = 135`, the servo PWM lands at 135°.
 
 ### Calibration
 
-1. Power on ESP32, command all servos to 135° (or chosen neutral angle)
-2. Physically assemble the robot while servos hold position
-3. The Blender rig's rest pose must match this assembly
-4. If there's a mismatch, adjust the `offset_deg` in `servo_mapping.yaml`
+1. Power on ESP32, command all servos to `offset_deg` (typically 135°).
+2. Physically assemble the robot while servos hold that position. The
+   assembly geometry now defines the splayed stance.
+3. The Blender rig's rest pose (built at `rotation_euler = 0` everywhere)
+   must match this assembly. If the URDF and the assembly disagree,
+   regenerate the URDF from Fusion — that's the source of truth.
+4. Per-servo direction/offset tweaks happen via `direction` and
+   `offset_deg` in `servo_mapping.yaml`. **The kinematic L/R asymmetry
+   is NOT calibrated here** — it's already absorbed at rig-build time
+   by `EditBone.align_roll(joint.axis)` reading the URDF `<axis>`.
+   `direction: -1` should only ever be needed for physical servo-horn
+   handedness mismatches discovered after assembly.
 
 ---
 
@@ -181,114 +260,60 @@ The neutral pose is the stance the robot assumes when:
 
 ## 6. Servo Mapping Config
 
-File: `servo_mapping.yaml`
+File: `servo_mapping.yaml` — the **URDF↔firmware bridge**. Each entry
+maps a URDF link name (= Blender bone name, lowercase: `fl_link1`, etc.)
+to firmware-side per-servo configuration.
+
+See [`animation/SERVO_ID_CONVENTION.md`](../../../animation/SERVO_ID_CONVENTION.md)
+for the proposed servo numbering and how it aligns with the firmware's
+`SERVO_CONFIG[]` ordering.
+
+Field semantics:
+
+- **`channel`** is uniform `2` after `align_roll` makes bone-local Z the
+  joint axis for every bone. Kept in the file for clarity but the
+  exporter may hardcode `2` instead.
+- **`direction`** is **HARDWARE-CALIBRATION-ONLY**. The kinematic L/R
+  asymmetry (URDF `<axis>0 -1 0</axis>` for FR/BL hip and knee joints)
+  is already absorbed into the bone roll at rig-build time, so a
+  positive Blender `rotation_euler[2]` rotates the leg "up" the same
+  way on both sides — no per-bone `direction: -1` needed for kinematic
+  mirroring. Default `1` everywhere; flip to `-1` only after the robot
+  is assembled and a specific servo is observed driving its joint
+  backward (typically because that unit's horn was mounted facing the
+  wrong way).
+- **`offset_deg`** is the SERVO PWM angle when the Blender bone is at
+  0 rad (the URDF rest pose). For DSS-M15S 0–270° servos, mid-range = 135°.
+- **`min_deg` / `max_deg`** are POST-CONVERSION PWM SAFETY CLAMPS — they
+  protect the servo and are independent of the URDF kinematic limits
+  (which the rig already enforces via `LIMIT_ROTATION` in §2). Keep them
+  tighter than 0/270.
 
 ```yaml
-# Maps Blender bone names/axes to physical servo IDs
-# direction: 1 = Blender positive rotation = servo angle increases
-#           -1 = inverted
-# offset_deg: Blender 0 rad → this servo angle (mechanical zero)
-# channel: rotation_euler index (0=X, 1=Y, 2=Z)
+# servo_mapping.yaml — URDF↔firmware bridge.
+# Keys: Blender bone names (= URDF link names, lowercase).
+# servo_id values follow the convention in animation/SERVO_ID_CONVENTION.md
+# (PROPOSAL — pending firmware confirmation against SERVO_CONFIG[]).
 
 servos:
-  FL_shoulder:
-    servo_id: 0
-    channel: 2          # Z = yaw
-    direction: 1
-    offset_deg: 135     # middle of 270° range
-    min_deg: 10
-    max_deg: 260
-
-  FL_hip:
-    servo_id: 1
-    channel: 0          # X = pitch
-    direction: -1
-    offset_deg: 135
-    min_deg: 0
-    max_deg: 270
-
-  FL_knee:
-    servo_id: 2
-    channel: 0
-    direction: -1
-    offset_deg: 135
-    min_deg: 0
-    max_deg: 270
-
-  FR_shoulder:
-    servo_id: 3
-    channel: 2
-    direction: -1       # mirrored from FL
-    offset_deg: 135
-    min_deg: 10
-    max_deg: 260
-
-  FR_hip:
-    servo_id: 4
-    channel: 0
-    direction: 1        # mirrored from FL
-    offset_deg: 135
-    min_deg: 0
-    max_deg: 270
-
-  FR_knee:
-    servo_id: 5
-    channel: 0
-    direction: 1
-    offset_deg: 135
-    min_deg: 0
-    max_deg: 270
-
-  BL_shoulder:
-    servo_id: 6
-    channel: 2
-    direction: 1
-    offset_deg: 135
-    min_deg: 10
-    max_deg: 260
-
-  BL_hip:
-    servo_id: 7
-    channel: 0
-    direction: -1
-    offset_deg: 135
-    min_deg: 0
-    max_deg: 270
-
-  BL_knee:
-    servo_id: 8
-    channel: 0
-    direction: -1
-    offset_deg: 135
-    min_deg: 0
-    max_deg: 270
-
-  BR_shoulder:
-    servo_id: 9
-    channel: 2
-    direction: -1
-    offset_deg: 135
-    min_deg: 10
-    max_deg: 260
-
-  BR_hip:
-    servo_id: 10
-    channel: 0
-    direction: 1
-    offset_deg: 135
-    min_deg: 0
-    max_deg: 270
-
-  BR_knee:
-    servo_id: 11
-    channel: 0
-    direction: 1
-    offset_deg: 135
-    min_deg: 0
-    max_deg: 270
+  fl_link1: { servo_id: 0,  channel: 2, direction: 1, offset_deg: 135, min_deg: 10, max_deg: 260 }
+  fl_link2: { servo_id: 1,  channel: 2, direction: 1, offset_deg: 135, min_deg:  0, max_deg: 270 }
+  fl_link3: { servo_id: 2,  channel: 2, direction: 1, offset_deg: 135, min_deg:  0, max_deg: 270 }
+  fr_link1: { servo_id: 3,  channel: 2, direction: 1, offset_deg: 135, min_deg: 10, max_deg: 260 }
+  fr_link2: { servo_id: 4,  channel: 2, direction: 1, offset_deg: 135, min_deg:  0, max_deg: 270 }
+  fr_link3: { servo_id: 5,  channel: 2, direction: 1, offset_deg: 135, min_deg:  0, max_deg: 270 }
+  bl_link1: { servo_id: 6,  channel: 2, direction: 1, offset_deg: 135, min_deg: 10, max_deg: 260 }
+  bl_link2: { servo_id: 7,  channel: 2, direction: 1, offset_deg: 135, min_deg:  0, max_deg: 270 }
+  bl_link3: { servo_id: 8,  channel: 2, direction: 1, offset_deg: 135, min_deg:  0, max_deg: 270 }
+  br_link1: { servo_id: 9,  channel: 2, direction: 1, offset_deg: 135, min_deg: 10, max_deg: 260 }
+  br_link2: { servo_id: 10, channel: 2, direction: 1, offset_deg: 135, min_deg:  0, max_deg: 270 }
+  br_link3: { servo_id: 11, channel: 2, direction: 1, offset_deg: 135, min_deg:  0, max_deg: 270 }
 ```
 
-**Note:** The `direction` and `offset_deg` values above are placeholders. They must be calibrated per servo once the robot is assembled. Left/right mirroring is assumed but must be verified.
+**Note:** the `offset_deg` values above are placeholders. They must be
+calibrated once the robot is assembled. The `direction: 1` defaults are
+correct under Convention A — only flip after observing a servo running
+backward on the assembled robot.
 
 ### Angle conversion formula
 
@@ -320,13 +345,12 @@ Output: <action_name>.gait (JSON file)
 4. fps = bpy.context.scene.render.fps
 
 5. For each servo in mapping:
-   a. bone_name = servo config key (e.g. "FL_shoulder")
-   b. channel = servo config channel index
-   c. data_path = f'pose.bones["{bone_name}"].rotation_euler'
-   d. fcurve = action.fcurves.find(data_path, index=channel)
-   e. If fcurve is None: ERROR — bone not animated or not baked
+   a. bone_name = servo config key (e.g. "fl_link1")
+   b. data_path = f'pose.bones["{bone_name}"].rotation_euler'
+   c. fcurve = action.fcurves.find(data_path, index=2)   # always Z after align_roll
+   d. If fcurve is None: ERROR — bone not animated or not baked
 
-   f. For each keyframe_point in fcurve.keyframe_points:
+   e. For each keyframe_point in fcurve.keyframe_points:
       - frame = kp.co[0]
       - value_rad = kp.co[1]
       - time_ms = round((frame / fps) * 1000)
@@ -335,7 +359,7 @@ Output: <action_name>.gait (JSON file)
       - interp_type = map_blender_interp(kp.interpolation)
         (BEZIER → "cubic", LINEAR → "linear", CONSTANT → "constant")
 
-   g. Append to track keyframes list
+   f. Append to track keyframes list
 
 6. neutral_pose = [track[0].angle for each track]  # frame 0 values
 7. duration_ms = max time_ms across all tracks
@@ -353,10 +377,11 @@ Output: <action_name>.gait (JSON file)
 ```python
 import bpy, yaml, math, json
 
-# Find an FCurve for a specific bone + channel
-def find_fcurve(action, bone_name, channel_index):
+# Find the Z-axis FCurve for a bone (every joint rotates on local Z after
+# align_roll, so index=2 uniformly).
+def find_fcurve(action, bone_name):
     data_path = f'pose.bones["{bone_name}"].rotation_euler'
-    return action.fcurves.find(data_path, index=channel_index)
+    return action.fcurves.find(data_path, index=2)
 
 # Convert frame to milliseconds
 fps = bpy.context.scene.render.fps
@@ -411,8 +436,8 @@ action = arm.animation_data.action
 for fc in action.fcurves:
     print(fc.data_path, fc.array_index, len(fc.keyframe_points))
 
-# Find specific FCurve
-fc = action.fcurves.find('pose.bones["FL_hip"].rotation_euler', index=0)
+# Find specific FCurve (every joint uses Z = index 2 after align_roll)
+fc = action.fcurves.find('pose.bones["fl_link2"].rotation_euler', index=2)
 
 # Read keyframes
 for kp in fc.keyframe_points:
@@ -421,7 +446,7 @@ for kp in fc.keyframe_points:
 
 # Evaluate at specific frame (alternative to reading FCurve)
 bpy.context.scene.frame_set(12)
-angle = arm.pose.bones["FL_hip"].rotation_euler[0]
+angle = arm.pose.bones["fl_link2"].rotation_euler[2]
 
 # Bake IK to FK
 bpy.ops.nla.bake(
