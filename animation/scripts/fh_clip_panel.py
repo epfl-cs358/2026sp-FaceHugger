@@ -1657,8 +1657,12 @@ def bake_clip(clip_name, context):
         [{"frame": 1, "time_ms": 0, "fl_link1": 0.0, "fl_link2": 0.0, ...},
          ...]
 
-    Pure data extraction — knows nothing about servos, scaling or
-    channels. Raises ValueError if the rig/clip is not exportable."""
+    Binds `clip_name`'s Actions onto the rig BEFORE sampling so the
+    depsgraph reflects this clip's motion — not whatever clip happens to
+    be active (the multi-clip "Export Selected" mislabel bug). Restores
+    the previously-active clip + frame afterward. Pure data extraction —
+    knows nothing about servos, scaling or channels. Raises ValueError if
+    the rig/clip is not exportable."""
     scene = context.scene
     arm_obj = _find_arm_obj()
     if arm_obj is None:
@@ -1666,6 +1670,19 @@ def bake_clip(clip_name, context):
     action = clip_action(clip_name, "body_ctrl")
     if action is None:
         raise ValueError(f"No body_ctrl action for clip '{clip_name}'")
+
+    # Bind the target clip so the depsgraph samples ITS motion. Autocomplete
+    # first (mirrors FH_OT_apply_clip) so a clip missing a target doesn't
+    # inherit the previous clip's Action on that target. view_layer.update()
+    # forces the IK constraint stack to re-solve to the rebind before frame 0.
+    prev_clip = active_clip()
+    _autocomplete_clip(clip_name, context)
+    _assigned, missing = assign_clip(clip_name)
+    if missing:
+        raise ValueError(
+            f"Clip '{clip_name}' incomplete — missing: {', '.join(missing)}"
+        )
+    context.view_layer.update()
 
     frame_start = int(action.frame_range[0])
     frame_end = int(action.frame_range[1])
@@ -1681,6 +1698,13 @@ def bake_clip(clip_name, context):
         time_ms = round((frame - frame_start) / fps * 1000)
         rows.append({"frame": frame, "time_ms": time_ms, **angles})
     scene.frame_set(original_frame)
+
+    # Restore whatever clip was active before, so baking doesn't leave the
+    # rig rebound to the last-baked clip (matters for "Export Selected").
+    if prev_clip is not None and prev_clip != clip_name:
+        _autocomplete_clip(prev_clip, context)
+        assign_clip(prev_clip)
+        context.view_layer.update()
     return rows
 
 
