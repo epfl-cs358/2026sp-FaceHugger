@@ -18,6 +18,7 @@ strict: true
 exclude_docs: |
   _context/
   *.py
+  README.md
 
 validation:
   nav:

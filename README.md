@@ -1,103 +1,20 @@
 # FaceHugger - a quadruped robot for MIT Things 2026sp
 
 CAD, firmware, simulation, and animation tooling for the FaceHugger quadruped.
-Project documentation lives in [`wiki/`](wiki/) and is published with MkDocs Material.
 
-## How the wiki works
+## Documentation
 
-- **Source:** every page is a Markdown file under `wiki/`. `mkdocs.yml` (repo root) is the config.
-- **Two pillars:** `wiki/guide/` is the build guide (for builders/newcomers); `wiki/reference/` is the
-  technical depth. Each shows as a top tab on the site.
-- **Navigation** is driven by a `.pages` file in each folder (it sets the section title and page order) -
-  there is no hand-maintained nav list. Add a page by creating the `.md` and adding its filename to the
-  folder's `.pages`.
-- **`_context/` folders** hold the original docs copied verbatim as source material. They are excluded from
-  the built site (`exclude_docs` in `mkdocs.yml`) but stay in the repo so you can read them on GitHub.
-- **Publishing:** a push to `main` that touches `wiki/**` runs `.github/workflows/deploy-docs.yml`, which
-  builds with `mkdocs build --strict` and deploys to GitHub Pages. A broken link fails the build.
+Project docs are a MkDocs Material wiki under [`wiki/`](wiki/).
 
-## Writing the docs
+- **Live site:** _GitHub Pages URL - add once Pages is enabled (Settings -> Pages -> Source: GitHub Actions)._
+- **How to contribute / fill it out:** see [`wiki/README.md`](wiki/README.md) - structure, local preview,
+  adding images/video/3D models/notebooks, and the per-member assignments.
 
-The wiki is scaffolded as stub pages. Each one has `!!! todo` markers - replace them with real content.
+## Repo layout
 
-**Preview locally** (live-reloads as you edit):
-
-```bash
-python -m venv .venv-docs
-.venv-docs/bin/pip install -r requirements-docs.txt
-.venv-docs/bin/mkdocs serve              # then open http://127.0.0.1:8000
-```
-
-**Where to write**
-
-- Build-guide pages (for builders/newcomers) live under `wiki/guide/`; technical depth under `wiki/reference/`.
-- Each reference page has source material in a sibling `_context/` folder - the old docs, copied verbatim.
-  **Read the `CONSISTENCY-CHECK` note at the top of each `_context/` file first**: many describe designs that
-  changed or were never built. Adapt the content, don't paste it. Do not edit `_context/` files - they are
-  reference only and get deleted once a page is written.
-- Keep code fences language-tagged (` ```cpp `, ` ```python `), use admonitions (`!!! note/warning/tip`),
-  and drop images in an `img/` folder next to the page that uses them.
-
-**Keep the build green**: `mkdocs build --strict` must pass (CI runs it on every push to `main`).
-
-## Adding images, GIFs, video, 3D models & notebooks
-
-Any non-Markdown file you put under `wiki/` is copied to the site as-is. Convention: put assets in an
-`img/` folder next to the page that uses them (shared assets go in `wiki/assets/`). Reference them with a
-path relative to the page.
-
-**Images & GIFs** - a GIF is just an image; it animates on its own. Click-to-zoom (glightbox) is automatic.
-
-```markdown
-![Assembled robot](img/robot.jpg){ width="500" }      <!-- sizing via attr_list -->
-
-<figure markdown="span">
-  ![Leg detail](img/leg.png){ width="300" }
-  <figcaption>Knee joint, exploded view</figcaption>
-</figure>
-```
-
-**Video** - small clips: drop an `.mp4` in `img/` and use an HTML5 tag. Large videos: prefer a YouTube embed
-(don't commit big binaries to git).
-
-```html
-<video controls width="100%"><source src="img/walk.mp4" type="video/mp4"></video>
-```
-
-**3D models (STL viewer)** - the `<model-viewer>` web component shows interactive 3D, but it loads `.glb`,
-not `.stl`. Convert once with the helper at [`wiki/assets/models/convert_stl_to_glb.py`](wiki/assets/models/convert_stl_to_glb.py),
-commit the `.glb`, then on the CAD page:
-
-```html
-<script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-
-<model-viewer src="../assets/models/QuadrupedBody.glb" camera-controls auto-rotate
-              style="width:100%;height:400px;background:#1a1a2e;"></model-viewer>
-```
-
-Quick fallback (no conversion): an iframe to `viewstl.com` pointed at the STL's raw-GitHub URL.
-
-**Interactive notebooks** - `mkdocs-jupyter` is enabled. Drop a `.ipynb` under `wiki/` and add it to the
-folder's `.pages`; it renders as a page with its **saved** outputs. The site has no Python kernel, so
-`ipywidgets` sliders are not live. For the torque analysis: ship the notebook read-only and tell readers to
-run it locally for interactivity, or reimplement the controls as a self-contained Plotly HTML widget embedded
-in an `<iframe>`. (See `WIKI_MIGRATION_PLAN.md` and the torque-analysis stub for the plan.)
-
-**Math & diagrams** - LaTeX via MathJax: inline `\( ... \)`, block `\[ ... \]`. Diagrams via Mermaid: a
-` ```mermaid ` fenced block (graphs, state machines, sequence diagrams). Both are already wired up; see the
-existing stubs for examples. Circuit schematics: export from KiCad as SVG and embed as an image.
-
-## Who writes what
-
-Starting split by theme - reassign names and rebalance as needed. Ferdinand's
-firmware+software block is the heaviest; consider sharing the firmware reference.
-
-| Member | Theme | Pages to write |
-|---|---|---|
-| **Antoine V.** | Design & analysis | `wiki/index.md` (Quick Start); `guide/design/` (concept, how a leg moves, sizing); `reference/simulation/` (torque analysis, torque heatmap) |
-| **Antoine R.** | Parts & 3D printing | `guide/parts/` (BOM, electronics, hardware & ball bearings, printed parts); `guide/printing.md` |
-| **Ilias S.** | Wiring & assembly | `guide/wiring/` (schematic, pinout, battery safety); `guide/assembly.md` (step-by-step build + photos) |
-| **Ferdinand C.** | Firmware & software | `guide/software/` (overview, how-it-works, setup, running); `reference/firmware/` (architecture, kinematics, servo conventions, API, CSV diagnostics) |
-| **Noa D.** | Animation & app | `reference/animation/` (pipeline, Blender rig, URDF pipeline, `.fhc` format, gait design); `reference/remote-control/` (app overview, WebSocket API) |
-
-Full page list and the source-doc mapping: see `WIKI_MIGRATION_PLAN.md` §7.
+- `cad/` - Fusion 360 design files and export add-ins
+- `code/simulation/` - URDF generator + PyBullet sim ([README](code/simulation/README.md))
+- `code/firmware/` - ESP32 firmware (PlatformIO)
+- `code/remote-control-app/` - Expo / React Native control app
+- `animation/` - Blender rig and animation tooling
+- `wiki/` - project documentation (published to GitHub Pages)
