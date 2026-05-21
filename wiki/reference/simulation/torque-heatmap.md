@@ -1,6 +1,6 @@
 # Torque heatmap
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     Direct adapt of `_context/torque-heatmap.md`.
 
 ## What the heatmap shows

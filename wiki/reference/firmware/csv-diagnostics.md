@@ -1,8 +1,8 @@
 # CSV diagnostics
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     Live state observability over HTTP. Adapt from `_context/csv-diagnostics.md`
-    (recent doc, 2026-05 — should adapt cleanly).
+    (recent doc, 2026-05 - should adapt cleanly).
 
 ## Overview
 

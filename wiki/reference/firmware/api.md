@@ -1,6 +1,6 @@
 # API
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     The control API. Merge `_context/api-spec.md` (WebSocket JSON protocol,
     port 81) with `../animation/_context/runtime-api-and-control.md` (gait
     playback control).

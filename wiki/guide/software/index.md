@@ -1,6 +1,6 @@
 # Software
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     Brief overview of the firmware and supporting software, for a reader who
     just built the robot. Sources: `code/README.md` and the nervous-system
     README. Deep detail lives in [Reference → Firmware](../../reference/firmware/index.md).

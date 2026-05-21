@@ -1,6 +1,6 @@
 # Sizing & loads
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     Why the links and servos are sized the way they are, accessibly. The full
     torque model with math and the interactive notebook lives in
     [Reference → Simulation → Torque analysis](../../reference/simulation/torque-analysis.md).

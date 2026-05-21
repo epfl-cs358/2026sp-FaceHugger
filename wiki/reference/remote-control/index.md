@@ -1,6 +1,6 @@
 # Remote control app
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     Overview of the Expo / React Native control app under
     `code/remote-control-app/MyApp/`. New content (no existing doc).
 

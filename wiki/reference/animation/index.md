@@ -1,6 +1,6 @@
 # Animation pipeline
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     Overview of the animation pipeline. Merge
     `_context/readme-animation-pipeline-index.md` (doc index) with
     `_context/readme-animation-scripts.md` (per-script roles + rig anatomy).

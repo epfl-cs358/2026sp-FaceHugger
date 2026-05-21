@@ -1,6 +1,6 @@
 # Firmware
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     Nervous-system architecture reference. Adapt from
     `_context/readme-nervous-system.md` (the "Absolute Geometry v2.0" README).
 
@@ -17,4 +17,4 @@
 ## Module map
 
 !!! todo
-    spinal_cord, leg, servo, movements — what each owns.
+    spinal_cord, leg, servo, movements - what each owns.

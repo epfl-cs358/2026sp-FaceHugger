@@ -1,6 +1,6 @@
 # URDF pipeline
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     How the URDF is generated and what it guarantees. Merge
     `_context/urdf-pipeline.md`, `_context/pipeline-spec.md`, and
     `_context/urdf-conventions.md` (tightly related).

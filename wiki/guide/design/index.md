@@ -1,6 +1,6 @@
 # Design
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     The quadruped concept and how the robot is meant to work, written for a
     newcomer. The *why* behind the build, before any code or math.
 

@@ -1,6 +1,6 @@
 # How it works
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     Accessible walkthrough of the algorithms that make the robot move. This is
     the friendly version; the full treatment is in
     [Reference → Firmware → Kinematics](../../reference/firmware/kinematics.md).
@@ -14,7 +14,7 @@
     \tau_{knee} = F_{tip} \cdot L_3 \cdot \cos\theta_{knee}
     \]
 
-    (placeholder equation — confirm/replace during authoring)
+    (placeholder equation - confirm/replace during authoring)
 
 ## Angle conventions
 
@@ -36,4 +36,4 @@
         Standing --> Idle
     ```
 
-    (placeholder — replace with the real FSM during authoring)
+    (placeholder - replace with the real FSM during authoring)

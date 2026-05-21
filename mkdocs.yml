@@ -1,4 +1,4 @@
-site_name: FaceHugger — Quadruped Robot
+site_name: FaceHugger - Quadruped Robot
 site_description: Documentation for the FaceHugger quadruped robot (EPFL MIT course 2026)
 site_url: https://epfl-cs358.github.io/2026sp-FaceHugger/
 repo_url: https://github.com/epfl-cs358/2026sp-FaceHugger
@@ -17,6 +17,7 @@ strict: true
 # exclude_docs implies not_in_nav for the same files (MkDocs >= 1.6).
 exclude_docs: |
   _context/
+  *.py
 
 validation:
   nav:

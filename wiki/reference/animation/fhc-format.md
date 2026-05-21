@@ -1,7 +1,7 @@
 # `.fhc` clip format
 
-!!! todo "Stub — to be written"
-    The on-board animation clip format and player. The biggest dedup job —
+!!! todo "Stub - to be written"
+    The on-board animation clip format and player. The biggest dedup job -
     merge `_context/onboard-clip-player-design.md` (primary),
     `_context/gait-file-format.md`, `_context/esp32-playback-engine.md`,
     `_context/leg-coordinates.md`, and `_context/api-surface.md`.

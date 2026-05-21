@@ -1,6 +1,6 @@
 # Torque analysis
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     Full torque model. Narrative adapted from `_context/torque-formalization.md`.
     Embed static result images via glightbox; link the notebook for interactive
     use. The accessible summary lives in
@@ -28,5 +28,5 @@
 !!! note "Interactive notebook"
     An interactive version with sliders for link lengths and servo angles is
     available as a Jupyter notebook at
-    `doc/torque-analysis/torque_calculations.ipynb` — run it locally for live
+    `doc/torque-analysis/torque_calculations.ipynb` - run it locally for live
     interaction (the static site has no Python kernel).

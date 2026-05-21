@@ -1,6 +1,6 @@
 # Assembly
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     Step-by-step build instructions with photos. Reads top to bottom: a builder
     should be able to follow it start to finish. Show the finished product.
 

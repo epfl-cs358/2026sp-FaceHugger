@@ -1,6 +1,6 @@
 # Schematic
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     The circuit schematic. Export from KiCad as SVG and embed as an image
     (MkDocs renders SVG inline). Mermaid is not used for EE schematics.
 

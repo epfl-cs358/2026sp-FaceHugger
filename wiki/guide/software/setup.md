@@ -1,6 +1,6 @@
 # Setup
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     Getting the toolchain installed and the firmware flashed. Commands adapted
     from `CLAUDE.md` and `code/firmware/`.
 

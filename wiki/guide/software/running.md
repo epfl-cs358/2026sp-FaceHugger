@@ -1,6 +1,6 @@
 # Running it
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     The commands to drive the robot and the host-side tools.
 
 ## Controlling the robot

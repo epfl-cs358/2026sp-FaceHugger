@@ -1,14 +1,14 @@
 # How a leg moves
 
-!!! todo "Stub — to be written"
-    Accessible explanation of leg motion — the intuition before the math.
+!!! todo "Stub - to be written"
+    Accessible explanation of leg motion - the intuition before the math.
     The full treatment lives in
     [Reference → Firmware → Kinematics](../../reference/firmware/kinematics.md).
 
 ## Joints and what they do
 
 !!! todo
-    Shoulder (yaw), hip, knee — what each joint rotates and the effect on the foot.
+    Shoulder (yaw), hip, knee - what each joint rotates and the effect on the foot.
 
 ## Forward vs inverse kinematics
 

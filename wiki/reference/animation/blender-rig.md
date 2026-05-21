@@ -1,6 +1,6 @@
 # Blender rig
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     The animator-facing rig. Merge `_context/blender-setup-for-rig.md`,
     `_context/blender-rig-and-export.md`, and `_context/api-animation-spec.md`
     (significant dedup expected).

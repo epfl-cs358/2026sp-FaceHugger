@@ -1,12 +1,12 @@
 # Electronics & Wiring
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     How everything is wired: servo channels, power distribution, and the ESP32
     pinout. The circuit diagram is on the [Schematic](schematic.md) page.
 
 !!! warning "Pinout may change"
     The exact pinout is not final and may change as the hardware evolves.
-    Treat the pin assignments here as the current proposal, not a contract —
+    Treat the pin assignments here as the current proposal, not a contract -
     confirm against the firmware `config.h` before wiring.
 
 ## Power distribution

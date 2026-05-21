@@ -1,8 +1,8 @@
 # Servo conventions
 
-!!! todo "Stub — to be written"
+!!! todo "Stub - to be written"
     Servo ID and rotation conventions. Adapt faithfully from
-    `_context/servo-id-convention.md` (well-written source — reproduce closely).
+    `_context/servo-id-convention.md` (well-written source - reproduce closely).
 
 ## Servo numbering
 
