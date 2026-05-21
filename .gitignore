@@ -864,3 +864,8 @@ animation/fh_rigged_latest.blend
 animation/exported_gaits/
 
 .claude/settings.local.json
+
+# The Python `parts/` ignore (zc.buildout) above accidentally matches the
+# wiki build-guide's Parts & Materials section, which is documentation.
+!wiki/guide/parts/
+!wiki/guide/parts/**
