@@ -105,6 +105,11 @@ _DELTA_THRESHOLD_DEG = 5.0
 # electrical backstop, this catches bad animation before it ships.
 FRAME_DELTA_WARN_DEG = 20.0
 
+# Recommended max authoring fps for robot export. Higher = more WS packets
+# per second with no motion benefit for these slow clips. Not enforced —
+# the animator sets fps in Output Properties; we only nudge.
+RECOMMENDED_MAX_FPS = 12
+
 # Heatmap colour thresholds (degrees).
 _HEATMAP_MID_DEG = 5.0
 _HEATMAP_HIGH_DEG = 20.0
@@ -1711,6 +1716,12 @@ def bake_clip(clip_name, context):
     frame_start = int(action.frame_range[0])
     frame_end = int(action.frame_range[1])
     fps = scene.render.fps / scene.render.fps_base
+    if fps > RECOMMENDED_MAX_FPS:
+        print(
+            f"WARNING: scene fps is {fps:.0f}; consider lowering to "
+            f"{RECOMMENDED_MAX_FPS} in Output Properties for robot export "
+            f"(fewer WebSocket packets, same motion)."
+        )
 
     original_frame = scene.frame_current
     rows = []
