@@ -1954,12 +1954,11 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False, write=True):
             ' call fhStop() when done.");\n'
             "  _timer = setInterval(playFrame, FRAME_MS);\n"
             "};\n"
-            "ws.onerror = (e) => {\n"
-            '  console.error("FaceHugger: WebSocket error. On the robot '
-            "Wi-Fi (FaceHugger_Net, ws://192.168.4.1:81)? Is this page http:// "
-            '(NOT https:// — ws:// is blocked from https pages)?", e);\n'
+            "ws.onerror = () => {\n"
+            '  alert("FaceHugger: could not connect to " + ws.url +\n'
+            '        " - check the robot IP / Wi-Fi network and reload.");\n'
             "};\n"
-            'ws.onclose = () => { fhStop(); console.log("FaceHugger: socket closed."); };'
+            'ws.onclose = (e) => { if (!e.wasClean) console.warn("FaceHugger WS closed", e.code); };'
         )
 
     js = f"""// FaceHugger clip: {clip_name}
@@ -1998,6 +1997,12 @@ const CLIP = [
 // convention can push the converted angle out of range).
 const clamp = (v) => Math.max(0, Math.min(180, v | 0));
 
+// Delta-encode: only emit a channel when its value changed since the last
+// frame. Cuts redundant traffic and ends the hold-at-end resend flood
+// (a held pose = unchanged angles = nothing sent). Reset to {{}} on restart
+// so the first frame after a (re)start always sends all 12 channels.
+let _last = {{}};
+
 let _i = 0;
 let _timer = null;
 {transport_decl}
@@ -2013,14 +2018,23 @@ function playFrame() {{
   // End of clip: in LOOP mode wrap to the start; otherwise clamp to
   // the last frame and keep re-sending it (hold-at-end per spec §3.1).
   if (_i >= CLIP.length) {{
-    _i = LOOP ? 0 : (CLIP.length - 1);
+    if (LOOP) {{
+      _i = 0;
+      _last = {{}};  // reset delta cache so loop restart re-sends all channels
+    }} else {{
+      _i = CLIP.length - 1;
+    }}
   }}
   const frame = CLIP[_i++];
   {open_guard}
   for (const leg of ["fr", "fl", "br", "bl"]) {{
     const angles = frame[leg];
     for (let j = 0; j < 3; j++) {{
-      const msg = {{ "T": 4, "id": LEG_IDS[leg], "servo_id": j, "a": clamp(angles[j]) }};
+      const a = clamp(angles[j]);
+      const key = leg + ":" + j;
+      if (_last[key] === a) continue;
+      _last[key] = a;
+      const msg = {{ "T": 4, "id": LEG_IDS[leg], "servo_id": j, "a": a }};
       {send_call}
     }}
   }}

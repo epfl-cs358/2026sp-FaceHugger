@@ -104,6 +104,8 @@ def main() -> int:
         f"FRAME_MS == round(1000/fps) ({expected_frame_ms})": _frame_ms_ok(
             js, expected_frame_ms
         ),
+        "delta-encode skip-on-unchanged present": "_last" in js,
+        "connection-failure alert present": ("onerror" in js and "alert(" in js),
     }
     for name, ok in checks.items():
         print(("PASS " if ok else "FAIL ") + name)
