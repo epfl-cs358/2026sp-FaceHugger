@@ -641,6 +641,52 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ---
 
+## Deferred tasks (tracked, NOT yet implemented)
+
+These were added after T1–T9 landed. Note the ordering: **T13 → T12 → T11**, and **T10** is
+independent. Each gets fully fleshed (bite-sized TDD steps) before implementation.
+
+### T10 — Robot IP configurability
+The WS template hardcodes `192.168.4.1`, but the robot IP varies by network (currently `.4.2`).
+- Add `bpy.context.scene.fh_robot_ip` (`StringProperty`, default `"192.168.4.1"`); expose as a
+  text field in the N-panel.
+- `to_js` reads the IP from this property instead of the hardcoded literal.
+- Update T9's IP verification to check the `.js` against the scene-property value, not a
+  hardcoded string.
+
+### T11 — Heatmap rework (delta + static torque)
+Replace the existing torque approximation with two honest layers (drop mass/gravity torque math —
+it gave false precision):
+- **Red:** frame-to-frame delta exceeds `FRAME_DELTA_WARN_DEG` (reuse the *same* constant as the
+  console warning so they're always consistent).
+- **Orange:** joint angle within 10% of its URDF limit.
+- **Green:** neither.
+- If a `torque_report.json` exists for the clip (produced by T12), use the **real PyBullet
+  torques** for colouring instead, against the **2.94 Nm** servo limit from the URDF.
+
+### T12 — PyBullet clip validator
+- Add `code/simulation/validate_clip.py` + a `facehugger.py` subcommand:
+  `python facehugger.py validate --clip <name> --out <json>`.
+- Loads the URDF into PyBullet with full physics, feeds joint angles from the exported CSV frame
+  by frame, reads `appliedJointMotorTorque` from `p.getJointState()` after each `stepSimulation()`,
+  writes a per-joint per-frame torque report as JSON. Flags frames exceeding `servo_force`
+  (2.94 Nm from config).
+- The Blender add-on gets a **Validate** button that runs this as a subprocess using the **conda**
+  env Python (not `uv` — PyBullet needs conda for C deps). Conda Python path read from
+  `bpy.context.scene.fh_conda_python` (`StringProperty`, default `""`, UI hint: "path to conda env
+  Python, e.g. `~/miniconda3/envs/facehugger/bin/python`"). After the subprocess completes, the
+  add-on reads the JSON and updates the heatmap.
+- **Blocking unknown (resolve in T13 first):** the CSV angle space. PyBullet needs joint-space
+  **radians**; if the CSV stores servo-space **degrees**, a reverse-`translateToServo` step is
+  required. Confirm before implementing T12.
+
+### T13 — Information gathering for T12 (DO BEFORE T12 — read-only, no code)
+- Read the current CSV export format in `fh_clip_panel.py` (`to_csv` ~1802 / `_bake_and_write`).
+  Confirm whether exported angles are joint-space radians or servo-space degrees.
+- `validate_clip.py` does not exist yet — confirm how the existing `simulate.py` / `gaits.py`
+  feed joint angles to PyBullet so T12 follows the same conventions.
+- Write findings to `tmp/validate-clip-findings.md` (local scratch).
+
 ## Self-review checklist (run before handoff)
 - Spec coverage: bake fix (T2) ✓, headless regression (T1) ✓, delta warning (T3) ✓, JS verify
   (T4) ✓, fps warn (T5) ✓, delta encode (T6) ✓, preview toggle (T7) ✓, VCS (T8) ✓, re-export
