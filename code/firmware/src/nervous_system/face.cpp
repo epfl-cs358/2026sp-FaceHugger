@@ -2,24 +2,26 @@
 #include <Wire.h>
 
 // Initialize the display object connected to standard I2C pins
-Face::Face() : 
+Face::Face() :
     display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1),
     currentState(EYES_FRONT),
+    ready(false),
     lastFrameMs(0),
     confusedToggle(false),
     needsRedraw(true)
 {}
 
-void Face::begin() {
-    // 0x3C is the standard I2C address for 128x64 OLEDs
+bool Face::begin() {
     if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
         Serial.println(F("SSD1306 allocation failed"));
-        return; 
+        return false;
     }
-    
+    ready = true;
+
     display.clearDisplay();
     display.drawBitmap(0, 0, eyes_front, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
     display.display();
+    return true;
 }
 
 void Face::setState(EyeState newState) {
@@ -30,7 +32,8 @@ void Face::setState(EyeState newState) {
 }
 
 void Face::update() {
-    // Handle the non-blocking "Confused" jitter animation
+    if (!ready) return;
+
     if (currentState == EYES_CONFUSED) {
         if (millis() - lastFrameMs > 300) { // Swap frames every 300ms
             confusedToggle = !confusedToggle;

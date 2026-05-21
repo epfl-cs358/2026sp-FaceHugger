@@ -20,17 +20,17 @@ class Face {
 private:
     Adafruit_SSD1306 display;
     EyeState currentState;
-    
-    // Animation timing variables
+    bool ready;
+
     unsigned long lastFrameMs;
-    bool confusedToggle; 
+    bool confusedToggle;
     bool needsRedraw;
 
 public:
     Face();
-    void begin();
+    bool begin();
     void setState(EyeState newState);
-    void update(); // Non-blocking loop
+    void update();
 };
 
 #endif
