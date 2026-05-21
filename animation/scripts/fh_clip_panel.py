@@ -99,6 +99,12 @@ _JOINT_AXIS_EULER_IDX = 2  # bone-local Z, all 12 bones
 # by more than this threshold in a single frame step.
 _DELTA_THRESHOLD_DEG = 5.0
 
+# Authoring-time torque guard: warn if any joint moves more than this many
+# degrees between consecutive baked frames (fast keyframe = mechanical shock
+# on hardware). Tunable; not a hard limit — the firmware clamp is the
+# electrical backstop, this catches bad animation before it ships.
+FRAME_DELTA_WARN_DEG = 20.0
+
 # Heatmap colour thresholds (degrees).
 _HEATMAP_MID_DEG = 5.0
 _HEATMAP_HIGH_DEG = 20.0
@@ -117,6 +123,24 @@ _heatmap_prev_angles: dict = {}
 _heatmap_saved_obj_color: dict = {}  # mesh name -> prior obj.color tuple
 _heatmap_saved_shading: list = []  # [(View3DShading, prior color_type)]
 _heatmap_hip_gap_warned = False
+
+
+def _warn_frame_deltas(rows):
+    """Print a console WARNING for each joint that moves more than
+    FRAME_DELTA_WARN_DEG between consecutive frames. Returns the number of
+    warnings emitted (for tests)."""
+    n = 0
+    for prev, cur in zip(rows, rows[1:]):
+        for bone in JOINT_BONES:
+            delta = abs(cur[bone] - prev[bone])
+            if delta > FRAME_DELTA_WARN_DEG:
+                print(
+                    f"WARNING: {bone} moves {delta:.0f}° between frame "
+                    f"{prev['frame']} and {cur['frame']} "
+                    f"(threshold: {FRAME_DELTA_WARN_DEG:.0f}°)"
+                )
+                n += 1
+    return n
 
 
 # ---------------------------------------------------------------------------
@@ -1705,6 +1729,7 @@ def bake_clip(clip_name, context):
         _autocomplete_clip(prev_clip, context)
         assign_clip(prev_clip)
         context.view_layer.update()
+    _warn_frame_deltas(rows)
     return rows
 
 

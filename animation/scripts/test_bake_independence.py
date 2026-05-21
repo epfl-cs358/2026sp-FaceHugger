@@ -60,8 +60,24 @@ def main() -> int:
         f"bake('{target}') with active='{other}' vs active='{target}': "
         f"{'MATCH' if ok else 'DIFFER'} ({len(pay_a)} vs {len(pay_b)} frames)"
     )
-    print("RESULT " + ("GREEN" if ok else "RED: bake_clip depends on active clip"))
-    return 0 if ok else 1
+    if not ok:
+        print("RESULT RED: bake_clip depends on active clip")
+        return 1
+
+    # Frame-delta warning fires on a synthetic > threshold jump.
+    fake = [
+        {"frame": 0, "time_ms": 0, **{b: 0.0 for b in mod.JOINT_BONES}},
+        {"frame": 1, "time_ms": 33, **{b: 0.0 for b in mod.JOINT_BONES}},
+    ]
+    fake[1]["fl_link1"] = mod.FRAME_DELTA_WARN_DEG + 5.0
+    nwarn = mod._warn_frame_deltas(fake)
+    print(f"delta-warning fired {nwarn} time(s) on synthetic jump")
+    if nwarn != 1:
+        print("RESULT RED: frame-delta warning did not fire as expected")
+        return 1
+
+    print("RESULT GREEN")
+    return 0
 
 
 if __name__ == "__main__":
