@@ -11,6 +11,15 @@ Maps to:        reference/animation/fhc-format.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `doc/gait-design/specs/gait-file-format.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [stale] The .gait JSON format and its compiled C headers (gait_types.h / gait_walk_forward.h / gait_registry.h) were never built — no *.gait files, no gait_to_c.py, no gait_validator.py in repo. This doc/gait-design/specs/ tree is superseded by doc/animation-pipeline/ (CLAUDE.md).
+- [stale] §2 angle range 0.0–270.0 "DSS-M15S physical range" contradicts config.h (180° servos, PCA9685 MIN_PULSE 150 / MAX_PULSE 600). neutral_pose flat-135 is wrong; neutral is per-leg/per-joint (convention.json neutral_joint_deg).
+- [drift] servo_id 0..11 layout matches the SERVO_ID_CONVENTION.md PROPOSAL but firmware addresses servos via LEG_SERVO_CHANNEL[leg][servo] (config.h); the flat-12 ordering is not confirmed firmware-side.
+- [drift] The implemented export is angle-space joint degrees in .js / clips_all.h (FhClipFrame{t_ms, a[12]}), pre-scaled 2/3, not this sparse-per-servo .gait JSON. See doc/animation-pipeline/onboard-clip-player-design.md §5.
+- [todo]  The replacement on-board clip storage is the foot-XYZ .fhc format (leg-coordinates.md §8) — also design-only, not implemented.
+-->
 # Spec: Gait File Format
 
 > Defines the `.gait` JSON intermediate format and the compiled C header format.

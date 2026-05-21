@@ -11,6 +11,17 @@ Maps to:        reference/firmware/servo-conventions.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `animation/SERVO_ID_CONVENTION.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    STATUS: PROPOSAL is still accurate. Firmware has no SERVO_CONFIG[] array; the actual channel map is LEG_SERVO_CHANNEL[leg][joint] in code/firmware/src/shared/config.h (PCA channels FR={8,9,10}, FL={12,13,14}, BR={4,5,6}, BL={0,1,2}) — i.e. firmware indexes by (leg_id,servo_id), not a flat 0..11 servo_id. The proposed flat numbering is not yet committed anywhere.
+- [ok]    §"Firmware leg ID translation" table matches movements.h LegId (FR=0,FL=1,RR=2→br,RL=3→bl) and MERGE_AND_CONVENTION §5.
+- [stale] export_gait.py does not exist in the repo (searched; no match). The "export script reads rotation_euler[2] → servo_id → .gait" workflow is unbuilt; treat as design intent.
+- [stale] servo_mapping.yaml does not exist anywhere in the repo (searched). The whole "bridge role" / "direction field" sections describe a file that has not been created — Phase B must flag it as not-yet-existing, not as current state.
+- [drift] firmware servo_id ordering differs from the proposal even within a leg: config.h uses servo_id 0=Hip, 1=Thigh, 2=Knee (SERVO_HIP/THIGH/KNEE), which maps link2=hip/thigh, link3=knee — the proposal's link1=shoulder/link2=hip/link3=knee naming is consistent, but cross-check joint↔servo_id naming when SERVO_CONFIG[] is authored.
+- [ok]    Cross-ref targets exist: doc/gait-design/specs/{blender-rig-and-export,gait-file-format,esp32-playback-engine}.md all present (note: CLAUDE.md flags doc/gait-design/ as superseded by doc/animation-pipeline/).
+- [todo] The EditBone.align_roll(joint.axis) rig claim and "direction is hardware-calibration-only" rule depend on the unbuilt rig/exporter — leave for Phase B once the animation export path lands.
+-->
 # Servo ID Convention
 
 > **STATUS: PROPOSAL** — pending firmware confirmation against

@@ -11,6 +11,16 @@ Maps to:        reference/firmware/api.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `code/API_SPEC.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    Transport: WebSocket port 81 (network.cpp:10 WebSocketsServer(81)); T-values match data.h CommandType (MOVE=1,STATE=2,POSE=3,CALIBRATE=4,GAIT_MODE=5,ACTION_SELECTION=6,TELEMETRY=10). T:4 calibrate keys id/servo_id/a + LEG_SERVO_CHANNEL[id][servo_id] confirmed in network.cpp:90-98.
+- [drift] T:1 Manual Movement key is wrong. Doc table says key 'd' (int, IDs 0..6). Firmware reads doc["dir"] (network.cpp:105) and app sends {T:1, dir: ...} (api-messages.tsx). The wire key is "dir", not "d".
+- [drift] Direction values are strings, not int IDs. app/api-types.tsx DirectionVector = "FW"/"BW"/"FW_R"/"FW_L"/"BW_R"/"BW_L"/"R"/"L"/"STOP". Doc's numbered 0..6 vector list does not match; also app adds R/L (in-place turn) not in doc's enumeration.
+- [drift] Gait Mode IDs disagree. Doc: TROT=0, CRAB=1, CRAWL=2. Real GaitType (movements.h): NONE=0, WALK=1, TROT=2, CRAB=3; app GaitMode TROT=2/CRAB=3. There is no CRAWL; T:5 'g' is validated against [GAIT_NONE..GAIT_CRAB] in network.cpp:119.
+- [drift] FSM has a 5th state not in doc's T:2 table: STATE_REST=4 (data.h). network.cpp CMD_STATE maps IDLE→rest(), WALK→walk(), ACTION→wallFlip(); guard only allows newState<=STATE_FAILSAFE so REST isn't reachable via T:2.
+- [todo] T:3 body-pose (h/p/r), T:10 telemetry shape, and §Safety timeout/voltage gate are not implemented in network.cpp's handler (no T:1-with-h/p/r, no telemetry emit) — left for Phase B to confirm against firmware loop/sensors.
+-->
 # FaceHugger API Specification v1.1
 
 This document defines the JSON-based communication protocol between the **Web Dashboard** and the **ESP32 Firmware**.

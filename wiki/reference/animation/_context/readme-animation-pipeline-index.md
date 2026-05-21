@@ -12,6 +12,15 @@ Maps to:        reference/animation/index.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `doc/animation-pipeline/README.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    All 6 sibling links (firmware-research.md, leg-coordinates.md, urdf-conventions.md, animation-pipeline-roadmap.md, api-surface.md, animation-library-pipeline-blender-setup-for-animation-rig.md) still exist in the ORIGINAL doc/animation-pipeline/ dir, so relative links resolve from the original location. They will break in the published wiki page unless repointed — Phase B.
+- [ok]    Cross-dir links resolve from original: code/API_SPEC.md, code/simulation/kinematics.py, code/simulation/docs/API_ANIMATION_SPEC.md, animation/scripts/urdf_to_blender_rigged.py, animation/SERVO_ID_CONVENTION.md all present.
+- [ok]    "Implementation: not yet started" matches reality — no T1-T10 firmware artifacts exist (no leg_ik/fhc_loader/bezier_eval/gait_engine in code/firmware/src/). CLAUDE.md concurs.
+- [ok]    "replaces legacy .gait + textbook IK in kinematics.cpp, scheduled for removal" matches CLAUDE.md.
+- [drift] kinematics.py described as "ported to C in firmware" — the C port (leg_ik.{h,cpp}, roadmap T1) does not exist yet; current firmware kinematics.cpp is the legacy/wrong-rig one. Aspirational, not done.
+-->
 # Animation Pipeline — Documentation Index
 
 Design + research + roadmap for the FaceHugger's animation pipeline:

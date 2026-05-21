@@ -11,6 +11,15 @@ Maps to:        reference/firmware/api.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `doc/gait-design/specs/runtime-api-and-control.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [stale] Whole doc is from doc/gait-design/specs/ which CLAUDE.md marks "superseded by doc/animation-pipeline/"; the reorg plan deletes doc/gait-design/ outright. Treat entire spec as historical.
+- [stale] Describes a REST API (POST /gait, GET /gait/status, /gait/list, /gait/clear). The actual firmware uses a WebSocket JSON protocol on port 81 (code/API_SPEC.md), not REST. No /gait endpoints exist in network.cpp. Fundamental mismatch — the published "reference/firmware/api.md" should be sourced from code/API_SPEC.md, NOT this doc.
+- [stale] Sibling link esp32-playback-engine.md lives under doc/gait-design/specs/ (same superseded tree); the on-board engine design is now doc/animation-pipeline/onboard-clip-player-design.md.
+- [stale] §6 "gait playback engine on a hardware timer interrupt at 50 Hz" and "GAIT_REGISTRY" do not match current firmware (spinal_cord.cpp tickGait driven from update() loop; GAITS[] not GAIT_REGISTRY). Design fiction, never built this way.
+- [todo]  Maps-to target reference/firmware/api.md should be re-derived from code/API_SPEC.md (WebSocket T:1..T:10 commands) in Phase B; do not migrate this REST spec verbatim.
+-->
 # Spec: Runtime API & Control Interface
 
 > Defines the REST API, command queuing, and control flow between the app/controller and the ESP32 gait engine.

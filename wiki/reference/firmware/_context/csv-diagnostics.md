@@ -11,6 +11,17 @@ Maps to:        reference/firmware/csv-diagnostics.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `code/firmware/docs/csv-diagnostics.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    24-column CSV header matches csv_log.cpp kHeader byte-for-byte (millis..bl_knee), incl. fr/fl/br/bl ordering; kColumnCount=24, kMaxRowBytes=192 (csv_log.h:27,40).
+- [ok]    Tunables in diagnostics.h: kSampleIntervalMs=200, kBufBytes=8*1024, kHttpPort=80 (diagnostics.h:14-24). HTTP routes GET / , GET /log, POST /log/clear all present in diagnostics.cpp:49-51; /log/clear returns "OK\n".
+- [ok]    Enum legends correct: robot_state 0..4 incl. 4=REST (data.h RobotState); gait 0=NONE,1=WALK,2=TROT,3=CRAB (movements.h GaitType).
+- [drift] Doc says POST /log/clear returns "200 OK\n"; handleClear() actually sends body "OK\n" with HTTP 200 (diagnostics.cpp:33) — fine, but the literal body is "OK\n" not "200 OK\n".
+- [drift] Doc names module file "src/brain/diagnostics.h" tunables and the pure core "csv_log.{h,cpp}, csv_log_ring.inl" — all present. But the original-path header (line 3) points at code/firmware/docs/csv-diagnostics.md, which exists; OK.
+- [todo] "~140 bytes/row", "~11.7 s window", and ESP32 "~320 KB / ~14% used" figures are estimates not derivable from source here — leave for Phase B / on-hardware measurement.
+- [todo] Ring eviction edge-cases ("evict just enough", multi-row eviction, row>capacity dropped) are claimed unit-tested in test/test_csv_log — not re-run in this audit.
+-->
 # CSV Diagnostics over HTTP
 
 Live state observability for the FaceHugger ESP32. The robot keeps a rolling

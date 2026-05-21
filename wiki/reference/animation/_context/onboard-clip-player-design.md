@@ -11,6 +11,16 @@ Maps to:        reference/animation/fhc-format.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `doc/animation-pipeline/onboard-clip-player-design.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [todo]  Whole design is unimplemented: no tickClip/playClip/CLIPS[]/clips_all.h anywhere in code/firmware/src/ (grep empty). Matches CLAUDE.md ".fhc engine implementation has not started" / Phase B.
+- [stale] Proposed CMD_PLAY_CLIP at "next free T:6 with {c:<id>}" — slot T:6 is now TAKEN. data.h has CMD_ACTION_SELECTION=6; network.cpp:128 dispatches it (payload {a:1}=INVERT_ROBOT → invertRobot), and STATE_ACTION=2 maps to spinalCord.wallFlip() (network.cpp:84, spinal_cord.cpp:86). A clip player would need a different command number / to share STATE_ACTION with wallFlip.
+- [ok]    2/3 pre-scale claim holds: convention.json scale=0.6667; firmware tickGait (spinal_cord.cpp:142) + translateToServo (spinal_cord.cpp:212,330) confirm the math-space→servo split.
+- [ok]    STATE_ACTION slot exists and is real (data.h STATE_ACTION=2), as the design assumes — though it is now occupied by wallFlip, not "empty" as §2 states.
+- [drift] §2 context pins firmware @ origin 3899ebc and "STATE_ACTION dispatch is empty / CMD_POSE=3 unhandled". Current main: STATE_ACTION→wallFlip is wired; CMD_POSE=3 still defined (data.h:8). Context snapshot is stale.
+- [drift] §11/§2 reference PR #72 as the exporter PR; per urdf-conventions cross-check PR #72 was actually a generate_urdf link-fix PR. Verify PR mapping before acting on §11.
+-->
 # On-board one-shot animation clip player + bundled export format
 
 **Status:** design — awaiting user review before implementation planning

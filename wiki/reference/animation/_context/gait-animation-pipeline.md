@@ -11,6 +11,16 @@ Maps to:        reference/animation/gait-design.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `doc/gait-design/gait-animation-pipeline.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [stale] Whole .gait pipeline (export_gait.py, gait_to_c.py, gait_validator.py, *.gait, gait_player.c) never implemented — none exist in repo. This entire doc/gait-design/ tree is superseded by doc/animation-pipeline/ per CLAUDE.md.
+- [stale] §5/§8 servo_mapping.yaml at code/blender/servo_mapping.yaml does not exist; bone names FL_hip/FL_knee/FL_shoulder and per-channel index (0=X/2=Z) are obsolete — current rig uses fl_link1/2/3 with uniform bone-local Z (align_roll), conversion via fh_clip_panel.py _frame_to_servo + animation/convention.json.
+- [stale] §8 project file structure (code/blender/, code/tools/, code/gaits/, gait_*.h) does not match the repo (animation/scripts/, animation/exported_gaits/, code/firmware/src/).
+- [stale] 270° range / 135° flat neutral / `270 - angle` inversion contradict config.h (180° servos, PCA9685, MIN_PULSE 150/MAX_PULSE 600); neutral is per-leg per-joint in convention.json.
+- [drift] §16 REST API (/gait POST) is superseded by the WebSocket T-command protocol in code/API_SPEC.md (T:1/T:2/T:5 etc.), not REST endpoints.
+- [todo]  Self-labelled "pre-implementation design document"; treat all of it as historical design, replaced by the .js/clips_all.h route (onboard-clip-player-design.md) and the .fhc design (leg-coordinates.md).
+-->
 # FaceHugger — Blender → ESP32 Gait Animation Pipeline
 
 > Reference notes for the `blender-gait-export` issue.  

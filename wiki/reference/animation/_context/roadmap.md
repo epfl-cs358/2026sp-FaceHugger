@@ -11,6 +11,16 @@ Maps to:        reference-only
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `doc/animation-pipeline/animation-pipeline-roadmap.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [todo]  T1-T10 all unstarted. None of the named firmware outputs exist: no leg_ik.{h,cpp}, fhc_format.h/fhc_loader.cpp, bezier_eval.{h,cpp}, gait_engine.{h,cpp}, servo_writer.{h,cpp}, leg_geom.h in code/firmware/src/nervous_system/; no export_fhc.py / generate_leg_geom_h.py. Matches CLAUDE.md "implementation has not started".
+- [ok]    T1 input link kinematics.py:135 ik_v2 is exact — `def ik_v2(cfg, foot_body, leg_id)` is at generate line 135 (kinematics.py:135).
+- [ok]    "Status of existing pieces" table accurate: urdf_to_blender_rigged.py exists/working; kinematics.py ik_v2 canonical (used at kinematics.py:313 leg_ik=ik_v2); firmware kinematics.cpp present but legacy; .gait legacy. Servo writer is in servo.cpp (firmware), as the ⚠ row states.
+- [stale] Sibling relative links (leg-coordinates.md, firmware-research.md, api-surface.md) resolve only from original doc/animation-pipeline/ — all siblings still present there, but will break in the published wiki location.
+- [drift] T1 signature shows `JointAngles leg_ik(int leg_id, FootPos foot_body, int8_t pole_sign)` — design-only, no implementation to check against; left for Phase B authors.
+- [drift] T8 lists T:1/T:3/T:5/T:2 dispatch; firmware now also has CMD_ACTION_SELECTION=6 (post-dates this roadmap) — fold into the command map when T8 is planned.
+-->
 # Animation Pipeline — Roadmap and Work Segmentation
 
 Companion to [`leg-coordinates.md`](leg-coordinates.md) and

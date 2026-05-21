@@ -11,6 +11,16 @@ Maps to:        reference/animation/urdf-pipeline.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `code/simulation/docs/PIPELINE_SPEC.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    §3 mount-point keys (LegMountPointFL/FR/BR/BL) match facehugger_config.yaml legs[].mount_point exactly (yaml lines 74-87).
+- [ok]    §1/§7/§10 side L/R + rpy_z assignment matches yaml: FL=L, BR=L, FR=R, BL=R; R-pair axis negate + limit negate-and-swap implemented at generate_urdf.py:1039/1042.
+- [drift] §4 zero-angle: spec says "0° = leg pointing along -X (FL base)". Current generator uses Convention-A per-leg shoulder rest derived from fl_rest_rad = -π/4 (-45°), not 0° (generate_urdf.py:166-190 _shoulder_rest_for). Spec predates Convention A; cross-ref MERGE_AND_CONVENTION.md §0/§4.
+- [drift] §7/§4 "Phase T (joint capture) ... reads limits directly from CAD export, no manual entry in yaml" is framed as future; facehugger_config.yaml still carries shoulder_limits_deg override (yaml line 63). Generator prefers CAD-sourced with yaml fallback — matches §7 prose but the "no manual entry" aspiration is not the current state.
+- [drift] §10 last row references simulate.py shoulder_neutral_deg=0° per leg — superseded by the per-leg Convention-A rest above; treat as historical.
+- [todo]  Doc is the CAD-decisions spec; mostly stable. Phase B: reconcile the 0°-zero-angle framing with Convention A before publishing.
+-->
 # FaceHugger URDF Pipeline — CAD Decisions & Spec
 
 This document captures all grilling answers and design decisions for the

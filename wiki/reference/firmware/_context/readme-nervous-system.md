@@ -12,6 +12,16 @@ Maps to:        reference/firmware/index.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `code/firmware/src/nervous_system/README.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    File layout (spinal_cord/kinematics/movements/leg/servo .h/.cpp) matches code/firmware/src/nervous_system/; servo.cpp maps 0-180° → MIN_PULSE/MAX_PULSE PWM via PCA9685 as described.
+- [ok]    "constrain(0,180)" safety + "90 = horizontal" mapping present in leg.cpp setPose() (servoThigh/Knee = 90±target).
+- [drift] Diagonal-pair claim is wrong: doc says "FR & BL share 90-Math, FL & BR share 90+Math". leg.cpp setPose() groups id==1||id==3 (FL + LEG_RL=bl) for "90+", and id 0/2 (FR + LEG_RR=br) for "90-". So code pairs FL+BL and FR+BR, not FR+BL / FL+BR.
+- [drift] Shoulder global-compass values are right (FR+45, FL+135, BR-45, BL-135 — match leg.cpp shoulderOffset), but leg.cpp inline comment mislabels id==3 as "Back-Right (2)" — it is LEG_RL=back-left. Doc's compass table is correct; firmware comment is the buggy one.
+- [stale] "Math Brain ... kinematics.cpp" still carries hardcoded L1=0.080/L2=0.075/L3=0.077 and mount (±0.040,±0.050,0.025) (kinematics.cpp:10-25) — the OLD CAD geometry that MERGE_AND_CONVENTION §6 rejects in favour of URDF (L1≈0.058/L2≈0.095/L3≈0.097). Firmware IK is not URDF-derived.
+- [todo] Milestone v1/v2 status, "Superman pose" calibration claim, and CoM-sway next-steps are narrative — not code-verifiable here.
+-->
 # 🦵 Nervous System Abstraction (Absolute Geometry) v2.0
 
 This directory serves as the "Peripheral Nervous System" of the FaceHugger quadruped. It bridges the gap between pure mathematical motion planning and the quirky physical reality of hobby servo motors. 

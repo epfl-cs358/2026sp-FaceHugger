@@ -11,6 +11,16 @@ Maps to:        reference/firmware/kinematics.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `code/simulation/docs/MERGE_AND_CONVENTION.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    §0/§4 shoulder-rest formula matches generate_urdf.py _shoulder_rest_for() (FR=-FL, BL=-wrap_pi(FL+π), BR=+wrap_pi(FL+π); generate_urdf.py:166-189). URDF origins confirm FL=-45°, FR=+45°, BL=-135°, BR=+135°. (NB: facehugger_config.yaml's comment and CLAUDE.md have BL/BR signs swapped — the doc here is the correct one.)
+- [ok]    §3 joint rename is real: URDF uses {leg}_link{1,2,3}_joint (generated/facehugger.urdf), not _shoulder/_hip/_knee. §5 firmware↔URDF leg-id table matches movements.h LegId (FR=0,FL=1,RR=2,RL=3) and URDF bl/br naming.
+- [ok]    §6 "theirs hardcoded" values (L1=0.080,L2=0.075,L3=0.077; mount ±0.040/±0.050/0.025) are exactly what firmware kinematics.cpp:10-25 still uses — confirming they pre-date the current CAD; sim kinematics.py is now URDF-derived (build_config).
+- [drift] §7 table marks shoulder_neutral_deg "KEEP if non-zero", but facehugger_config.yaml dropped it entirely (yaml comment lines 56-68: "All three former yaml fields below were dropped"). rpy_z_deg and shoulder_limits_deg drops ([DROP] rows) are confirmed; the neutral row is now stale.
+- [drift] §8 "Outstanding work" is partly done: STANCE_DEG/Convention-A landed (constants.py, generate_urdf.py); teleop.py/terrain.py still NotImplementedError stubs (task #4 open). Treat the task table as a historical snapshot.
+- [todo] §1 merge-decision table (OURS/DELETED per file, commit 25951ae) is git-history provenance — not re-verified against the merge commit here.
+-->
 # MERGE_AND_CONVENTION
 
 Captures the `feat/urdf-pipeline` ↔ `origin/main` merge decisions and locks

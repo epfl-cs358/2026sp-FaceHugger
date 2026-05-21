@@ -12,6 +12,16 @@ Maps to:        reference/firmware/kinematics.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `code/simulation/README.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    blender subcommand: `--rigged`/`--headless`/`--save`/`--reset`/`--blender-version` flags all match facehugger.py cmd_blender (L137-168) + argparse (L202-231). PR #72 changes present.
+- [ok]    Mode-dependent --save (L91-96): rigged→`animation/fh_rigged_latest.blend`, placement-only→no persist, matches cmd_blender L150-156 + the placement-save guard comment L140-149.
+- [ok]    `--reset` row (L89): matches `args.reset` guard in cmd_blender L160 (rigged-only reopen).
+- [stale] `view` subcommand + view_urdf.py (L33,62,117-126,164): still present in code (facehugger.py cmd_view L133), but slated for removal per doc/reorg-plan-2026-05-13.md §4 — replacement is `facehugger.py sim`.
+- [drift] Prereqs (L38) list `numpy`; requirements.txt only pins `pybullet>=3.2` + `pyyaml>=6.0` (numpy comes transitively via pybullet, not pinned).
+- [todo]  STL count "29 STL visuals" (L80) and "12 servo visuals" (L134) not re-counted against generated/facehugger.urdf — left for Phase B.
+-->
 # FaceHugger simulation pipeline
 
 End-to-end: from the Fusion 360 design, produce a URDF that's faithful to the

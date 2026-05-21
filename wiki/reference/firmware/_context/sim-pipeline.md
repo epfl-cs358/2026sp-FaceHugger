@@ -11,6 +11,17 @@ Maps to:        reference/firmware/kinematics.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `code/simulation/docs/SIM_PIPELINE.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [drift] Joint names are stale. Doc steps 4a-c and §C use fl_shoulder_joint / fl_hip_joint / fl_knee_joint. The actual URDF (generated/facehugger.urdf) emits fl_link1_joint / fl_link2_joint / fl_link3_joint (×4 legs) — see MERGE_AND_CONVENTION §3 rename. name[:2]→leg still holds; "shoulder|hip|knee" by name does NOT.
+- [drift] §C verification numbers are off. Doc: fl_link1 world = (-0.0579, +0.0462, -0.0090). URDF fl_link1_joint origin = (-0.050401, +0.043222, +0.036844); Z is +0.0368 not -0.009, X/Y also differ (likely older export). rpy rest angles DO match (FL=-45°, FR=+45°, BL=-135°, BR=+135°).
+- [ok]    STANCE_DEG hip=-40°, knee=-60° and shoulder=0 match constants.py STANCE_DEG and the Convention-A "shoulder neutral = 0" rule. fk_v2 / build_config / reset_to_stance / run_stand / run_gait all exist in kinematics.py + gaits.py.
+- [drift] Line refs drifted: doc cites gaits.py:176 (_connect_and_setup) and gaits.py:242 (run_stand); actual lines are 209 and 284.
+- [stale] Inputs list (step "facehugger_config.yaml — ... per-leg rpy_z_deg ... shoulder limits and neutral") is stale: rpy_z_deg, shoulder_limits_deg AND shoulder_neutral_deg were all dropped from facehugger_config.yaml (now derived; see yaml comment lines 56-68). Step 1e/2's yaml.legs[*].shoulder_neutral_deg no longer exists.
+- [ok]    8 STLs in generated/exported_meshes/ match (QuadrupedBody, servo, leg_upper, leg_lower, leg_shoulder_{L,R}, leg_mount_{L,R}); LEG ASSEMBLY METADATA block (BodyToLink1Point/FootTip) present in URDF.
+- [todo] PyBullet numeric foot-landing claims (fl_link3 ≈ (-0.181,+0.069,-0.055), feet z≈-0.118, body_height≈0.12) not recomputed here; verify after a fresh `facehugger.py urdf` + sim run.
+-->
 # SIM_PIPELINE — generation and consumption recipes
 
 This is the verifiable algorithmic walkthrough for **(A)** how the URDF is built

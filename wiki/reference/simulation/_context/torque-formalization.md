@@ -11,6 +11,16 @@ Maps to:        reference/simulation/torque-analysis.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `doc/torque-analysis/torque_formalization.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    τ_knee (§3.1) and τ_hip (§3.2, independent hip/knee cosines) match torque_calculations.py torque_knee()/torque_hip(); I_leg (§3.3.1) matches moment_of_inertia_leg() incl. parallel-axis I=(1/12)mL²+md².
+- [ok]    Inverse solver guards (§4.1/4.2, clamped cos for inverse, unclamped for forward) match the update() closure logic.
+- [drift] §5 Code References line numbers off by ~1: torque_knee L147 (doc says 146), torque_hip L186 (185), moment_of_inertia_leg L280 (279), torque_yaw L323 (319), update() L521 (doc 503). Re-anchor on function names in Phase B.
+- [drift] Link lengths/masses are NOT in code/simulation/facehugger_config.yaml — they live in doc/torque-analysis/config.yaml (L1/L2=8cm, L3=6cm, PLA ρ=1.24, +15% margin). The sim yaml has no link dims; servo there is DFRobot SER0038 (60g, 2.94 N·m). Torque config servo is DSS-M15S (72g, 15 kg·cm). Different configs — don't conflate.
+- [drift] Material: §2.3/derivations imply PLA (config.yaml comment + .py L178 "PLA"), but .py L381 narrative says leg is "PETG". Source self-inconsistent; flag for Phase B.
+- [todo]  tip.mass_kg = 0.0 in config.yaml (foot not yet modelled) — capacity numbers are link/servo-only; note in published page.
+-->
 # Torque Analysis Formalization — Quadruped Leg
 
 ## 1. Problem Statement

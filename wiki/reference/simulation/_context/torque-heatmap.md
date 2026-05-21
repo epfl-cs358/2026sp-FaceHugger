@@ -11,6 +11,15 @@ Maps to:        reference/simulation/torque-heatmap.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `animation/scripts/torque-heatmap.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    Body is byte-identical to original animation/scripts/torque-heatmap.md (only the H1 line differs in diff context). Still "not implemented".
+- [ok]    Activity Heatmap colours per-joint servo meshes by per-frame |Δangle|: confirmed in fh_clip_panel.py _heatmap_handler() (L250) using `delta = abs(angle - prev)` and thresholds _HEATMAP_MID_DEG=5/_HIGH_DEG=20 (L103-104).
+- [ok]    `_read_bone_angles()` returns all 12 IK-solved joint angles (fh_clip_panel.py L132-151, JOINT_BONES loop). URDF has per-link `<inertial>` mass+COM `<origin>` (13 inertial blocks in generated/facehugger.urdf) — feasibility inputs exist as claimed.
+- [drift] Doc implies the heatmap colours all 12 joints; fh_clip_panel.py L106-111 notes only 8 of 12 are shown (hip/link2 has no `__servo` mesh — merged in CAD combine step). Display ≠ angle-read coverage.
+- [todo]  Proposed τ_stall constant location ("convention.json or servo_spec", MG-series 1.8-3.5 kg·cm): animation/convention.json exists but has no servo stall field yet — Phase A (this task) does not verify the future-mode plan.
+-->
 # Torque heatmap — design note (future task)
 
 Status: **not implemented.** The Display panel's Activity Heatmap

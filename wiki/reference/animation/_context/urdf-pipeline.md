@@ -11,6 +11,16 @@ Maps to:        reference/animation/urdf-pipeline.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `code/simulation/docs/URDF_PIPELINE.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    §5b/§5c R-pair handling matches code: axis_dir = [-a for a in axis_dir] + lim_lo,lim_hi = -lim_hi,-lim_lo at generate_urdf.py:1039/1042; §5e mesh_rpy=(0,π,0) on link2/link3 R-side via link_mesh_rpy (1085-1088).
+- [ok]    §1 "URDF emits <origin xyz='0 0 0'> on visuals" (re-origined STLs) confirmed — generated/facehugger.urdf has 26 origin xyz="0 0 0". Matches CLAUDE.md.
+- [ok]    §7 file table accurate: generate_urdf.py, facehugger_config.yaml, simulate.py, PIPELINE_SPEC.md, ASSEMBLY_HIERARCHY.md, ALIGNMENT_FIX_PLAN.md all present in code/simulation/ + docs/.
+- [stale] §7 lists view_urdf.py as "use this to eyeball the robot" — CLAUDE.md slates view_urdf.py + `facehugger.py view` for REMOVAL (redundant with `facehugger.py sim`). Don't promote it in the wiki.
+- [drift] §4c states L_offset/R_offset and shoulder math; these constants are CAD-snapshot values — verify against current fusion_export.json before quoting in the wiki (numbers may drift on re-export).
+- [ok]    §6 diagram counts (1 base_link + 4 legs, 12 revolute joints, 13 links total) consistent with generated URDF (13 <link>, 13 <inertial>).
+-->
 # How the FaceHugger URDF pipeline works
 
 ## TL;DR

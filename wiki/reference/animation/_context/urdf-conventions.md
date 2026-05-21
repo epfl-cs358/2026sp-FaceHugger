@@ -11,6 +11,16 @@ Maps to:        reference/animation/urdf-pipeline.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `doc/animation-pipeline/urdf-conventions.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    link_mesh_rpy symbol reference is correct — generate_urdf.py defines link_mesh_rpy (line 1085) setting mesh_rpy=(0,π,0) on link2/link3 when side=="R" (lines 1087-1088). PR #72's repoint to the symbol holds; the prose "search for link_mesh_rpy" resolves.
+- [stale] Numeric line anchors drifted: R-side axis negate is at generate_urdf.py:1039 (doc says #L1007); negate-and-swap limits at :1042 (doc says #L1010); _shoulder_rest_for at :166-190 (doc says #L152-L176). Repoint to symbols for Phase B.
+- [drift] Shoulder-asymmetry section claims "current export with fl_rest = 0°". Current generator uses fl_rest_rad = -π/4 (-45°) per _shoulder_rest_for docstring (generate_urdf.py:169-175). The "currently incomplete" R-side shoulder fix description should be re-checked against the -45° rest.
+- [ok]    Inertial TODO is now satisfiable: generated/facehugger.urdf has 13 <inertial> == 13 <link> (grep -c). The "verify before RL handoff" check passes today.
+- [ok]    Joint-origin convention + part-reuse table (FL=L, BR=L, FR=R, BL=R; Link2/3 shared, R-pair spun 180° about Y) matches URDF_PIPELINE.md §5 and yaml.
+- [stale] Sibling relative links (leg-coordinates.md, animation-pipeline-roadmap.md, firmware-research.md) resolve only from original doc/animation-pipeline/; will break at the published wiki location.
+-->
 # URDF Conventions for the Animation Pipeline
 
 The URDF is the single source of truth for kinematic geometry — it

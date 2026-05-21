@@ -11,6 +11,16 @@ Maps to:        reference/animation/blender-rig.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `doc/gait-design/specs/blender-rig-and-export.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    §2 armature anatomy (12 leg bones + base_link, names = URDF link names, uniform bone-local-Z via align_roll, tail-projection in _bone_endpoints_world_mm, LIMIT_ROTATION clamps) matches animation/scripts/urdf_to_blender_rigged.py.
+- [drift] §3 "shoulder stays FK / IK chain=2 / foot target Empty per leg" — current rig drives link1 yaw analytically (scripted driver) and uses foot_target_{leg} + foot_ik/foot_local indirection, not a manually-posed FK shoulder. Empty naming is foot_target_{leg}, not {leg}_foot_target.
+- [stale] §6 servo_mapping.yaml does not exist in the repo; channel/direction/offset_deg/min_deg/max_deg schema was never implemented. Real conversion is fh_clip_panel.py _frame_to_servo (scale-from-NEUTRAL 0.6667 + translateToServo) reading animation/convention.json.
+- [stale] §7 export_gait.py + .gait JSON output do not exist. Superseded by the .js / clips_all.h export (doc/animation-pipeline/onboard-clip-player-design.md). No *.gait files in repo.
+- [stale] DSS-M15S 0–270° / offset_deg 135 placeholders contradict config.h (180° servos, MIN_PULSE 150 / MAX_PULSE 600). Neutral is per-leg/per-joint (convention.json), not flat 135.
+- [todo]  servo_id 0..11 ordering still PROPOSAL (SERVO_ID_CONVENTION.md); firmware uses LEG_SERVO_CHANNEL[leg][servo] in config.h. §8 blender-servo-animation addon was reference reading only.
+-->
 # Spec: Blender Rig & Export Workflow
 
 > Covers: Fusion 360 import, armature rigging, IK setup, animation, baking, and the `export_gait.py` script.

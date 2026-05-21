@@ -11,6 +11,16 @@ Maps to:        reference/animation/fhc-format.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `doc/animation-pipeline/leg-coordinates.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [todo]  The .fhc format (FhcFileHeader/FhcKeyframe/foot-XYZ Bezier), on-board IK port, runtime gait engine are all design-only — no .fhc files, no Fhc* structs, no clip-player in code/firmware/ (CLAUDE.md: "implementation has not started"). This is the canonical design for that unstarted work.
+- [ok]    §3 ik_v2 / w_y description matches code/simulation/kinematics.py: w_y = L1.y + L2.y + foot_L3.y (kinematics.py:155), ik_v2 at line 135, fk_v2 at line 105 — line refs in the doc are accurate.
+- [ok]    §9.3 + Bottom Line correctly flag that servo range is 180° per config.h (MIN_PULSE 150 / MAX_PULSE 600) and that the 0–270°/DSS-M15S spec docs need updating — this doc is the one that got it right.
+- [drift] Claims "kinematics.cpp is wrong / gets retired" and ".gait + kinematics.cpp are now legacy." Both still present (code/firmware/src/nervous_system/kinematics.cpp exists, is the active textbook IK). The retirement is planned, not done.
+- [drift] Assumes foot empties unparented + body_ctrl world-transform export. Implemented rig parents/constrains foot_target_{leg} and exports joint-angle Actions (fh_clip_panel.py), not body-frame foot XYZ; the foot-XYZ exporter is unwritten.
+- [todo]  §9 open items (URDF L1 cleanup, phase-aligned transitions, pole-flip tolerance, neutral-equality tolerance) all unresolved — no implementing code exists to settle them.
+-->
 # Leg Coordinates, IK Frame, and Animation Pipeline — Design Synthesis
 
 Distilled from a Claude conversation

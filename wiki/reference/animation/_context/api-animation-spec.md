@@ -11,6 +11,16 @@ Maps to:        reference/animation/blender-rig.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `code/simulation/docs/API_ANIMATION_SPEC.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    13-bone rig + uniform bone-local-Z (align_roll) + _bone_endpoints_world_mm tail-projection all match animation/scripts/urdf_to_blender_rigged.py (ARMATURE_NAME="FaceHuggerRig", base_link + 12 link bones).
+- [drift] §2/§3 describe FK shoulder + IK chain_count=2 with foot target parented to {leg}_link1. Current rig drives link1 yaw ANALYTICALLY via a scripted driver (rotation_euler[2]) + foot_ik/foot_local indirection; foot empties are named `foot_target_{leg}` (FOOT_TARGET_FMT), not `{leg}_foot_target`. The "rotate shoulder → drag foot" manual-FK workflow no longer matches.
+- [drift] §6's "Current implementation" note is correct: real conversion is fh_clip_panel.py `_frame_to_servo` = scale-from-NEUTRAL (0.6667) + per-leg translateToServo, sourced from animation/convention.json, parity-locked by animation/scripts/test_servo_parity.py. The `offset_deg + direction*degrees(z)` model below it is the never-built .gait pipeline.
+- [stale] §6/§7 servo_mapping.yaml + .gait export + gait_to_c.py + validator do not exist in repo (no servo_mapping.yaml, no export_gait.py/gait_to_c.py, no *.gait files). Superseded by the .js / clips_all.h angle-space route (doc/animation-pipeline/onboard-clip-player-design.md).
+- [stale] DSS-M15S 0–270° / 135° mid-range is wrong for current hardware: code/firmware/src/shared/config.h uses 180° servos (MIN_PULSE 150 / MAX_PULSE 600). Neutral is per-leg per-joint (convention.json neutral_joint_deg), not a flat 135.
+- [todo]  Links to doc/gait-design/specs/* point at the superseded tree (CLAUDE.md: gait-design superseded by animation-pipeline). servo_id 0..11 numbering is still a PROPOSAL (SERVO_ID_CONVENTION.md); firmware uses LEG_SERVO_CHANNEL[leg][servo] in config.h.
+-->
 # API_ANIMATION_SPEC — animator-facing reference
 
 How to load the FaceHugger rig in Blender, pose it, and export the

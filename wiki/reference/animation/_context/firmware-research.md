@@ -11,6 +11,15 @@ Maps to:        reference-only
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `doc/animation-pipeline/firmware-research.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    Pure research synthesis (external LLM answers + cited projects). Not a spec of this repo's code, so most of it can't "drift" — its job is to inform design, which it still does.
+- [ok]    Core conclusions still hold for the planned engine: dual-core split, on-board IK is cheap, preload clips at boot, never read flash in the control loop, hybrid storage. These underpin api-surface.md / leg-coordinates.md (both still design-only).
+- [todo]  The architecture it recommends (LittleFS /clips, FreeRTOS queue, 100 Hz tick, foot-XYZ + IK) is design-only — no clip-player / IK-on-ESP32 code exists in code/firmware/ yet (CLAUDE.md: .fhc engine "implementation has not started").
+- [drift] Storage-encoding discussion (Approach A/B, 0–270° implicit) predates the implemented angle-space path: current firmware ships pre-scaled NEUTRAL[]/GAITS[] joint angles (config.h, 180° servos via PCA9685), not foot-XYZ Bezier clips.
+- [todo]  References to /gaits/*.bin LittleFS layout and Bezier LocoCurve are aspirational; the present-day kinematics is the textbook kinematics.cpp scheduled for replacement.
+-->
 # ESP32 12-DOF Quadruped Firmware — Research Synthesis
 
 Consolidated synthesis of three LLM research answers — Claude, Gemini, Perplexity — to the original prompt. Each top-level section corresponds to one part of that prompt.

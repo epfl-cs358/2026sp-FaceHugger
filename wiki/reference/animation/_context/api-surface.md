@@ -11,6 +11,15 @@ Maps to:        reference/animation/fhc-format.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `doc/animation-pipeline/api-surface.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [todo]  Design-only, no implementation. No gait_engine.h / gait_engine_* / GaitFsmState / clips_all in code/firmware/ (grep finds nothing). This is the T7 contract for the unstarted .fhc on-board engine (CLAUDE.md: "implementation has not started").
+- [drift] WebSocket command mapping table (T:1/T:2/T:5/T:10) is roughly consistent with code/API_SPEC.md, but the engine maps clip-name strings ("walk_forward", "trot"); the actually-implemented path is angle-space clip ids (playClip(id), CMD_PLAY_CLIP) per doc/animation-pipeline/onboard-clip-player-design.md, not this clip-name FreeRTOS-queue API.
+- [drift] T:4 calibration: API_SPEC wire shape is {T:4, id:<leg 0-3>, servo_id:<0-2>, a}; firmware maps via LEG_SERVO_CHANNEL[id][servo_id] (config.h), not a flat servo_id 0..11.
+- [todo]  Open contract questions §4 (IMU correction R/dh_mm semantics) and §3 (default_pole_sign) remain unresolved — no T7/T10 code exists to pin them.
+- [ok]    Dual-core split (WiFi core 0 / motion core 1, FreeRTOS queue) matches the recommendation in firmware-research.md §1; consistent with that doc's architecture.
+-->
 # Runtime Gait Engine — API Surface
 
 How the runtime gait engine (T7 in

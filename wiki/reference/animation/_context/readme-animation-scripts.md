@@ -12,6 +12,16 @@ Maps to:        reference/animation/index.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `animation/scripts/README.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [ok]    All 5 scripts in the role table exist: urdf_to_blender_rigged.py, visualize_urdf.py, visualize_fusion_export.py, fh_clip_panel.py, fh_rename_actions.py (animation/scripts/). test_servo_parity.py + torque-heatmap.md also present as referenced.
+- [ok]    Firmware-verified facts in the "stop any gait" callout hold on current main: data.h CMD_STATE=2, CMD_GAIT_MODE=5, STATE_IDLE=0, GAIT_NONE=0; spinal_cord.cpp:119 skips tickGait if currentGait_==GAIT_NONE; CMD_CALIBRATE=4 (data.h) → network.cpp:90 → applyCalibration (spinal_cord.cpp:96).
+- [ok]    {T:4, id, servo_id, a} wire shape + LEG_SERVO_CHANNEL[id][servo_id] mapping confirmed (config.h:64); translateToServo lives in tickGait (spinal_cord.cpp:212,330) as claimed.
+- [stale] Link to doc/animation-pipeline/onboard-clip-player-design.md "§3.5" and "§3.2/§5" — the design doc has no §3.5 (§3 has 5 numbered items, not subsections); section anchors are imprecise. File itself still exists at original path.
+- [drift] "future on-board clip player is mutually exclusive with the gait engine by construction" — note T:6 is now CMD_ACTION_SELECTION (wallFlip via STATE_ACTION), so the clip player's command slot assumption (see onboard-clip-player-design) is already occupied.
+- [drift] config.h:64 line ref for LEG_SERVO_CHANNEL is accurate today; pin to symbol not line for Phase B durability.
+-->
 # animation/scripts — Blender tooling
 
 Blender 5.x scripts that build the FaceHugger scene from the URDF or

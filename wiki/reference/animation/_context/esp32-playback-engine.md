@@ -11,6 +11,15 @@ Maps to:        reference/animation/fhc-format.md
 > as source for the published wiki page. Edit the parent wiki page, not
 > this file. The original at `doc/gait-design/specs/esp32-playback-engine.md` is still canonical; this file is
 > scaffolding the user will delete manually once the wiki pages exist.
+<!--
+CONSISTENCY-CHECK 2026-05-21
+Verified against: feat/wiki-setup @ 0a1a138
+- [stale] Whole spec describes the .gait playback engine (gait_t/gait_track_t/keyframe_t, 50 Hz tick, IDLE/PLAYING FSM). No such code in code/firmware/ (no gait_player, no gait_types.h, no .gait files). Superseded twice over: by the implemented angle-space gait engine (NEUTRAL[]/GAITS[]/tickGait in firmware) and by the unstarted .fhc design.
+- [stale] §8 SERVO_CONFIG[NUM_SERVOS] with per-servo gpio_pin + pwm_min/max 500–2500us for 0–270° does not match firmware: config.h drives a PCA9685 (ADDR 0x40, MIN_PULSE 150 / MAX_PULSE 600 ticks) over LEG_SERVO_CHANNEL[4][3], 180° servos — not GPIO LEDC, not 270°.
+- [stale] 270° angle range and `270.0f - angle` inversion assume DSS-M15S; current hardware is 180°.
+- [todo]  The interpolation math (linear / cubic smoothstep / constant) and queue-at-cycle-boundary idea are reasonable design references but tied to the .gait format that was never built; treat as historical (gait-design tree superseded by animation-pipeline per CLAUDE.md).
+- [ok]    Cross-ref to runtime-api-and-control.md / gait-file-format.md exists in the original doc/gait-design/specs/ tree (superseded sibling).
+-->
 # Spec: ESP32 Playback Engine
 
 > Defines the firmware-side gait playback: interpolation, state machine, command queue, inversion, speed scaling.
