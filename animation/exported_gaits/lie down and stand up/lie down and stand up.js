@@ -1,0 +1,169 @@
+// FaceHugger clip: lie down and stand up
+// Generated 2026-05-21 from Blender animation
+//
+// HOW TO RUN (browser):
+//   1. Join the robot Wi-Fi (FaceHugger_Net); robot at 192.168.4.1.
+//   2. Open a console on a NON-HTTPS page (http://, file://, or
+//      about:blank). ws:// is BLOCKED from https:// (mixed content)
+//      — the #1 reason "nothing happens".
+//   3. Paste this whole file. Call  fhStop()  to stop at any time.
+//
+// Wire shape matches origin/main CMD_CALIBRATE (T:4):
+//   {T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}
+// Firmware does PCA-channel mapping via LEG_SERVO_CHANNEL.
+//
+// PLAYBACK SEMANTICS (Phase-1 parity with firmware tickClip, see spec
+// doc/animation-pipeline/onboard-clip-player-design.md §3.1):
+//   - DEFAULT: play the clip ONCE, then HOLD the final pose by
+//     re-sending the last frame's servo angles every FRAME_MS — the
+//     same as the firmware's hold-at-end behaviour.
+//   - LOOP=true: replay from frame 0 instead of holding (diagnostic).
+//   - fhStop(): explicit safe stop — clears the interval and closes
+//     the socket. The robot keeps the last commanded servo positions
+//     (servos hold their last commanded angle in hardware).
+
+const LOOP = false;
+// Playback wall-clock period — derived from the Blender scene FPS at
+// bake time (median delta of `t` between consecutive frames), so this
+// clip plays at the speed it was authored. Each scheduled tick sends
+// the next CLIP[] frame.
+const FRAME_MS = 42;
+const CLIP_NAME = "lie down and stand up";
+
+// Blender leg name -> firmware LegId (see movements.h enum LegId on
+// origin/main). The wire `id` field is this leg_id; the firmware maps
+// to a PCA channel via LEG_SERVO_CHANNEL[id][servo_id].
+const LEG_IDS = { fr: 0, fl: 1, br: 2, bl: 3 };
+
+const CLIP = [
+  { t: 0, fr:[59,131,33], fl:[24,49,148], br:[61,52,151], bl:[179,131,34] },
+  { t: 42, fr:[59,131,33], fl:[24,49,148], br:[61,52,151], bl:[179,131,34] },
+  { t: 83, fr:[59,131,33], fl:[24,49,148], br:[61,52,151], bl:[179,131,34] },
+  { t: 125, fr:[59,130,33], fl:[24,50,148], br:[61,53,151], bl:[179,130,34] },
+  { t: 167, fr:[59,129,33], fl:[24,51,148], br:[61,54,151], bl:[179,129,34] },
+  { t: 208, fr:[59,128,33], fl:[24,52,148], br:[61,55,151], bl:[179,128,34] },
+  { t: 250, fr:[60,127,34], fl:[25,53,147], br:[60,56,151], bl:[180,127,34] },
+  { t: 292, fr:[60,126,34], fl:[25,54,147], br:[60,57,150], bl:[180,126,35] },
+  { t: 333, fr:[60,125,35], fl:[25,55,146], br:[60,59,150], bl:[180,125,35] },
+  { t: 375, fr:[60,124,36], fl:[25,56,145], br:[60,60,149], bl:[180,124,36] },
+  { t: 417, fr:[60,122,37], fl:[25,58,144], br:[60,61,147], bl:[180,122,38] },
+  { t: 458, fr:[60,121,38], fl:[25,59,143], br:[60,62,146], bl:[180,121,39] },
+  { t: 500, fr:[60,121,40], fl:[25,59,141], br:[60,63,144], bl:[180,121,41] },
+  { t: 542, fr:[60,120,42], fl:[25,60,139], br:[60,64,142], bl:[180,120,43] },
+  { t: 583, fr:[60,119,44], fl:[25,61,137], br:[60,64,140], bl:[180,119,45] },
+  { t: 625, fr:[60,119,47], fl:[25,61,134], br:[60,65,138], bl:[180,119,47] },
+  { t: 667, fr:[60,119,49], fl:[25,61,132], br:[60,65,135], bl:[180,119,50] },
+  { t: 708, fr:[60,119,52], fl:[25,61,129], br:[60,65,132], bl:[180,119,53] },
+  { t: 750, fr:[60,119,55], fl:[25,61,126], br:[60,65,129], bl:[180,119,56] },
+  { t: 792, fr:[60,119,58], fl:[25,61,123], br:[60,64,126], bl:[180,119,59] },
+  { t: 833, fr:[60,119,61], fl:[25,61,120], br:[60,64,123], bl:[180,119,62] },
+  { t: 875, fr:[60,119,64], fl:[25,61,117], br:[60,64,121], bl:[180,119,64] },
+  { t: 917, fr:[60,119,65], fl:[25,61,116], br:[60,65,120], bl:[180,119,65] },
+  { t: 958, fr:[60,117,64], fl:[25,63,117], br:[60,66,120], bl:[180,117,65] },
+  { t: 1000, fr:[60,115,62], fl:[25,65,119], br:[60,68,122], bl:[180,115,63] },
+  { t: 1042, fr:[60,113,59], fl:[25,67,122], br:[60,70,125], bl:[180,113,60] },
+  { t: 1083, fr:[60,111,57], fl:[25,69,124], br:[60,72,127], bl:[180,111,58] },
+  { t: 1125, fr:[60,109,55], fl:[25,71,126], br:[60,74,129], bl:[180,109,56] },
+  { t: 1167, fr:[60,108,54], fl:[25,72,127], br:[60,76,130], bl:[180,108,55] },
+  { t: 1208, fr:[60,106,53], fl:[25,74,128], br:[60,77,131], bl:[180,106,54] },
+  { t: 1250, fr:[60,105,52], fl:[25,75,129], br:[60,78,132], bl:[180,105,53] },
+  { t: 1292, fr:[60,104,51], fl:[25,76,130], br:[60,79,133], bl:[180,104,52] },
+  { t: 1333, fr:[60,103,51], fl:[25,77,130], br:[60,80,134], bl:[180,103,51] },
+  { t: 1375, fr:[60,103,50], fl:[25,77,131], br:[60,81,134], bl:[180,103,51] },
+  { t: 1417, fr:[60,102,50], fl:[25,78,131], br:[60,81,134], bl:[180,102,51] },
+  { t: 1458, fr:[60,102,50], fl:[25,78,131], br:[60,81,135], bl:[180,102,50] },
+  { t: 1500, fr:[60,102,50], fl:[25,78,131], br:[60,82,135], bl:[180,102,50] },
+  { t: 1542, fr:[60,102,49], fl:[25,78,132], br:[60,82,135], bl:[180,102,50] },
+  { t: 1583, fr:[60,101,49], fl:[25,79,132], br:[60,82,135], bl:[180,101,50] },
+  { t: 1625, fr:[60,101,48], fl:[25,79,133], br:[60,82,136], bl:[180,101,49] },
+  { t: 1667, fr:[60,100,47], fl:[25,80,134], br:[60,83,137], bl:[180,100,48] },
+  { t: 1708, fr:[60,99,45], fl:[25,81,136], br:[60,84,139], bl:[180,99,46] },
+  { t: 1750, fr:[60,98,43], fl:[25,82,138], br:[60,85,141], bl:[180,98,44] },
+  { t: 1792, fr:[60,97,41], fl:[25,83,140], br:[60,86,143], bl:[180,97,42] },
+  { t: 1833, fr:[60,96,38], fl:[25,84,143], br:[60,87,146], bl:[180,96,39] },
+  { t: 1875, fr:[60,95,36], fl:[25,85,145], br:[60,88,148], bl:[180,95,37] },
+  { t: 1917, fr:[60,94,33], fl:[25,86,148], br:[60,90,151], bl:[180,94,34] },
+  { t: 1958, fr:[60,92,31], fl:[25,88,150], br:[60,91,154], bl:[180,92,31] },
+  { t: 2000, fr:[60,91,28], fl:[25,89,153], br:[60,92,157], bl:[180,91,28] },
+  { t: 2042, fr:[60,90,25], fl:[25,90,156], br:[60,94,159], bl:[180,90,26] },
+  { t: 2083, fr:[60,88,22], fl:[25,92,159], br:[60,95,162], bl:[180,88,23] },
+  { t: 2125, fr:[60,87,20], fl:[25,93,161], br:[60,96,165], bl:[180,87,20] },
+  { t: 2167, fr:[60,86,18], fl:[25,94,163], br:[60,97,167], bl:[180,86,18] },
+  { t: 2208, fr:[60,87,18], fl:[25,93,163], br:[60,97,167], bl:[180,87,18] },
+  { t: 2250, fr:[60,87,18], fl:[25,93,163], br:[60,97,167], bl:[180,87,18] },
+  { t: 2292, fr:[60,87,18], fl:[25,93,163], br:[60,96,167], bl:[180,87,18] },
+  { t: 2333, fr:[60,89,18], fl:[25,91,163], br:[60,95,167], bl:[180,89,18] },
+  { t: 2375, fr:[60,91,18], fl:[25,89,163], br:[60,93,167], bl:[180,91,18] },
+  { t: 2417, fr:[60,93,18], fl:[25,87,163], br:[60,90,167], bl:[180,93,18] },
+  { t: 2458, fr:[60,96,18], fl:[25,84,163], br:[60,87,167], bl:[180,96,18] },
+  { t: 2500, fr:[60,100,18], fl:[25,80,163], br:[60,84,167], bl:[180,100,18] },
+  { t: 2542, fr:[60,103,18], fl:[25,77,163], br:[60,80,167], bl:[180,103,18] },
+  { t: 2583, fr:[60,107,18], fl:[25,73,163], br:[60,77,167], bl:[180,107,18] },
+  { t: 2625, fr:[60,110,18], fl:[25,70,163], br:[60,73,167], bl:[180,110,18] },
+  { t: 2667, fr:[59,113,18], fl:[24,67,163], br:[61,70,167], bl:[179,113,18] },
+  { t: 2708, fr:[59,115,18], fl:[24,65,163], br:[61,68,167], bl:[179,115,18] },
+  { t: 2750, fr:[59,118,18], fl:[24,62,163], br:[61,66,167], bl:[179,118,18] },
+  { t: 2792, fr:[59,121,21], fl:[24,59,160], br:[61,62,163], bl:[179,121,22] },
+  { t: 2833, fr:[59,125,25], fl:[24,55,156], br:[61,59,160], bl:[179,125,25] },
+  { t: 2875, fr:[59,127,28], fl:[24,53,153], br:[61,56,157], bl:[179,127,28] },
+  { t: 2917, fr:[59,130,30], fl:[24,50,151], br:[61,54,154], bl:[179,130,31] },
+  { t: 2958, fr:[59,131,32], fl:[24,49,149], br:[61,52,152], bl:[179,131,33] },
+  { t: 3000, fr:[59,131,33], fl:[24,49,148], br:[61,52,151], bl:[179,131,34] },
+];
+
+// Servos accept 0..180; clamp defensively (extreme poses / a drifted
+// convention can push the converted angle out of range).
+const clamp = (v) => Math.max(0, Math.min(180, v | 0));
+
+// Delta-encode: only emit a channel when its value changed since the last
+// frame. Cuts redundant traffic and ends the hold-at-end resend flood
+// (a held pose = unchanged angles = nothing sent). Reset to {} on restart
+// so the first frame after a (re)start always sends all 12 channels.
+let _last = {};
+
+let _i = 0;
+let _timer = null;
+const ws = new WebSocket("ws://192.168.4.1:81");
+
+function fhStop() {
+  if (_timer !== null) { clearInterval(_timer); _timer = null; }
+  try { ws.close(); } catch (e) {}
+  console.log("FaceHugger: playback stopped (servos hold last commanded pose).");
+}
+globalThis.fhStop = fhStop;
+
+function playFrame() {
+  // End of clip: in LOOP mode wrap to the start; otherwise clamp to
+  // the last frame and keep re-sending it (hold-at-end per spec §3.1).
+  if (_i >= CLIP.length) {
+    if (LOOP) {
+      _i = 0;
+      _last = {};  // reset delta cache so loop restart re-sends all channels
+    } else {
+      _i = CLIP.length - 1;
+    }
+  }
+  const frame = CLIP[_i++];
+  if (ws.readyState !== WebSocket.OPEN) return;
+  for (const leg of ["fr", "fl", "br", "bl"]) {
+    const angles = frame[leg];
+    for (let j = 0; j < 3; j++) {
+      const a = clamp(angles[j]);
+      const key = leg + ":" + j;
+      if (_last[key] === a) continue;
+      _last[key] = a;
+      const msg = { "T": 4, "id": LEG_IDS[leg], "servo_id": j, "a": a };
+      ws.send(JSON.stringify(msg));
+    }
+  }
+}
+
+ws.onopen = () => {
+  console.log("FaceHugger: connected — playing " + CLIP_NAME + " (" + CLIP.length + " frames). Hold-at-end is on by default; call fhStop() when done.");
+  _timer = setInterval(playFrame, FRAME_MS);
+};
+ws.onerror = () => {
+  alert("FaceHugger: could not connect to " + ws.url +
+        " - check the robot IP / Wi-Fi network and reload.");
+};
+ws.onclose = (e) => { if (!e.wasClean) console.warn("FaceHugger WS closed", e.code); };
