@@ -3,7 +3,7 @@
 !!! todo "Stub - to be written"
     What to print and how. Adapted from `cad/README.md` and
     `cad/print_export.txt`; part list cross-references
-    [Printed parts](parts/printed-parts.md).
+    [Printed parts](parts.md#printed-parts).
 
 ## Printer & filament
 

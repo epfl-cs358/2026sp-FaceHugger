@@ -1,8 +1,8 @@
 title: Build Guide
 nav:
-  - design
-  - parts
+  - design.md
+  - parts.md
   - printing.md
-  - wiring
+  - wiring.md
   - assembly.md
-  - software
+  - software.md

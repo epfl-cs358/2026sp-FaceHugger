@@ -106,10 +106,10 @@ firmware+software block is the heaviest; consider sharing the firmware reference
 
 | Member | Theme | Pages to write |
 |---|---|---|
-| **Antoine V.** | Design & analysis | `wiki/index.md` (Quick Start); `guide/design/` (concept, how a leg moves, sizing); `reference/simulation/` (torque analysis, torque heatmap) |
-| **Antoine R.** | Parts & 3D printing | `guide/parts/` (BOM, electronics, hardware & ball bearings, printed parts); `guide/printing.md` |
-| **Ilias S.** | Wiring & assembly | `guide/wiring/` (schematic, pinout, battery safety); `guide/assembly.md` (step-by-step build + photos) |
-| **Ferdinand C.** | Firmware & software | `guide/software/` (overview, how-it-works, setup, running); `reference/firmware/` (architecture, kinematics, servo conventions, API, CSV diagnostics) |
+| **Antoine V.** | Design & analysis | `wiki/index.md` (Quick Start); `guide/design.md` (concept, how a leg moves, sizing); `reference/simulation/` (torque analysis, torque heatmap) |
+| **Antoine R.** | Parts & 3D printing | `guide/parts.md` (BOM, electronics, hardware & ball bearings, printed parts); `guide/printing.md` |
+| **Ilias S.** | Wiring & assembly | `guide/wiring.md` (schematic, pinout, battery safety); `guide/assembly.md` (step-by-step build + photos) |
+| **Ferdinand C.** | Firmware & software | `guide/software.md` (overview, how-it-works, setup, running); `reference/firmware/` (architecture, kinematics, servo conventions, API, CSV diagnostics) |
 | **Noa D.** | Animation & app | `reference/animation/` (pipeline, Blender rig, URDF pipeline, `.fhc` format, gait design); `reference/remote-control/` (app overview, WebSocket API) |
 
 Full page list and the source-doc mapping: see `WIKI_MIGRATION_PLAN.md` §7 at the repo root.

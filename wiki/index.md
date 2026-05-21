@@ -18,14 +18,14 @@ firmware, animation pipeline, and simulation.
 ## What you'll need
 
 !!! todo
-    Pointer to [Parts & Materials](guide/parts/index.md): printed parts,
+    Pointer to [Parts & Materials](guide/parts.md): printed parts,
     servos, ESP32, battery, fasteners, tools.
 
 ## How it works (in a nutshell)
 
 !!! todo
-    One-paragraph overview: ESP32 brain → servos → legs, driven by inverse
-    kinematics. Link to [Software](guide/software/how-it-works.md).
+    One-paragraph overview: ESP32 brain -> servos -> legs, driven by inverse
+    kinematics. Link to [Software](guide/software.md#how-it-works).
 
 ## Explore
 
@@ -37,7 +37,7 @@ firmware, animation pipeline, and simulation.
 
     The quadruped concept, how a leg moves, and why it's sized this way.
 
-    [:octicons-arrow-right-24: Design](guide/design/index.md)
+    [:octicons-arrow-right-24: Design](guide/design.md)
 
 -   :material-cog:{ .lg .middle } __Parts & Materials__
 
@@ -45,7 +45,7 @@ firmware, animation pipeline, and simulation.
 
     Bill of materials: printed parts, electronics, fasteners, ball bearings.
 
-    [:octicons-arrow-right-24: Parts](guide/parts/index.md)
+    [:octicons-arrow-right-24: Parts](guide/parts.md)
 
 -   :material-printer-3d:{ .lg .middle } __3D Printing__
 
@@ -61,7 +61,7 @@ firmware, animation pipeline, and simulation.
 
     Schematic, circuitry, pinout, and battery safety.
 
-    [:octicons-arrow-right-24: Wiring](guide/wiring/index.md)
+    [:octicons-arrow-right-24: Wiring](guide/wiring.md)
 
 -   :material-hammer-wrench:{ .lg .middle } __Assembly__
 
@@ -77,7 +77,7 @@ firmware, animation pipeline, and simulation.
 
     Firmware overview, how the algorithms work, setup, and running it.
 
-    [:octicons-arrow-right-24: Software](guide/software/index.md)
+    [:octicons-arrow-right-24: Software](guide/software.md)
 
 -   :material-book-open-variant:{ .lg .middle } __Technical reference__
 

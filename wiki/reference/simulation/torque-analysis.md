@@ -4,7 +4,7 @@
     Full torque model. Narrative adapted from `_context/torque-formalization.md`.
     Embed static result images via glightbox; link the notebook for interactive
     use. The accessible summary lives in
-    [Design → Sizing](../../guide/design/sizing.md).
+    [Design -> Sizing](../../guide/design.md#sizing-loads).
 
 ## The model
 

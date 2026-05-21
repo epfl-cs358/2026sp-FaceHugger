@@ -7,8 +7,8 @@
 ## Before you start
 
 !!! todo
-    Checklist: all [printed parts](parts/printed-parts.md),
-    [hardware](parts/hardware.md), and [electronics](parts/electronics.md) ready.
+    Checklist: all [printed parts](parts.md#printed-parts),
+    [hardware](parts.md#hardware-fasteners), and [electronics](parts.md#electronics) ready.
 
 ## Step-by-step
 
