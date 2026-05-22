@@ -201,10 +201,12 @@ keyframes at every frame — that's what the export script reads.
 > earlier `servo_mapping.yaml`/`.gait` pipeline; it is retained for
 > reference and is being superseded by the design in
 > [`doc/animation-pipeline/onboard-clip-player-design.md`](../../../doc/animation-pipeline/onboard-clip-player-design.md)
-> (see §3.2 for the pre-scaled math-space rule, §3.1 for one-shot +
-> hold-at-end semantics, §6 for the firmware contract). Phase-1 path
-> (today) is the `.js` browser console; Phase-2 will be the bundled
-> `clips_all.h` + `playClip(id)` over WS.
+> (see §3.2 for the pre-scaled math-space rule, §3.1 for one-shot
+> semantics, §6 for the firmware contract). **Note:** the design doc's
+> "hold-at-end" was superseded — a clip now auto-returns to the NEUTRAL
+> stand over 500 ms then goes IDLE (see `CONTEXT.md` and "Clip header"
+> below). Phase-1 path (today) is the `.js` browser console; Phase-2 is
+> the bundled `clips_all.h` + `playClip(id)` over WS.
 
 The export script reads `pose.bones["{leg}_link{N}"].rotation_euler[2]`
 for each frame and converts to servo PWM degrees:
@@ -265,6 +267,19 @@ compilation (`gait_to_c.py`).
 | Mesh "drifts" in viewport vs PyBullet | URDF was regenerated but the rig wasn't rebuilt | Re-run `facehugger.py blender --rigged`. The rig is rebuilt from scratch on every invocation. |
 | Joint goes past the URDF limit | `LIMIT_ROTATION` constraint disabled | Check pose bone constraints in the Properties panel. |
 | Foot target starts in the wrong place | `Link3TipAxis` missing from `fusion_export.json` (CAD not re-exported) | Re-export from Fusion. Falls back to a hardcoded value in the meantime — animator-visible offset of ~50–60 mm in some legs. |
+
+---
+
+## 8. Clip header (`clips_all.h`)
+
+Bundled clip export for the on-board clip player (`to_clips_header()` in
+`fh_clip_panel.py`) is **pre-scaled, math-space**: the 2/3 scale-from-NEUTRAL
+is applied at bake time and `a[12]` is emitted as math-space joint degrees in
+firmware `LegId` order (FR, FL, RR, RL × shoulder, thigh, knee). The firmware
+applies **only** `translateToServo()` at runtime — it never re-scales clip
+data. This differs from the per-clip `.js` path (`_frame_to_servo`), which
+additionally bakes in `translateToServo` and rounds to integer servo degrees.
+Clip name→id mapping is emitted alongside in `clips_manifest.json`.
 
 ---
 
