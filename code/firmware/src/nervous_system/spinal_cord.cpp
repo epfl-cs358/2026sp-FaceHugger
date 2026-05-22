@@ -8,6 +8,9 @@
 #include "motion_math.h"
 #include "movements.h"
 #include "../shared/config.h"
+#include "clips_all.h"   // generated FH_CLIPS[] (placeholder until export, see B6)
+
+static const uint32_t CLIP_RETURN_MS = 500;  // ease to NEUTRAL at clip end
 
 // Math-space neutral poses (shoulder, thigh, knee in degrees), indexed by LegId.
 // These are the JS N[] values that have been physically tested on hardware.
@@ -55,6 +58,7 @@ SpinalCord::SpinalCord(uint8_t pwm):
     targetX(0.0f), targetY(0.0f), targetYaw(0.0f),
     activeX(0.0f), activeY(0.0f), activeYaw(0.0f),
     isMovingRequested(false), lastCommandMs(0), isInverted(false)
+    , clipState_{ CLIP_DONE, 0, 0, 0, 0 }
 {
 }
 
@@ -119,9 +123,11 @@ void SpinalCord::update() {
         case STATE_WALK:
             if (currentGait_ != GAIT_NONE) tickGait();
             break;
+        case STATE_ACTION:
+            tickClip();
+            break;
         case STATE_IDLE:
         case STATE_REST:
-        case STATE_ACTION:
             break;
         case STATE_FAILSAFE:
             leg1.returnToDefaultAngles();
@@ -364,6 +370,61 @@ void SpinalCord::tickYawRotation() {
 
         ServoTriple s = translateToServo((uint8_t)i, sh, th, kn);
         legs[i]->setJointAngles(s.hip, s.thigh, s.knee);
+    }
+}
+
+void SpinalCord::playClip(uint8_t id) {
+    if (id >= FH_CLIP_COUNT) {
+        Serial.printf("[clip] ignored: id %u >= %u\n", id, (unsigned)FH_CLIP_COUNT);
+        return;
+    }
+    if (FH_CLIPS[id].frame_count == 0) {
+        Serial.printf("[clip] ignored: '%s' has 0 frames\n", FH_CLIPS[id].name);
+        return;
+    }
+    clipState_.clipId      = id;
+    clipState_.clipStartMs = millis();
+    clipState_.returnStartMs = 0;
+    clipState_.cursor      = 0;
+    clipState_.phase       = CLIP_PLAYING;
+    robotState = STATE_ACTION;   // pre-empts any running gait (single motion owner)
+    Serial.printf("[clip] play %s (%u frames)\n",
+                  FH_CLIPS[id].name, FH_CLIPS[id].frame_count);
+}
+
+void SpinalCord::tickClip() {
+    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+    const FhClip& clip = FH_CLIPS[clipState_.clipId];
+
+    ClipStep step = clipPlayerStep(&clipState_, millis(),
+                                   clip.duration_ms, CLIP_RETURN_MS);
+    switch (step.action) {
+        case CLIP_ACT_APPLY_POSE:
+        case CLIP_ACT_BEGIN_RETURN: {
+            float a[12];
+            clipPoseAt(clip.frames, clip.frame_count, step.elapsed_ms,
+                       &clipState_.cursor, a);
+            for (uint8_t i = 0; i < LEG_COUNT; ++i) {
+                ServoTriple s = translateToServo(i, a[i*3+0], a[i*3+1], a[i*3+2]);
+                legs[i]->setJointAngles(s.hip, s.thigh, s.knee);
+            }
+            if (step.action == CLIP_ACT_BEGIN_RETURN) {
+                // Final pose applied; start the non-blocking ease to NEUTRAL.
+                for (uint8_t i = 0; i < LEG_COUNT; ++i)
+                    legs[i]->returnToDefaultAnglesTimed(CLIP_RETURN_MS);
+            }
+            break;
+        }
+        case CLIP_ACT_EASE:
+            for (uint8_t i = 0; i < LEG_COUNT; ++i) legs[i]->tickEase();
+            break;
+        case CLIP_ACT_FINISH:
+            for (uint8_t i = 0; i < LEG_COUNT; ++i) legs[i]->tickEase(); // snap to target
+            robotState = STATE_IDLE;
+            break;
+        case CLIP_ACT_NONE:
+        default:
+            break;
     }
 }
 

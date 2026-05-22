@@ -6,6 +6,7 @@
 #include <cstdint>
 #include "leg.h"
 #include "movements.h"
+#include "motion_math.h"
 #include "../shared/data.h"
 
 class SpinalCord{
@@ -22,6 +23,7 @@ class SpinalCord{
         void setGait(GaitType g);
         GaitType currentGait() const;
         void processCommand(String dir);
+        void playClip(uint8_t id);
 
         // POD bundle of read-only state for the diagnostics CSV logger.
         // Field names match CSV column names (snake_case is intentional).
@@ -48,6 +50,8 @@ class SpinalCord{
         GaitType currentGait_;
         uint32_t gaitPhaseStartMs_;
 
+        ClipState clipState_;   // pure lifecycle state (see motion_math.h)
+
         // Vector timing and state
         float targetX;
         float targetY;
@@ -62,6 +66,7 @@ class SpinalCord{
         void tickGait();
         void tickTrot();
         void tickYawRotation();
+        void tickClip();
 };
 
 #endif
