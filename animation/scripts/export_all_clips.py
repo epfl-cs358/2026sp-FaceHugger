@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Headless re-export of every clip in the open .blend to
-animation/exported_gaits/<clip>/{<clip>.js,.h,.csv}.
+animation/exported_clips/<clip>/{<clip>.js,.h,.csv}.
 
 Runs the (fixed) bake_clip + the Layer-2 converters directly — no operator
 or scene-property dependency — so it works in --background. Use it after

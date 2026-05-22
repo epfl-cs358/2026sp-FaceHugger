@@ -595,9 +595,9 @@ def _load_convention():
     return data
 
 
-def _exported_gaits_dir(clip_name):
-    """animation/exported_gaits/<clip_name>/, created if absent."""
-    out = os.path.join(_animation_dir(), "exported_gaits", clip_name)
+def _exported_clips_dir(clip_name):
+    """animation/exported_clips/<clip_name>/, created if absent."""
+    out = os.path.join(_animation_dir(), "exported_clips", clip_name)
     os.makedirs(out, exist_ok=True)
     return out
 
@@ -1784,7 +1784,7 @@ def bake_clip(clip_name, context):
 
 
 # ---------------------------------------------------------------------------
-# LAYER 2 — converters: baked rows -> animation/exported_gaits/<clip>/
+# LAYER 2 — converters: baked rows -> animation/exported_clips/<clip>/
 # ---------------------------------------------------------------------------
 
 _LEGS = ("fr", "fl", "br", "bl")  # firmware LegId order: FR=0, FL=1, BR=2, BL=3
@@ -1801,7 +1801,7 @@ _LEG_ID = {"fr": 0, "fl": 1, "br": 2, "bl": 3}
 
 def to_csv(frames, clip_name):
     """Raw bone angles, one row per frame (unchanged legacy format)."""
-    path = os.path.join(_exported_gaits_dir(clip_name), f"{clip_name}.csv")
+    path = os.path.join(_exported_clips_dir(clip_name), f"{clip_name}.csv")
     fieldnames = ["frame", "time_ms"] + JOINT_BONES
     with open(path, "w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
@@ -1822,7 +1822,7 @@ def to_c_header(frames, clip_name, convention):
     the firmware header intentionally stays raw — hardware conversion is
     the JS layer's job, not the C array's."""
     del convention  # intentionally unused — header stays raw
-    path = os.path.join(_exported_gaits_dir(clip_name), f"{clip_name}.h")
+    path = os.path.join(_exported_clips_dir(clip_name), f"{clip_name}.h")
     safe = clip_name.upper().replace("-", "_").replace(" ", "_")
     guard = f"FH_CLIP_{safe}_H"
     c_sym = f"fh_clip_{clip_name.lower().replace('-', '_').replace(' ', '_')}"
@@ -1905,7 +1905,7 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False, write=True):
 
     `write=False` returns the generated JS string without touching the
     filesystem (useful for tests/validation). Default (`write=True`) writes
-    the file to `animation/exported_gaits/<clip_name>/` and returns its path.
+    the file to `animation/exported_clips/<clip_name>/` and returns its path.
 
     Math: applies the full hardware conversion (scale-from-NEUTRAL +
     per-leg translateToServo + round) at bake time via
@@ -1916,7 +1916,7 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False, write=True):
     {T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}. Firmware maps to
     PCA channel via LEG_SERVO_CHANNEL[id][servo_id] (config.h:64);
     convention.json's `channels` is no longer on the wire."""
-    path = os.path.join(_exported_gaits_dir(clip_name), f"{clip_name}.js")
+    path = os.path.join(_exported_clips_dir(clip_name), f"{clip_name}.js")
     today = datetime.date.today().isoformat()
 
     # Derive the playback wall-clock period from the baked time_ms
@@ -2095,7 +2095,7 @@ function playFrame() {{
 
 def _bake_and_write(clip, context, convention):
     """Bake one clip (Layer 1) then run the scene's enabled converters
-    (Layer 2) into animation/exported_gaits/<clip>/. Returns
+    (Layer 2) into animation/exported_clips/<clip>/. Returns
     (written, n_frames, max_simultaneous, warning_count). Raises
     ValueError if the clip can't be baked or yields no frames. Shared by
     Export Active Clip and Export Selected so both stay byte-identical."""
@@ -2141,7 +2141,7 @@ def _bake_and_write(clip, context, convention):
 
 class FH_OT_export_clip(bpy.types.Operator):
     """Bake the active clip once, then write the enabled outputs to
-    animation/exported_gaits/<clip>/ (.csv / .h / .js)."""
+    animation/exported_clips/<clip>/ (.csv / .h / .js)."""
 
     bl_idname = "fh.export_clip"
     bl_label = "Export Active Clip"
@@ -2178,7 +2178,7 @@ class FH_OT_export_clip(bpy.types.Operator):
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
 
-        rel = os.path.join("animation", "exported_gaits", clip)
+        rel = os.path.join("animation", "exported_clips", clip)
         print(
             f"Exported '{clip}' ({nframes} frames, {', '.join(written)}) "
             f"→ {rel}/  [max simultaneous servos: {max_seen}, "
@@ -2191,7 +2191,7 @@ class FH_OT_export_clip(bpy.types.Operator):
 class FH_OT_export_selected(bpy.types.Operator):
     """Bake + export every clip ticked via the per-row checkbox in the
     Clips sub-panel (fh_export_selected_clips), each into its own
-    animation/exported_gaits/<clip>/ with the enabled formats. A clip
+    animation/exported_clips/<clip>/ with the enabled formats. A clip
     that fails to bake is skipped and reported; the rest still export."""
 
     bl_idname = "fh.export_selected"
@@ -2244,13 +2244,13 @@ class FH_OT_export_selected(bpy.types.Operator):
             self.report(
                 {"WARNING"},
                 f"Exported {len(ok)}/{len(chosen)} ({', '.join(ok)}) → "
-                f"animation/exported_gaits/ | failed: {'; '.join(failed)}",
+                f"animation/exported_clips/ | failed: {'; '.join(failed)}",
             )
         else:
             self.report(
                 {"INFO"},
                 f"Exported {len(ok)} clip(s) ({', '.join(ok)}) → "
-                "animation/exported_gaits/",
+                "animation/exported_clips/",
             )
         return {"FINISHED"}
 

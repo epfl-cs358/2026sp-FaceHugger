@@ -12,7 +12,7 @@ and overlay them for cross-validation.
 | `urdf_to_blender_rigged.py` | scene builder (`--python`) | `facehugger.urdf` + `fusion_export.json` | **Animator-facing**. Pose-able rig: FK shoulder + IK on hip+knee, foot-target Empties. |
 | `visualize_urdf.py` | scene builder (`--python`) | `code/simulation/generated/facehugger.urdf` | Cross-check: does the URDF chain walk reproduce PyBullet's `loadURDF` rest pose? |
 | `visualize_fusion_export.py` | scene builder (`--python`) | `code/simulation/generated/fusion_export.json` | Cross-check: does the CAD's raw landmark/world data match the URDF generator's output? |
-| `fh_clip_panel.py` | UI add-on (sidebar N-panel) | `bpy.data.actions` + `animation/convention.json` + `animation/poses.json` | Clips (5-Action bundles), a position-based Pose Library, selection sets, export to `exported_gaits/`, activity heatmap — via the layered Action API. |
+| `fh_clip_panel.py` | UI add-on (sidebar N-panel) | `bpy.data.actions` + `animation/convention.json` + `animation/poses.json` | Clips (5-Action bundles), a position-based Pose Library, selection sets, export to `exported_clips/`, activity heatmap — via the layered Action API. |
 | `fh_rename_actions.py` | **LEGACY** one-shot CLI (`--background`) | `animation/fh_rigged_latest.blend` | Idempotent migration of legacy `body_ctrlAction` / `foot_target_*Action` names to `base_anim__<target>`. Run once per old rig; not day-to-day. |
 
 ## urdf_to_blender_rigged.py — animation rig
@@ -227,7 +227,7 @@ Two core data models, kept deliberately separate:
   checklist (tick any subset) + **Export Selected Clips**. Bakes the
   IK-solved joint angles once per clip (`bake_clip`, Layer 1) then runs
   the enabled converters (Layer 2) into
-  `animation/exported_gaits/<clip>/` (git-ignored output) — one folder
+  `animation/exported_clips/<clip>/` — one folder
   per clip. The `.h` stays raw bone angles; the `.js` applies the full
   hardware conversion (scale-from-neutral + per-leg `translateToServo`)
   from `convention.json`. (No more Set N/Flat buttons here — those poses
@@ -280,7 +280,7 @@ bpy.ops.fh.save_as_clip()                # snapshot live actions → new clip
 bpy.ops.fh.duplicate_clip()              # reads scene.fh_new_clip_name
 bpy.ops.fh.overwrite_clip(clip_name="walk")  # live anim → overwrite existing
 bpy.ops.fh.rename_clip()                 # reads scene.fh_new_clip_name
-bpy.ops.fh.export_clip()                 # active clip → exported_gaits/
+bpy.ops.fh.export_clip()                 # active clip → exported_clips/
 bpy.ops.fh.export_selected()             # ticked clips (scene.fh_export_clips)
 
 bpy.ops.fh.pose_save()                   # reads scene.fh_pose_name
@@ -329,7 +329,7 @@ saved set of control transforms** (independent of clips).
    (`Legs`, `Front`, `FL`, …) so you can grab/key them together.
 7. **Export.** In **Export**, tick CSV / `.h` / `.js`, then either
    *Export Active Clip* or tick clips in *Clips to export* and hit
-   *Export Selected Clips* → `animation/exported_gaits/<clip>/`.
+   *Export Selected Clips* → `animation/exported_clips/<clip>/`.
 
 ### Running an exported `.js` clip in a browser
 
@@ -340,7 +340,7 @@ without firmware changes — full design context in
 mirrors).
 
 1. **Author + export.** Build the clip, tick **Browser JS (.js)**, hit
-   *Export Active Clip* → `animation/exported_gaits/<clip>/<clip>.js`.
+   *Export Active Clip* → `animation/exported_clips/<clip>/<clip>.js`.
 2. **Optional `.js` toggles** (under the Browser JS tick):
    - *Dry run* — emits a variant that `console.log`s every
      `{T:4,id,a}` message instead of sending it. **Validate the servo
@@ -491,7 +491,7 @@ so a no-op re-run leaves the file's mtime untouched.
    makes any future rigging code one branch simpler.
 3. **Binary `.fhc` exporter.** Export Active Clip already bakes the
    IK-solved angles to CSV / `.h` / `.js` in
-   `animation/exported_gaits/<clip>/` (two-layer `bake_clip` →
+   `animation/exported_clips/<clip>/` (two-layer `bake_clip` →
    converters). What's still missing is a converter to the on-board
    binary playback format once it lands (see
    [doc/animation-pipeline/](../../doc/animation-pipeline/)) — it slots
