@@ -25,7 +25,7 @@
 
 ## Next-gen clip format: `.fhc` and foot-space animation
 
-The key architectural step is shifting from baked joint angles to foot positions + Bezier handles, unlocking runtime IK. Full spec: [animation/fhc-format.md](animation/fhc-format.md).
+The key architectural step is shifting from baked joint angles to foot positions + Bezier handles, unlocking runtime IK. The locked design lives in `doc/animation-pipeline/leg-coordinates.md`; the sections below summarize it.
 
 ### Why foot-space matters
 

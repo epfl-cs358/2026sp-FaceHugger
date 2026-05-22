@@ -2,7 +2,7 @@
 
 The **FH Clip Panel** add-on (Blender 5.x) is the animator-facing tool for authoring and exporting FaceHugger Clips - one-shot canned gestures played once via `CMD_PLAY_CLIP`. It adds a "FaceHugger" tab to the 3D viewport sidebar (press `N`) and manages clip bundles, pose snapshots, selection presets, and exports to multiple formats. The add-on lives in `animation/scripts/fh_clip_panel.py` and targets the rigged scene at `animation/fh_rigged_latest.blend`.
 
-For a step-by-step authoring walkthrough see [Blender clips how-to](../../guide/toolchain/blender-clips.md). The Phase-2 on-board clip player design is described in [fhc-format.md](fhc-format.md).
+For a step-by-step authoring walkthrough see [Blender clips how-to](../../guide/toolchain/blender-clips.md). The Phase-2 on-board clip player design is covered in the [roadmap](../roadmap.md).
 
 ---
 
