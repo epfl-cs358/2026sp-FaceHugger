@@ -1,6 +1,9 @@
 title: Reference
 nav:
+  - conventions.md
+  - api.md
   - firmware
   - animation
   - simulation
   - remote-control
+  - roadmap.md

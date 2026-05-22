@@ -3,7 +3,7 @@
 !!! todo "Stub - to be written"
     The message types the app sends/receives. New content from
     `code/remote-control-app/MyApp/api/api-messages.tsx` and `api-types.tsx`.
-    Should agree with [Firmware → API](../firmware/api.md).
+    Should agree with [the WebSocket API](../api.md).
 
 ## Message types
 

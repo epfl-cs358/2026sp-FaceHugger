@@ -24,7 +24,7 @@
 
 !!! todo
     Which servo connects to which channel/pin. Map to servo IDs in
-    [servo conventions](../reference/firmware/servo-conventions.md).
+    [servo conventions](../reference/conventions.md).
 
 ## ESP32 pinout
 

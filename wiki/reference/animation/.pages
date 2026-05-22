@@ -1,6 +1,7 @@
 title: Animation pipeline
 nav:
   - index.md
+  - clip-panel.md
   - blender-rig.md
   - urdf-pipeline.md
   - fhc-format.md

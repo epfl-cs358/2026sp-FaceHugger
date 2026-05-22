@@ -20,8 +20,8 @@
 !!! todo
     Plain-language intuition: which joint moves the foot where; forward vs
     inverse kinematics; the zero pose and sign conventions at a glance. Full
-    treatment in [Reference → Kinematics](../reference/firmware/kinematics.md)
-    and [servo conventions](../reference/firmware/servo-conventions.md).
+    treatment in [Reference - Kinematics](../reference/firmware/kinematics.md)
+    and [servo conventions](../reference/conventions.md).
 
 ## Sizing & loads
 
