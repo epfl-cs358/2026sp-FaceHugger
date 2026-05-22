@@ -32,4 +32,4 @@ const ws = new WebSocket("ws://192.168.4.1:81");
 ws.send(JSON.stringify({ T: 2, s: 0 }));   // transition to IDLE
 ```
 
-See [Reference - API](../../reference/api.md) for the full command protocol.
+See the [API reference](../../reference/api.md) for the full command protocol.

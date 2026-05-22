@@ -18,4 +18,4 @@ Aim to keep high-red frames out of loops that repeat frequently, as they indicat
 
 ## Generating it
 
-Each frame, `_heatmap_handler()` in `fh_clip_panel.py` reads the IK-solved bone angles, computes the per-frame delta for each joint, maps the delta through the green/orange/red thresholds (`_HEATMAP_MID_DEG = 5`, `_HIGH_DEG = 20`), and applies a material colour to the corresponding `__servo` mesh in the viewport. No external script is needed - enable the heatmap toggle in the Display sub-panel of the FH Clip Panel while a clip is active.
+Each frame, `_heatmap_handler()` in `fh_clip_panel.py` reads the IK-solved bone angles, computes the per-frame delta for each joint, maps the delta through the green/orange/red thresholds (`_HEATMAP_MID_DEG = 5`, `_HIGH_DEG = 20`), and applies a material colour to the corresponding `__servo` mesh in the viewport. No external script is needed; just enable the heatmap toggle in the Display sub-panel of the FH Clip Panel while a clip is active.

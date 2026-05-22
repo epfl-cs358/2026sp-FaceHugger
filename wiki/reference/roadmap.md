@@ -112,7 +112,7 @@ Code location hints: gait control UI is in `code/remote-control-app/`; T:6 (inve
 
 **Status:** Proposal in `animation/SERVO_ID_CONVENTION.md`. Pending firmware confirmation.
 
-The proposed numbering (`servo_id = leg_idx * 3 + joint_idx`, FL->FR->BL->BR order) disagrees with the current firmware leg ordering (FR->FL->RR->RL). This matters because `.gait` files bake servo IDs at export time - wrong numbering means every leg moves wrong on hardware. See [conventions.md](conventions.md) for leg-naming context.
+The proposed numbering (`servo_id = leg_idx * 3 + joint_idx`, FL->FR->BL->BR order) disagrees with the current firmware leg ordering (FR->FL->RR->RL). This matters because `.gait` files bake servo IDs at export time, and wrong numbering means every leg moves wrong on hardware. See [conventions.md](conventions.md) for leg-naming context.
 
 ### Resolution checklist
 
@@ -131,7 +131,7 @@ The proposed numbering (`servo_id = leg_idx * 3 + joint_idx`, FL->FR->BL->BR ord
 
 Gaits are currently hardcoded in `spinal_cord.cpp`. Proposed direction:
 
-1. **Move gait profiles to a config file** (JSON or YAML) read at boot - editable without recompiling.
+1. **Move gait profiles to a config file** (JSON or YAML) read at boot, so they are editable without recompiling.
 2. **Blender-authored gaits (v2+):** Once foot-space clips work, gaits can be authored as cyclic `.fhc` clips in Blender instead of procedural parameters. Handles complex gaits (gallop, bound, canter) more naturally.
 
 This is a v2+ feature. Pursue only if authoring new gaits becomes a bottleneck.
@@ -210,4 +210,4 @@ If servo overheating or current spikes become an issue, add a slew-rate limiter 
 | `code/simulation/kinematics.py` | `ik_v2` canonical implementation (to port to C for T1). |
 | `code/firmware/CLIP_PLAYER_TESTING.md` | Test suite for the current joint-angle clip player (reference for `.fhc` test structure). |
 
-All design decisions in these documents are locked - settled through grill-me sessions and ADRs. Implement as written; if you find a contradiction, check `CONTEXT.md` for the latest resolution.
+All design decisions in these documents are locked, settled through grill-me sessions and ADRs. Implement as written; if you find a contradiction, check `CONTEXT.md` for the latest resolution.

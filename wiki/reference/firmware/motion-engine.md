@@ -1,6 +1,6 @@
 # Motion engine (gaits & clips)
 
-The motion engine is the part of `nervous_system/` that turns smoothed direction inputs into 12 servo angles per tick. Two motion sources exist - the gait engine and the clip player - but only one drives the servos at any instant (the single-owner principle). Clips pre-empt gaits: a `CMD_PLAY_CLIP` switches `robotState` to `STATE_ACTION` and pauses the gait immediately.
+The motion engine is the part of `nervous_system/` that turns smoothed direction inputs into 12 servo angles per tick. Two motion sources exist (the gait engine and the clip player), but only one drives the servos at any instant (the single-owner principle). Clips pre-empt gaits: a `CMD_PLAY_CLIP` switches `robotState` to `STATE_ACTION` and pauses the gait immediately.
 
 ## Gait mechanics
 
@@ -60,7 +60,7 @@ The thigh handles lateral (strafe) motion via `activeX`, with left and right leg
 
 ### CRAB gait
 
-CRAB suppresses the forward component entirely (`fwdContrib = 0`), leaving only lateral and yaw motion. This allows the robot to move sideways and spin in place without any forward travel - useful for orienting toward walls or obstacles.
+CRAB suppresses the forward component entirely (`fwdContrib = 0`), leaving only lateral and yaw motion. This allows the robot to move sideways and spin in place without any forward travel, which is useful for orienting toward walls or obstacles.
 
 ### TROT gait
 
@@ -83,7 +83,7 @@ The three conditions are: the user released the joystick (or the deadman switch 
 
 ### Yaw rotation
 
-If `|activeYaw| > 0.05`, the gait branches to `tickYawRotation()` regardless of the selected gait type. This function uses diagonal trot phasing (FL + RR in stance, then FR + RL) with per-leg yaw coefficients chosen so all four hips rotate in the same effective direction during their stance phase. Translation forces cancel diagonally and only torque remains - the robot spins in place.
+If `|activeYaw| > 0.05`, the gait branches to `tickYawRotation()` regardless of the selected gait type. This function uses diagonal trot phasing (FL + RR in stance, then FR + RL) with per-leg yaw coefficients chosen so all four hips rotate in the same effective direction during their stance phase. Translation forces cancel diagonally and only torque remains, so the robot spins in place.
 
 ## Gait profiles
 
@@ -95,9 +95,9 @@ Three built-in gaits are configured in `GAITS[]` in `spinal_cord.cpp`:
 | GAIT_TROT | 1.5 | 40.0 | 50.0 | 0.50 | [0.50, 0.0, 0.0, 0.50] |
 | GAIT_CRAB | 1.5 | 20.0 | 33.3 | 0.50 | [0.50, 0.0, 0.0, 0.50] |
 
-WALK uses a high duty cycle (0.75) so three legs are in stance at any moment - the slowest but most stable gait. TROT pairs diagonals (FL+RR vs. FR+RL) for medium-speed travel. CRAB shares TROT's phase offsets but suppresses forward motion.
+WALK uses a high duty cycle (0.75) so three legs are in stance at any moment, making it the slowest but most stable gait. TROT pairs diagonals (FL+RR vs. FR+RL) for medium-speed travel. CRAB shares TROT's phase offsets but suppresses forward motion.
 
-The TROT step length/height shown above (40/50) are `tickTrot()`'s own internal constants - TROT branches to `tickTrot()` and ignores the `GAITS[]` array's TROT step_length/step_height row.
+The TROT step length/height shown above (40/50) are `tickTrot()`'s own internal constants; TROT branches to `tickTrot()` and ignores the `GAITS[]` array's TROT step_length/step_height row.
 
 A phase offset of 0.5 means "halfway through the global cycle." With duty = 0.5, a leg with offset 0.5 is in swing exactly when the leg with offset 0.0 is in stance, producing the diagonal pairing.
 
@@ -178,4 +178,4 @@ flowchart TD
 
 ## translateToServo()
 
-`translateToServo()` remaps math-space angles to servo-space (0-180°) accounting for how each leg is physically mounted - sign flips and offsets differ per leg because two legs face forward and two face rear, and some have mirrored servo brackets. This is not a clamp and not inverse kinematics; it is a purely mechanical remap. For the per-leg formulas see [../conventions.md](../conventions.md) (or `servo-conventions.md` in this section).
+`translateToServo()` remaps math-space angles to servo-space (0-180°) accounting for how each leg is physically mounted. Sign flips and offsets differ per leg because two legs face forward and two face rear, and some have mirrored servo brackets. This is not a clamp and not inverse kinematics; it is a purely mechanical remap. For the per-leg formulas see [../conventions.md](../conventions.md) (or `servo-conventions.md` in this section).

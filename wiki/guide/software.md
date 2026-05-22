@@ -7,8 +7,8 @@ tooling: a Python simulation stack, Blender animation scripts, and a React Nativ
 remote-control app. The firmware is split into three logical layers under
 `code/firmware/src/`: `brain/` (network and sensors), `nervous_system/`
 (kinematics, legs, servos, and motion), and `shared/` (config and data
-structures). Deep reference detail lives in
-[Reference - Firmware](../reference/firmware/index.md).
+structures). Deep reference detail lives in the
+[firmware reference](../reference/firmware/index.md).
 
 ## How it works
 
@@ -40,8 +40,8 @@ stateDiagram-v2
 
 Build, flash, and connect to the robot via the Toolchain pages:
 
-- [Toolchain overview](toolchain/index.md) - pipeline from CAD to firmware flash.
-- [Flashing the firmware](toolchain/flashing.md) - PlatformIO build, upload,
+- [Toolchain overview](toolchain/index.md): pipeline from CAD to firmware flash.
+- [Flashing the firmware](toolchain/flashing.md): PlatformIO build, upload,
   monitor, and Wi-Fi/WebSocket connection details.
 
 For the simulation and Blender workflows, start at
@@ -49,5 +49,5 @@ For the simulation and Blender workflows, start at
 [Fusion 360 export add-ins](toolchain/fusion-export.md) and
 [Blender clip authoring and export](toolchain/blender-clips.md).
 
-The remote-control app is documented at
-[Reference - Remote control](../reference/remote-control/index.md).
+The remote-control app is documented in the
+[remote-control reference](../reference/remote-control/index.md).

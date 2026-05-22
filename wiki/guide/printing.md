@@ -13,7 +13,7 @@
 ## Print settings
 
 !!! todo
-    Infill, walls, supports - per part where it differs. From `print_export.txt`.
+    Infill, walls, and supports, varying per part. From `print_export.txt`.
 
 ## Orientation per part
 

@@ -1,6 +1,6 @@
 # Blender clip panel (FH Clip Panel)
 
-The **FH Clip Panel** add-on (Blender 5.x) is the animator-facing tool for authoring and exporting FaceHugger Clips - one-shot canned gestures played once via `CMD_PLAY_CLIP`. It adds a "FaceHugger" tab to the 3D viewport sidebar (press `N`) and manages clip bundles, pose snapshots, selection presets, and exports to multiple formats. The add-on lives in `animation/scripts/fh_clip_panel.py` and targets the rigged scene at `animation/fh_rigged_latest.blend`.
+The **FH Clip Panel** add-on (Blender 5.x) is the animator-facing tool for authoring and exporting FaceHugger Clips, the one-shot canned gestures played once via `CMD_PLAY_CLIP`. It adds a "FaceHugger" tab to the 3D viewport sidebar (press `N`) and manages clip bundles, pose snapshots, selection presets, and exports to multiple formats. The add-on lives in `animation/scripts/fh_clip_panel.py` and targets the rigged scene at `animation/fh_rigged_latest.blend`.
 
 For a step-by-step authoring walkthrough see [Blender clips how-to](../../guide/toolchain/blender-clips.md). The Phase-2 on-board clip player design is covered in the [roadmap](../roadmap.md).
 
@@ -16,15 +16,15 @@ Blender 5.0 or later is required (not 3.3 LTS) because the add-on uses the layer
 
 ### Clip management
 
-Clips are organized as named 5-Action bundles - one Action per control object (`body_ctrl` plus the four foot targets). A clip is a one-shot gesture, not a loop: after the final frame the robot linearly interpolates back to NEUTRAL over 500 ms, then goes IDLE. The panel lets you create, overwrite, rename, and duplicate clips. The `.blend` file must be saved for clips to persist, because the panel rescans on every viewport redraw.
+Clips are organized as named 5-Action bundles, one Action per control object (`body_ctrl` plus the four foot targets). A clip is a one-shot gesture, not a loop: after the final frame the robot linearly interpolates back to NEUTRAL over 500 ms, then goes IDLE. The panel lets you create, overwrite, rename, and duplicate clips. The `.blend` file must be saved for clips to persist, because the panel rescans on every viewport redraw.
 
 ### Pose library
 
-`animation/poses.json` stores named position snapshots of the five control objects (`body_ctrl` loc+rot, foot targets loc only). Poses are clip-independent - applying a pose is a pure viewport transform with no keyframes or Action side effects. Two default poses ship: `flat` (URDF rest, splayed) and `standing` (raised, tucked); `neutral` is seeded on first use. The **Key into Clip** button commits the currently applied pose into the active clip's Actions at the chosen frame. The panel shows a yellow warning whenever a pose is applied but not yet keyed.
+`animation/poses.json` stores named position snapshots of the five control objects (`body_ctrl` loc+rot, foot targets loc only). Poses are clip-independent: applying a pose is a pure viewport transform with no keyframes or Action side effects. Two default poses ship: `flat` (URDF rest, splayed) and `standing` (raised, tucked); `neutral` is seeded on first use. The **Key into Clip** button commits the currently applied pose into the active clip's Actions at the chosen frame. The panel shows a yellow warning whenever a pose is applied but not yet keyed.
 
 ### Selection sets
 
-One-click selection of rig control groups for efficient keyframing: **All, Body, Legs, Front, Back, FL, FR, BL, BR**. Selection is a pure viewport operation - no transforms, keyframes, or Actions are modified.
+One-click selection of rig control groups for efficient keyframing: **All, Body, Legs, Front, Back, FL, FR, BL, BR**. Selection is a pure viewport operation; no transforms, keyframes, or Actions are modified.
 
 ### Export formats
 
@@ -43,7 +43,7 @@ Colours the 8 servo meshes (shoulder and knee; hip/link2 meshes are absent from 
 
 ### Bezier/Linear preview toggle
 
-Switches the active clip's F-curves between **BEZIER** (smooth authoring) and **LINEAR** (exact robot playback, no inter-frame easing). The toggle is non-destructive - Bezier handles are preserved and restored when switching back.
+Switches the active clip's F-curves between **BEZIER** (smooth authoring) and **LINEAR** (exact robot playback, no inter-frame easing). The toggle is non-destructive: Bezier handles are preserved and restored when switching back.
 
 ### Authoring-time warnings
 
@@ -68,12 +68,12 @@ BLENDER_BIN=/Applications/Blender-5.1.app/Contents/MacOS/Blender
 
 ## Terminology
 
-- **Clip** - one-shot canned gesture (not "action", not "animation"). Plays once via `CMD_PLAY_CLIP`.
-- **Gait** - looping locomotion pattern (not a clip). Selected by `T:5`.
-- **Math-space angle** - joint angle in the rig's convention (symmetric per URDF). Stored in CSV/`.h` exports.
-- **Servo-space angle** - physical 0-180 deg PWM angle written to hardware. Applied only in `.js` via per-leg `translateToServo`.
-- **SCALE** - 2/3 (0.6667) shrink from NEUTRAL. Applied at bake time; firmware never re-scales clip data.
-- **Leg naming** - Blender/URDF uses `fl/fr/bl/br`; firmware LegId uses `FR/FL/RR/RL`. The add-on uses Blender names exclusively.
+- **Clip**: one-shot canned gesture (not "action", not "animation"). Plays once via `CMD_PLAY_CLIP`.
+- **Gait**: looping locomotion pattern (not a clip). Selected by `T:5`.
+- **Math-space angle**: joint angle in the rig's convention (symmetric per URDF). Stored in CSV/`.h` exports.
+- **Servo-space angle**: physical 0-180 deg PWM angle written to hardware. Applied only in `.js` via per-leg `translateToServo`.
+- **SCALE**: 2/3 (0.6667) shrink from NEUTRAL. Applied at bake time; firmware never re-scales clip data.
+- **Leg naming**: Blender/URDF uses `fl/fr/bl/br`; firmware LegId uses `FR/FL/RR/RL`. The add-on uses Blender names exclusively.
 
 ---
 

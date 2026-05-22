@@ -104,4 +104,4 @@ All implementations are in `doc/torque-analysis/torque_calculations.py`:
 | Inverse solver | `build_widget()` / `update()` |
 
 !!! note
-    An interactive version with sliders is available as the rendered Jupyter notebook on the [torque notebook page](torque_calculations.ipynb). The sliders require a live Python kernel - the static site has none. Run `doc/torque-analysis/torque_calculations.ipynb` locally for live interaction.
+    An interactive version with sliders is available as the rendered Jupyter notebook on the [torque notebook page](torque_calculations.ipynb). The sliders require a live Python kernel; the static site has none. Run `doc/torque-analysis/torque_calculations.ipynb` locally for live interaction.

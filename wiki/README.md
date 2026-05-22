@@ -2,15 +2,15 @@
 
 This folder is the source of the project wiki (a [MkDocs Material](https://squidfunk.github.io/mkdocs-material/)
 site). This page explains how the wiki is built and how to contribute to it. It is **not** published to the
-site itself - it's here for editors.
+site itself; it's here for editors.
 
 ## How the wiki works
 
 - **Source:** every page is a Markdown file under `wiki/`. The config is `mkdocs.yml` at the repo root.
 - **Two pillars:** `wiki/guide/` is the build guide (for builders/newcomers); `wiki/reference/` is the
   technical depth. Each is a top tab on the site.
-- **Navigation** comes from a `.pages` file in each folder (it sets the section's title and page order) -
-  there is no hand-maintained nav list. Add a page by creating the `.md` and adding its filename to that
+- **Navigation** comes from a `.pages` file in each folder (it sets the section's title and page order).
+  There is no hand-maintained nav list. Add a page by creating the `.md` and adding its filename to that
   folder's `.pages`.
 - **`_context/` folders** hold the original project docs copied verbatim, as source material for writing the
   real pages. They are excluded from the built site but stay in the repo so you can read them on GitHub.
@@ -60,7 +60,7 @@ Pull often (`git pull`) so you stay in sync with teammates on the same branch.
 Any non-Markdown file under `wiki/` is copied to the site as-is. Convention: an `img/` folder next to the
 page that uses it; shared assets in `wiki/assets/`. Reference with a path relative to the page.
 
-**Images & GIFs** - a GIF is just an image; it animates on its own. Click-to-zoom is automatic (glightbox).
+**Images & GIFs:** a GIF is just an image; it animates on its own. Click-to-zoom is automatic (glightbox).
 
 ```markdown
 ![Assembled robot](img/robot.jpg){ width="500" }
@@ -71,14 +71,14 @@ page that uses it; shared assets in `wiki/assets/`. Reference with a path relati
 </figure>
 ```
 
-**Video** - small clips: an `.mp4` in `img/` with an HTML5 tag. Large videos: use a YouTube embed instead of
+**Video:** for small clips, put an `.mp4` in `img/` with an HTML5 tag. For large videos, use a YouTube embed instead of
 committing big binaries to git.
 
 ```html
 <video controls width="100%"><source src="img/walk.mp4" type="video/mp4"></video>
 ```
 
-**3D models (STL viewer)** - the `<model-viewer>` web component shows interactive 3D, but it loads `.glb`,
+**3D models (STL viewer):** the `<model-viewer>` web component shows interactive 3D, but it loads `.glb`,
 not `.stl`. Convert once with [`assets/models/convert_stl_to_glb.py`](assets/models/convert_stl_to_glb.py),
 commit the `.glb`, then on the page:
 
@@ -91,17 +91,17 @@ commit the `.glb`, then on the page:
 
 No-conversion fallback: an iframe to `viewstl.com` pointed at the STL's raw-GitHub URL.
 
-**Interactive notebooks** - `mkdocs-jupyter` is enabled. Drop a `.ipynb` under `wiki/` and add it to the
+**Interactive notebooks:** `mkdocs-jupyter` is enabled. Drop a `.ipynb` under `wiki/` and add it to the
 folder's `.pages`; it renders with its **saved** outputs. The site has no Python kernel, so `ipywidgets`
 sliders aren't live. For the torque analysis: ship the notebook read-only and tell readers to run it locally,
 or reimplement the controls as a self-contained Plotly HTML widget embedded in an `<iframe>`.
 
-**Math & diagrams** - LaTeX via MathJax: inline `\( ... \)`, block `\[ ... \]`. Diagrams via Mermaid: a
+**Math & diagrams:** LaTeX via MathJax: inline `\( ... \)`, block `\[ ... \]`. Diagrams via Mermaid: a
 ` ```mermaid ` fenced block. Circuit schematics: export from KiCad as SVG and embed as an image.
 
 ## Who writes what
 
-Starting split by theme - reassign names and rebalance per page as you go (this is WIP). Ferdinand's
+Starting split by theme; reassign names and rebalance per page as you go (this is WIP). Ferdinand's
 firmware+software block is the heaviest; consider sharing the firmware reference.
 
 | Member | Theme | Pages to write |

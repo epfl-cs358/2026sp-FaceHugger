@@ -8,7 +8,7 @@ nothing moved downstream.
 `cad/scripts/ExportBodiesToURDF/` and `cad/scripts/ExportPrintableSTLs/` are the
 first stage. The URDF exporter writes a JSON manifest and STL meshes that the
 Python generator (`generate_urdf.py`) turns into `facehugger.urdf`. Everything
-downstream is derived from that URDF - never hand-edit the generated files. See
+downstream is derived from that URDF, so never hand-edit the generated files. See
 [Fusion 360 export add-ins](fusion-export.md) for the step-by-step.
 
 **URDF -> Blender rig.** Running `facehugger.py blender --rigged` ingests the

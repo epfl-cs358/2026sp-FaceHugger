@@ -6,8 +6,8 @@
     one-paragraph "how it works". Source: repo root `README.md` + new copy.
 
 FaceHugger is a quadruped robot built for EPFL's *Making Intelligent Things*
-course (2026sp). This wiki is a build guide - start at the top and work down
-to go from parts to a walking robot - backed by a technical reference for the
+course (2026sp). This wiki is a build guide: start at the top and work down
+to go from parts to a walking robot. It is backed by a technical reference for the
 firmware, animation pipeline, and simulation.
 
 ## What is FaceHugger

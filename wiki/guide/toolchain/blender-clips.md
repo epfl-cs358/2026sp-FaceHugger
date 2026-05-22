@@ -1,7 +1,7 @@
 # Blender clip authoring and export
 
 FaceHugger clips are one-shot authored gestures baked in Blender and exported as
-C headers for firmware playback. The workflow requires Blender 5.0 or later - the
+C headers for firmware playback. The workflow requires Blender 5.0 or later. The
 add-on uses the layered Action API introduced in Blender 4.4, and 3.3 LTS is no
 longer supported.
 
@@ -26,13 +26,13 @@ clips by posing these controls, not the armature bones directly.
 Press `N` in the 3D Viewport to open the sidebar, then switch to the
 **FaceHugger** tab. The panel provides:
 
-- **Clips** - create, rename, duplicate, and overwrite named clip bundles. Each
+- **Clips**: create, rename, duplicate, and overwrite named clip bundles. Each
   clip is a set of five Actions (one per control object). Switch the active clip
   by clicking its entry in the list.
-- **Poses** - a commit-tracked library of control-object snapshots. Apply a pose
+- **Poses**: a commit-tracked library of control-object snapshots. Apply a pose
   to set the viewport without keyframing, then use **Key into Clip** to record
   the pose as a keyframe at the current frame.
-- **Export** - bake and export the active clip (or a selection of clips) to CSV,
+- **Export**: bake and export the active clip (or a selection of clips) to CSV,
   C header (`.h`), and browser JavaScript (`.js`). The bundled
   `clips_all.h` + `clips_manifest.json` is the format consumed by the on-board
   clip player.
@@ -56,6 +56,6 @@ lands in `animation/exported_clips/`: per-clip folders and the bundled
 `clips_all.h` and `clips_manifest.json` at the top level. Exit code 0 means all
 clips exported cleanly.
 
-For the full feature reference - pose library, selection sets, activity heatmap,
-authoring-time warnings, and integration tests - see
-[Reference - Clip Panel](../../reference/animation/clip-panel.md).
+For the full feature reference (pose library, selection sets, activity heatmap,
+authoring-time warnings, and integration tests), see
+[the Clip Panel reference](../../reference/animation/clip-panel.md).

@@ -10,7 +10,7 @@ python code/simulation/facehugger.py blender --rigged
 
 The script reads `code/simulation/generated/facehugger.urdf`, the STLs in
 `code/simulation/generated/exported_meshes/`, and `fusion_export.json`. It
-rebuilds the rig from scratch on every run - nothing is persisted in a `.blend`
+rebuilds the rig from scratch on every run; nothing is persisted in a `.blend`
 between runs.
 
 For clip authoring and export, see [clip-panel.md](clip-panel.md).
@@ -19,7 +19,7 @@ For clip authoring and export, see [clip-panel.md](clip-panel.md).
 
 ## Armature anatomy
 
-The armature is named `FaceHuggerRig` and contains 13 bones - one root
+The armature is named `FaceHuggerRig` and contains 13 bones: one root
 (`base_link`) plus three per leg:
 
 ```
@@ -34,7 +34,7 @@ FaceHuggerRig
 ```
 
 Bone names match URDF link names exactly (lowercase, e.g. `fl_link1`). The
-export tooling uses these names as dict keys with no translation table - do not
+export tooling uses these names as dict keys with no translation table, so do not
 rename them.
 
 ### Bone roll and the uniform-Z contract
@@ -43,7 +43,7 @@ At rig-build time, `EditBone.align_roll(joint.axis)` is called for every bone.
 After this, **bone-local Z is the URDF joint axis for all 12 joint bones**,
 including the per-side axis sign flip on FR/BL hip and knee (`<axis>0 -1 0</axis>`
 in the URDF). The practical result: all pose-mode rotation lives on
-`rotation_euler[2]` uniformly - no per-joint axis branching.
+`rotation_euler[2]` uniformly, with no per-joint axis branching.
 
 This relies on `_bone_endpoints_world_mm` projecting each bone's tail onto the
 plane perpendicular to its joint axis before `align_roll` is called. Without the
@@ -56,7 +56,7 @@ unaffected by the tail projection.
 
 A `LIMIT_ROTATION` constraint with `use_limit_z = True` is applied to every
 joint bone. The `min_z`/`max_z` values are read from the URDF `<limit lower
-upper>` at rig-build time - they are not hardcoded here. The URDF is the
+upper>` at rig-build time and are not hardcoded here. The URDF is the
 authoritative source; if joint ranges are retuned in Fusion, regenerate the URDF
 and rebuild the rig.
 
@@ -66,9 +66,9 @@ and rebuild the rig.
 
 The rig implements the physical 3-servo-per-leg arrangement directly:
 
-- **Shoulder (`*_link1`) - FK only.** Rotate it in pose mode to aim the leg
+- **Shoulder (`*_link1`), FK only.** Rotate it in pose mode to aim the leg
   laterally (world-Z yaw). It is not included in the IK chain.
-- **Hip + knee (`*_link2`, `*_link3`) - IK, chain_count=2.** An `IK` constraint
+- **Hip + knee (`*_link2`, `*_link3`), IK with chain_count=2.** An `IK` constraint
   on the knee bone (`*_link3`) targets the foot Empty
   `foot_target_{fl,fr,bl,br}`. The solver drives hip and knee to bring the foot
   to the target position.
@@ -82,7 +82,7 @@ prevents lateral bending that has no physical servo counterpart.
 Each foot target is parented to its leg's `*_link1` bone (`parent_type='BONE'`).
 If the shoulder were also in the IK chain (`chain_count=3`), the solver would
 rotate `*_link1`, which moves the parented foot target, which changes the IK
-goal - producing an unstable feedback loop with approximately 180 mm of drift at
+goal, producing an unstable feedback loop with approximately 180 mm of drift at
 rest pose. `chain_count=2` excludes the shoulder and is the only stable
 configuration for this parenting arrangement.
 
@@ -91,7 +91,7 @@ configuration for this parenting arrangement.
 1. Rotate `{leg}_link1` in pose mode to set the shoulder yaw.
 2. Drag the `foot_target_{leg}` Empty to set the foot position. Because the foot
    target is parented to `*_link1`, rotating the shoulder automatically carries
-   the foot target with it - no manual repositioning required.
+   the foot target with it; no manual repositioning required.
 
 ---
 

@@ -22,7 +22,7 @@ belong here, not downstream.
 
 Rather than computing per-visual `<origin xyz>` offsets in the URDF, the
 exporter pre-shifts every STL's vertices so that mesh-local `(0, 0, 0)`
-coincides with a meaningful CAD construction point - typically the joint
+coincides with a meaningful CAD construction point, typically the joint
 pivot that attaches the next link. The URDF generator can therefore emit
 identity origins on every visual:
 
@@ -65,7 +65,7 @@ user edits to `mesh_files._servo_role_assignment` in the JSON across reruns.
 
 ## Joint zero and limits
 
-Joint angle theta=0 corresponds to the Fusion rest pose - the configuration
+Joint angle theta=0 corresponds to the Fusion rest pose, the configuration
 the joint is in when the CAD assembly is at its definition state. Limits are
 read from the Fusion revolute joint definitions via `collect_joints()` and
 written into each `<limit lower="..." upper="..."/>` element.

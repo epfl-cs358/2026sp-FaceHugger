@@ -43,7 +43,7 @@ All commands carry a `T` field identifying the message type. The robot silently 
 
 Payload: `{"T": 1, "dir": "<direction_string>"}`
 
-The field is `dir` (string), not `d` (integer). The `api-types.tsx` `DirectionVector` enum defines the valid values; `API_SPEC.md` incorrectly shows `d: int` - trust the code.
+The field is `dir` (string), not `d` (integer). The `api-types.tsx` `DirectionVector` enum defines the valid values. `API_SPEC.md` incorrectly shows `d: int`, so trust the code.
 
 | String   | Vector   | Description           |
 |----------|----------|-----------------------|
@@ -119,7 +119,7 @@ This command directly drives a single servo to a specific angle via PCA9685, byp
 
 Payload: `{"T": 5, "g": <gait_id>}`
 
-`API_SPEC.md` lists TROT=0, CRAB=1, CRAWL=2 - this is outdated. The firmware `GaitType` enum (`movements.h`) and the frontend `GaitMode` enum (`api-types.tsx`) are authoritative:
+`API_SPEC.md` lists TROT=0, CRAB=1, CRAWL=2, which is outdated. The firmware `GaitType` enum (`movements.h`) and the frontend `GaitMode` enum (`api-types.tsx`) are authoritative:
 
 | ID | Name      | Description                                 |
 |----|-----------|---------------------------------------------|
@@ -140,7 +140,7 @@ Payload: `{"T": 6, "a": <action_id>}`
 |----|--------------|------------------------------------------------|
 | 0  | INVERT_ROBOT | Tip the robot over a wall, flip, and right it  |
 
-This command triggers a specialized authored maneuver and runs only in `STATE_ACTION`. After the maneuver completes, the robot returns to `STATE_IDLE`. Note that `T:6` is a high-level action selector (maneuver), not the clip player - clips are played via `T:7`.
+This command triggers a specialized authored maneuver and runs only in `STATE_ACTION`. After the maneuver completes, the robot returns to `STATE_IDLE`. Note that `T:6` is a high-level action selector (maneuver), not the clip player. Clips are played via `T:7`.
 
 ### T:7 - CMD_PLAY_CLIP (Play Animation Clip)
 
@@ -198,7 +198,7 @@ Example:
 
 **Movement timeout:** If no `T:1` command arrives for more than 2 seconds while in `STATE_WALK`, the robot automatically reverts to `STATE_IDLE`. Sending a `"STOP"` direction is also safe but not required.
 
-**Angle clamp:** Every servo write - whether from IK, pose, calibration, or a clip - is clamped to 0-180 degrees. If a value exceeds this range, the servo is clamped and a warning `[WARN] servo <ch> clamped: <raw> -> <clamped>` is logged to the serial monitor.
+**Angle clamp:** Every servo write, whether from IK, pose, calibration, or a clip, is clamped to 0-180 degrees. If a value exceeds this range, the servo is clamped and a warning `[WARN] servo <ch> clamped: <raw> -> <clamped>` is logged to the serial monitor.
 
 **Frame-delta warning (authoring):** The clip exporter warns during baking if any joint moves more than ~20 degrees between consecutive frames, indicating a torque or shock risk.
 

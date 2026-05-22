@@ -7,7 +7,7 @@
 
 !!! warning "Pinout may change"
     The exact pinout is not final. Treat pin assignments here as the current
-    proposal, not a contract - confirm against the firmware `config.h` before wiring.
+    proposal, not a contract. Confirm against the firmware `config.h` before wiring.
 
 ## Schematic
 

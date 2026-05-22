@@ -31,7 +31,7 @@ The default IP is `192.168.4.1` (the soft-AP default for arduino-esp32); use you
 | GET    | `/log`       | CSV header line, then the rolling buffer contents. Chunked.    |
 | POST   | `/log/clear` | Wipe the buffer. Returns body `OK\n` with HTTP 200.            |
 
-`/log/clear` is intentionally POST rather than GET - clearing is a state-changing action and we don't want a browser prefetch or `curl --retry` firing it twice.
+`/log/clear` is intentionally POST rather than GET because clearing is a state-changing action and we don't want a browser prefetch or `curl --retry` firing it twice.
 
 ---
 
@@ -56,7 +56,7 @@ The default IP is `192.168.4.1` (the soft-AP default for arduino-esp32); use you
 
 **Leg-naming note.** Columns use the firmware convention (`fr`/`fl`/`br`/`bl` = `leg1..leg4` in `SpinalCord`), not the URDF/Python convention (`fl`/`fr`/`bl`/`br`). Downstream Python plotting code should remap names explicitly. See [Conventions](../conventions.md) for the full leg-naming and angle-space tables.
 
-**Precision note.** Servo angles are stored internally as `uint16_t` (whole degrees) by `Servo::setServoAngle`. The CSV emits them as `90.0` etc. for formatting consistency - the trailing `.0` is cosmetic, not real precision.
+**Precision note.** Servo angles are stored internally as `uint16_t` (whole degrees) by `Servo::setServoAngle`. The CSV emits them as `90.0` etc. for formatting consistency; the trailing `.0` is cosmetic, not real precision.
 
 ---
 
@@ -144,7 +144,7 @@ pio run -e upesy_wroom -t upload
 pio device monitor
 ```
 
-Native tests verify the CSV formatter and ring buffer in isolation. The HTTP server itself is tested manually on hardware - see Quick start above.
+Native tests verify the CSV formatter and ring buffer in isolation. The HTTP server itself is tested manually on hardware; see Quick start above.
 
 ---
 

@@ -8,7 +8,7 @@ Single reference for FaceHugger's coordinate systems, angle spaces, leg naming, 
 
 The body frame origin is the geometric center of the chassis (`base_link` in URDF), anchored to a named construction point in Fusion 360. The axes follow the Fusion 360 / Blender Z-up convention: **+X** points right, **+Y** points forward, **+Z** points up. Units are metres in simulation and millimetres in Blender scene and clip storage.
 
-This frame governs URDF joint placement and Blender rig alignment. It is an authoring/URDF concept - not a runtime concept in current firmware - and does not directly affect clip playback (clips store math-space joint angles, not foot positions).
+This frame governs URDF joint placement and Blender rig alignment. It is an authoring and URDF concept rather than a runtime one in current firmware, and it does not directly affect clip playback (clips store math-space joint angles, not foot positions).
 
 ```
         +Y (forward)
@@ -29,7 +29,7 @@ This frame governs URDF joint placement and Blender rig alignment. It is an auth
 
 ## Leg Naming and IDs
 
-Naming is context-dependent. Use `fl/fr/bl/br` everywhere except inside firmware. The firmware boundary translates to `FR/FL/RR/RL` internally; never propagate firmware leg names into Python or Blender code - translation happens only at the boundary (e.g., `spinal_cord.cpp` `NEUTRAL[]` array indexing).
+Naming is context-dependent. Use `fl/fr/bl/br` everywhere except inside firmware. The firmware boundary translates to `FR/FL/RR/RL` internally. Never propagate firmware leg names into Python or Blender code; translation happens only at the boundary (e.g., `spinal_cord.cpp` `NEUTRAL[]` array indexing).
 
 | Position | Blender / URDF / Python | Firmware (`LegId` enum) | CAD / Old firmware |
 |----------|--------------------------|-------------------------|-------------------|
@@ -94,7 +94,7 @@ Leg positions at NEUTRAL (top view):
 
 ## The Math-to-Servo Transform: `translateToServo()`
 
-`translateToServo()` converts math-space joint angles to servo-space 0-180 deg. It is not IK and not kinematics - it is purely a mounting remap that encodes which way each servo horn faces. The firmware runs this transform every tick in both gait and clip players.
+`translateToServo()` converts math-space joint angles to servo-space 0-180 deg. It is not IK and not kinematics; it is purely a mounting remap that encodes which way each servo horn faces. The firmware runs this transform every tick in both gait and clip players.
 
 Source of truth: `code/firmware/src/nervous_system/motion_math.cpp`, lines 4-31.
 

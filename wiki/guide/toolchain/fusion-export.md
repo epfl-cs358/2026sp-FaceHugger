@@ -29,7 +29,7 @@ After running the add-in, run `python facehugger.py urdf` from `code/simulation/
 to regenerate `facehugger.urdf` from the new export.
 
 If the chassis STL contains unexpected electronics or PCBs, the `combined.parts`
-list in the add-in source (`ExportBodiesToURDF.py`) is out of date - add or remove
+list in the add-in source (`ExportBodiesToURDF.py`) is out of date; add or remove
 the relevant occurrences and re-run.
 
 ## ExportPrintableSTLs
