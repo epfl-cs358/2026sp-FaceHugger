@@ -159,4 +159,4 @@ The `constrain(0, 180)` clamp is the electrical safety backstop on every motion 
 | GAIT_TROT | 1.5 | 40.0 | 50.0 | 0.50 | [0.5, 0, 0, 0.5] |
 | GAIT_CRAB | 1.5 | 20.0 | 33.3 | 0.50 | [0.5, 0, 0, 0.5] |
 
-Step lengths and heights are tuned constants in the firmware. The 2/3 SCALE factor applies only to clips (baked at export time in Blender); gait amplitudes are independent firmware parameters.
+Step lengths and heights are tuned constants in the firmware. TROT is the exception: it runs through `tickTrot()`, which uses its own internal `STEP_LENGTH=40` / `STEP_HEIGHT=50` rather than the `GAITS[]` row above (that row's TROT step values are unused). The 2/3 SCALE factor applies only to clips (baked at export time in Blender); gait amplitudes are independent firmware parameters.

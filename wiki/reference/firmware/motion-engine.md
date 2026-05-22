@@ -97,6 +97,8 @@ Three built-in gaits are configured in `GAITS[]` in `spinal_cord.cpp`:
 
 WALK uses a high duty cycle (0.75) so three legs are in stance at any moment - the slowest but most stable gait. TROT pairs diagonals (FL+RR vs. FR+RL) for medium-speed travel. CRAB shares TROT's phase offsets but suppresses forward motion.
 
+The TROT step length/height shown above (40/50) are `tickTrot()`'s own internal constants - TROT branches to `tickTrot()` and ignores the `GAITS[]` array's TROT step_length/step_height row.
+
 A phase offset of 0.5 means "halfway through the global cycle." With duty = 0.5, a leg with offset 0.5 is in swing exactly when the leg with offset 0.0 is in stance, producing the diagonal pairing.
 
 ## Clip player

@@ -177,7 +177,7 @@ Payload: `{"T": 10, "s": <state>, "d": [<tof>...], "a": [<speed>, <gyro_x>, <gyr
 | `s`   | int           | Current FSM state (0-3)                        | 0=IDLE, 1=WALK, 2=ACTION, 3=FAILSAFE     |
 | `d`   | array(int)    | ToF distance readings [FL, FR, RL, RR, Center] | mm, 0-2000                               |
 | `a`   | array(float)  | Motion: [speed, gyro_x, gyro_y, gyro_z]        | speed: m/s, gyro: deg/s                  |
-| `g`   | int           | Current gait mode (0-2)                        | 0=TROT, 1=CRAB, 2=CRAWL                  |
+| `g`   | int           | Current gait mode (0-3)                        | 0=NONE, 1=WALK, 2=TROT, 3=CRAB           |
 | `pc`  | float         | Motion progress (gait cycle or clip frame)      | 0.0-1.0                                  |
 | `e`   | string\|null  | Error message, if any                          | e.g., `"battery < 3.0V"`                 |
 
