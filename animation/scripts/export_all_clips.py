@@ -31,12 +31,21 @@ def main() -> int:
     ctx = bpy.context
     clips = mod.list_clips()
     print(f"Re-exporting {len(clips)} clip(s): {clips}")
+    baked = {}
     for clip in clips:
         rows = mod.bake_clip(clip, ctx)
         mod.to_csv(rows, clip)
         mod.to_c_header(rows, clip, conv)
         js_path = mod.to_js(rows, clip, conv)
+        baked[clip] = rows
         print(f"  exported '{clip}': {len(rows)} frames -> {js_path}")
+
+    # Bundle every clip into one clips_all.h + clips_manifest.json (Phase 2).
+    header, manifest = mod.to_clips_header(baked, conv, write=True)
+    out = os.path.join(REPO_ROOT, "animation/exported_clips")
+    print(
+        f"  bundled {len(baked)} clip(s) -> {out}/clips_all.h (+ clips_manifest.json)"
+    )
     return 0
 
 
