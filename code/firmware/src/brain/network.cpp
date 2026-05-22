@@ -134,6 +134,15 @@ void handleParsedMessage(uint8_t * payload) {
             }
             break;
         }
+        case CMD_PLAY_CLIP: {
+            if (doc["c"].is<int>()) {
+                int c = doc["c"];
+                if (c >= 0 && c < 256) {
+                    spinalCord.playClip((uint8_t)c);
+                }
+            }
+            break;
+        }
         case CMD_TELEMETRY: { //this is the robot that sends it
             Serial.printf("FSM state: %d, Battery voltage: %lf, In stabilization mode: %s\n",
                 (int)doc["s"], (float)doc["b"], (int)doc["a"] ? "true": "false");

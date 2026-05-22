@@ -86,6 +86,16 @@ Gait mode change
 | 'a' | int  | Action ID | 0,1,2...|
 **Example:** '{"T": 6, "a": 1}'
 
+### 7. Play Clip ('T: 7')
+Play a bundled one-shot animation clip by id. The robot plays the clip once on
+its baked timeline, then auto-returns to the neutral standing pose over 500 ms
+and enters IDLE. Clip ids/names come from `clips_manifest.json` (generated with
+`clips_all.h`).
+| Key | Type | Description | Range |
+| :-- | :--- | :---------- | :---- |
+| 'c' | int  | Clip id (index into FH_CLIPS[]) | 0..N-1 |
+
+**Example:** `{"T": 7, "c": 0}` *(play clip 0; out-of-range ids are ignored)*
 
 ---
 

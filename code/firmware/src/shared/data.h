@@ -9,6 +9,7 @@ enum CommandType {
     CMD_CALIBRATE = 4,
     CMD_GAIT_MODE = 5,
     CMD_ACTION_SELECTION = 6,
+    CMD_PLAY_CLIP = 7,
     CMD_TELEMETRY = 10
 };
 
