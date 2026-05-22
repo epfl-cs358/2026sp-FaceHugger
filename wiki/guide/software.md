@@ -1,58 +1,53 @@
-<!-- Sections below are suggestions, not requirements - keep what's useful, drop or merge the rest. -->
 # Software
-
-!!! todo "Stub - to be written"
-    Brief overview of the firmware and host-side tooling, then how to set it up
-    and run it. Deep detail lives in
-    [Reference → Firmware](../reference/firmware/index.md).
 
 ## Overview
 
-!!! todo
-    What runs where: ESP32 firmware (the robot) vs host-side tooling (simulation,
-    animation, remote-control app). The brain / nervous_system / shared split.
+FaceHugger runs firmware on an ESP32 (the robot itself) alongside host-side
+tooling: a Python simulation stack, Blender animation scripts, and a React Native
+remote-control app. The firmware is split into three logical layers under
+`code/firmware/src/`: `brain/` (network and sensors), `nervous_system/`
+(kinematics, legs, servos, and motion), and `shared/` (config and data
+structures). Deep reference detail lives in
+[Reference - Firmware](../reference/firmware/index.md).
 
 ## How it works
 
-!!! todo
-    Accessible version of the algorithms. Inverse kinematics (foot target ->
-    three joint angles), angle conventions, and the finite state machine.
+The core of the firmware is an inverse-kinematics loop: a foot target position
+is resolved to three joint angles (shoulder, hip, knee), then remapped from
+math-space to servo-space via `translateToServo()` before being written to the
+PCA9685 PWM driver.
 
-    \[
-    \tau_{knee} = F_{tip} \cdot L_3 \cdot \cos\theta_{knee}
-    \]
+Motion is governed by a five-state FSM (IDLE, WALK, ACTION, REST, FAILSAFE).
+Gaits (looping locomotion) run in WALK; one-shot authored clips run in ACTION.
+Both paths converge at the same angle-to-servo path.
 
-    ```mermaid
-    stateDiagram-v2
-        [*] --> Idle
-        Idle --> Standing
-        Standing --> Walking
-        Walking --> Standing
-        Standing --> Idle
-    ```
+\[
+\tau_{knee} = F_{tip} \cdot L_3 \cdot \cos\theta_{knee}
+\]
 
-    (placeholders - replace the equation and FSM with the real ones)
-
-## Setup
-
-!!! todo
-    PlatformIO + flashing the ESP32.
-
-```bash
-pio run                 # build for the upesy_wroom ESP32
-pio run -t upload       # flash
-pio device monitor      # 115200 baud
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE : power-on
+    IDLE --> WALK : gait command
+    WALK --> IDLE : graceful stop
+    IDLE --> ACTION : play clip
+    ACTION --> IDLE : clip ends + 500 ms ease
+    IDLE --> REST : relax command
+    REST --> IDLE : wake command
 ```
 
-## Running
+## Setup and running
 
-!!! todo
-    Power-on sequence and connecting the
-    [remote-control app](../reference/remote-control/index.md). Host-side
-    simulation:
+Build, flash, and connect to the robot via the Toolchain pages:
 
-```bash
-python facehugger.py sim          # GUI, standing pose
-python facehugger.py sim --walk   # walk gait
-python facehugger.py blender --rigged
-```
+- [Toolchain overview](toolchain/index.md) - pipeline from CAD to firmware flash.
+- [Flashing the firmware](toolchain/flashing.md) - PlatformIO build, upload,
+  monitor, and Wi-Fi/WebSocket connection details.
+
+For the simulation and Blender workflows, start at
+[Toolchain overview](toolchain/index.md) and follow the links to
+[Fusion 360 export add-ins](toolchain/fusion-export.md) and
+[Blender clip authoring and export](toolchain/blender-clips.md).
+
+The remote-control app is documented at
+[Reference - Remote control](../reference/remote-control/index.md).
