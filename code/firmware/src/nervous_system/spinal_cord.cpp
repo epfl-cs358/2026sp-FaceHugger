@@ -5,6 +5,7 @@
 #include "leg.h"
 #include "spinal_cord.h"
 #include "servo.h"
+#include "motion_math.h"
 #include "movements.h"
 #include "../shared/config.h"
 
@@ -210,33 +211,8 @@ void SpinalCord::tickGait() {
 
         // Translate math-space angles to servo angles (0–180°).
         // Mirrors the JS translateToServo() function exactly.
-        double servoHip, servoThigh, servoKnee;
-        switch (i) {
-            case LEG_FR:
-                servoHip   = 90.0 + (sh - 45.0);
-                servoThigh = 90.0 - th;
-                servoKnee  = 90.0 + kn;
-                break;
-            case LEG_FL:
-                servoHip   = sh;
-                servoThigh = 90.0 + th;
-                servoKnee  = 90.0 - kn;
-                break;
-            case LEG_RR:
-                servoHip   = 90.0 - (sh + 45.0);
-                servoThigh = 90.0 + th;
-                servoKnee  = 90.0 - kn;
-                break;
-            case LEG_RL:
-                servoHip   = 90.0 + (sh + 135.0);
-                servoThigh = 90.0 - th;
-                servoKnee  = 90.0 + kn;
-                break;
-            default:
-                continue;
-        }
-
-        legs[i]->setJointAngles(servoHip, servoThigh, servoKnee);
+        ServoTriple s = translateToServo((uint8_t)i, sh, th, kn);
+        legs[i]->setJointAngles(s.hip, s.thigh, s.knee);
     }
 }
 
@@ -328,33 +304,8 @@ void SpinalCord::tickTrot() {
         if (isInverted) { th = -th; kn = -kn; }
 
         // Math → servo, identical to the JS translateToServo().
-        double servoHip, servoThigh, servoKnee;
-        switch (i) {
-            case LEG_FR:
-                servoHip   = 90.0 + (sh - 45.0);
-                servoThigh = 90.0 - th;
-                servoKnee  = 90.0 + kn;
-                break;
-            case LEG_FL:
-                servoHip   = sh;
-                servoThigh = 90.0 + th;
-                servoKnee  = 90.0 - kn;
-                break;
-            case LEG_RR:
-                servoHip   = 90.0 - (sh + 45.0);
-                servoThigh = 90.0 + th;
-                servoKnee  = 90.0 - kn;
-                break;
-            case LEG_RL:
-                servoHip   = 90.0 + (sh + 135.0);
-                servoThigh = 90.0 - th;
-                servoKnee  = 90.0 + kn;
-                break;
-            default:
-                continue;
-        }
-
-        legs[i]->setJointAngles(servoHip, servoThigh, servoKnee);
+        ServoTriple s = translateToServo((uint8_t)i, sh, th, kn);
+        legs[i]->setJointAngles(s.hip, s.thigh, s.knee);
     }
 }
 
@@ -411,32 +362,8 @@ void SpinalCord::tickYawRotation() {
 
         if (isInverted) { th = -th; kn = -kn; }
 
-        double servoHip, servoThigh, servoKnee;
-        switch (i) {
-            case LEG_FR:
-                servoHip   = 90.0 + (sh - 45.0);
-                servoThigh = 90.0 - th;
-                servoKnee  = 90.0 + kn;
-                break;
-            case LEG_FL:
-                servoHip   = sh;
-                servoThigh = 90.0 + th;
-                servoKnee  = 90.0 - kn;
-                break;
-            case LEG_RR:
-                servoHip   = 90.0 - (sh + 45.0);
-                servoThigh = 90.0 + th;
-                servoKnee  = 90.0 - kn;
-                break;
-            case LEG_RL:
-                servoHip   = 90.0 + (sh + 135.0);
-                servoThigh = 90.0 - th;
-                servoKnee  = 90.0 + kn;
-                break;
-            default:
-                continue;
-        }
-        legs[i]->setJointAngles(servoHip, servoThigh, servoKnee);
+        ServoTriple s = translateToServo((uint8_t)i, sh, th, kn);
+        legs[i]->setJointAngles(s.hip, s.thigh, s.knee);
     }
 }
 
