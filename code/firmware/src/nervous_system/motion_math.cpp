@@ -59,3 +59,37 @@ void clipPoseAt(const FhClipFrame* frames, uint16_t frame_count,
                               : (float)(elapsed_ms - lo.t_ms) / (float)span;
     for (int j = 0; j < 12; ++j) out[j] = lo.a[j] + (hi.a[j] - lo.a[j]) * f;
 }
+
+ClipStep clipPlayerStep(ClipState* st, uint32_t now,
+                        uint32_t duration_ms, uint32_t return_ms) {
+    ClipStep r = { CLIP_ACT_NONE, 0 };
+    switch (st->phase) {
+        case CLIP_PLAYING: {
+            uint32_t elapsed = now - st->clipStartMs;
+            if (elapsed >= duration_ms) {
+                // Apply the final pose, then transition into the ease.
+                r.action = CLIP_ACT_BEGIN_RETURN;
+                r.elapsed_ms = duration_ms;     // sample the last frame exactly
+                st->phase = CLIP_RETURNING;
+                st->returnStartMs = now;
+            } else {
+                r.action = CLIP_ACT_APPLY_POSE;
+                r.elapsed_ms = elapsed;
+            }
+            break;
+        }
+        case CLIP_RETURNING:
+            if (now - st->returnStartMs >= return_ms) {
+                r.action = CLIP_ACT_FINISH;
+                st->phase = CLIP_DONE;
+            } else {
+                r.action = CLIP_ACT_EASE;
+            }
+            break;
+        case CLIP_DONE:
+        default:
+            r.action = CLIP_ACT_NONE;
+            break;
+    }
+    return r;
+}
