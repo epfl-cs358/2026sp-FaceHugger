@@ -212,15 +212,15 @@ Insert the servo into the thigh bracket, cable-first, so the cable exits through
 
 ---
 
-### Step 7 — Thigh: install the ball bearing
+### Step 7 — Thigh: install the ball bearings
 
-Press the ball bearing into the recessed pocket on the free arm of the thigh bracket. Secure with **1× M3×8 screw** through the bearing's centre into the hex nut behind it.
+Press the ball bearing into the recessed pocket on the free arm of the thigh bracket. Secure with **1× M3×8 screw** through the bearing's centre into the hex nut behind it. Screw another ball bearing on the servo directly with another **M3×8 screw**.
 
 ![Thigh with servo installed and ball bearing fitted on the free arm](../assets/img/assembly/thigh_ball_bearing.jpg)
 
 ![Alternate angle showing thigh, ball bearing, and the knee assembly nearby](../assets/img/assembly/thigh_ball_bearing_servo.jpg)
 
-**Fasteners for this step:** 1× M3×8 screw.
+**Fasteners for this step:** 2× M3×8 screw.
 
 ---
 
