@@ -24,6 +24,34 @@ void Servo::setServoAngle(double angle){
     this->servoAngle = clamped;
 }
 
+void Servo::setServoAngleTimed(double angle, uint32_t ms) {
+    double target = constrain(angle, 0.0, 180.0);
+    if (ms == 0) { easeActive = false; setServoAngle(target); return; }
+    easeStartAngle  = (double)servoAngle;  // ease from where we are now
+    easeTargetAngle = target;
+    easeStartMs     = millis();
+    easeDurMs       = ms;
+    easeActive      = true;
+}
+
+void Servo::tickEase() {
+    if (!easeActive) return;
+    uint32_t t = millis() - easeStartMs;
+    if (t >= easeDurMs) {
+        setServoAngle(easeTargetAngle);
+        easeActive = false;
+        return;
+    }
+    double frac = (double)t / (double)easeDurMs;
+    setServoAngle(easeStartAngle + (easeTargetAngle - easeStartAngle) * frac);
+}
+
+bool Servo::easing() const { return easeActive; }
+
+void Servo::returnToDefaultAngleTimed(uint32_t ms) {
+    setServoAngleTimed((double)servoDefaultAngle, ms);
+}
+
 uint8_t Servo::getChannel() const {
     return pcaChannel;
 }

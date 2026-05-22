@@ -79,6 +79,22 @@ void Leg::returnToDefaultAngles(){
     kneeServo.returnToDefaultAngle();
 }
 
+void Leg::returnToDefaultAnglesTimed(uint32_t ms) {
+    hipServo.returnToDefaultAngleTimed(ms);
+    thighServo.returnToDefaultAngleTimed(ms);
+    kneeServo.returnToDefaultAngleTimed(ms);
+}
+
+void Leg::tickEase() {
+    hipServo.tickEase();
+    thighServo.tickEase();
+    kneeServo.tickEase();
+}
+
+bool Leg::easing() const {
+    return hipServo.easing() || thighServo.easing() || kneeServo.easing();
+}
+
 void Leg::identifyAndMove(uint8_t channel, double angle){
     if (hipServo.getChannel()   == channel) hipServo.setServoAngle(angle);
     if (thighServo.getChannel() == channel) thighServo.setServoAngle(angle);
