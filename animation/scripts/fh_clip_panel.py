@@ -2120,6 +2120,15 @@ def to_clips_header(clips, convention, write=True, out_dir=None):
     Returns (header_str, manifest_json_str). When write=True also writes
     them to out_dir (default animation/exported_clips/)."""
     names = list(clips.keys())
+    seen_syms = {}
+    for name in names:
+        sym = _c_sym(name)
+        if sym in seen_syms:
+            raise ValueError(
+                f"Clip names '{seen_syms[sym]}' and '{name}' both map to C "
+                f"symbol '{sym}'; rename one (duplicate symbol won't compile)"
+            )
+        seen_syms[sym] = name
     lines = [
         "#ifndef FH_CLIPS_ALL_H",
         "#define FH_CLIPS_ALL_H",
@@ -2144,6 +2153,22 @@ def to_clips_header(clips, convention, write=True, out_dir=None):
     manifest = {"clips": []}
     for cid, name in enumerate(names):
         rows = clips[name]
+        if not rows:
+            raise ValueError(f"Clip '{name}' has no frames; refusing to emit")
+        prev_t = None
+        for r in rows:
+            t = int(r["time_ms"])
+            if t > 65535:
+                raise ValueError(
+                    f"Clip '{name}' t_ms {t} exceeds uint16_t (65535 ms); "
+                    f"clip too long for the header timeline type"
+                )
+            if prev_t is not None and t <= prev_t:
+                raise ValueError(
+                    f"Clip '{name}' t_ms not strictly increasing "
+                    f"({prev_t} -> {t}); firmware bracket search requires it"
+                )
+            prev_t = t
         sym = _c_sym(name)
         lines.append(f"static const FhClipFrame {sym}[] = {{")
         for row in rows:

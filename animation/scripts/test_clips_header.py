@@ -159,6 +159,38 @@ def main():
     check("deterministic header", h_again == header)
     check("deterministic manifest", m_again == manifest)
 
+    # 6. Empty clip refused.
+    try:
+        mod.to_clips_header({"empty": []}, conv, write=False)
+        check("empty clip refused", False)
+    except ValueError:
+        check("empty clip refused", True)
+
+    # 7. Non-monotonic t_ms refused.
+    bad = [row(0, 0, 0.0), row(1, 0, 1.0)]  # t_ms not increasing
+    try:
+        mod.to_clips_header({"bad": bad}, conv, write=False)
+        check("non-monotonic t_ms refused", False)
+    except ValueError:
+        check("non-monotonic t_ms refused", True)
+
+    # 8. C-symbol collision refused ("tiny wiggle" and "tiny-wiggle" both
+    #    -> fh_clip_tiny_wiggle).
+    coll = {"tiny wiggle": [row(0, 0, 0.0)], "tiny-wiggle": [row(0, 0, 1.0)]}
+    try:
+        mod.to_clips_header(coll, conv, write=False)
+        check("C-symbol collision refused", False)
+    except ValueError:
+        check("C-symbol collision refused", True)
+
+    # 9. uint16_t overflow refused (t_ms > 65535).
+    over = [row(0, 0, 0.0), row(1, 70000, 1.0)]
+    try:
+        mod.to_clips_header({"over": over}, conv, write=False)
+        check("uint16_t overflow refused", False)
+    except ValueError:
+        check("uint16_t overflow refused", True)
+
     print("RESULT " + ("GREEN" if ok else "RED"))
     return 0 if ok else 1
 
