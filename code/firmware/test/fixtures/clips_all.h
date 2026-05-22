@@ -1,14 +1,19 @@
-#ifndef FH_CLIPS_ALL_H
-#define FH_CLIPS_ALL_H
-#include <stdint.h>
-typedef struct { uint16_t t_ms; float a[12]; } FhClipFrame;
-typedef struct {
-    const char*        name;
-    const FhClipFrame* frames;
-    uint16_t           frame_count;
-    uint16_t           duration_ms;
-} FhClip;
-#define FH_CLIP_COUNT 2
+#ifndef FH_CLIPS_TEST_FIXTURE_H
+#define FH_CLIPS_TEST_FIXTURE_H
+
+/* Test-only clip frame data for the pure clipPoseAt tests.
+ *
+ * Distinct include guard (FH_CLIPS_TEST_FIXTURE_H) from the production
+ * clips_all.h (FH_CLIPS_ALL_H) so this fixture is never shadowed when a test
+ * also pulls in the production header via motion_math.h. The FhClipFrame type
+ * comes from that production header (included below); this fixture does NOT
+ * redefine FhClipFrame/FhClip/FH_CLIPS, and its array symbols (fh_clip_a /
+ * fh_clip_single) are distinct from any production clip — so test_clip_interp
+ * keeps compiling regardless of what the production registry holds
+ * (placeholder today, real bundle after INT1). */
+
+#include "../../src/nervous_system/motion_math.h"
+
 static const FhClipFrame fh_clip_a[] = {
     {   0, { 0,0,0, 0,0,0, 0,0,0, 0,0,0 }},
     { 100, { 10,20,30, 0,0,0, 0,0,0, 0,0,0 }},
@@ -17,8 +22,5 @@ static const FhClipFrame fh_clip_a[] = {
 static const FhClipFrame fh_clip_single[] = {
     {   0, { 5,5,5, 5,5,5, 5,5,5, 5,5,5 }},
 };
-static const FhClip FH_CLIPS[FH_CLIP_COUNT] = {
-    { "a",      fh_clip_a,      3, 200 },
-    { "single", fh_clip_single, 1,   0 },
-};
-#endif /* FH_CLIPS_ALL_H */
+
+#endif /* FH_CLIPS_TEST_FIXTURE_H */
