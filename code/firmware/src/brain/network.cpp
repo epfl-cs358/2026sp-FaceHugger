@@ -87,7 +87,7 @@ void handleParsedMessage(uint8_t * payload) {
                 }
             }
             break;
-        case CMD_CALIBRATE: { 
+        case CMD_CALIBRATE: {
             if(doc.containsKey("id") && doc.containsKey("servo_id") && doc.containsKey("a")){
                 int id = doc["id"];
                 int servoId = doc["servo_id"];
@@ -96,10 +96,11 @@ void handleParsedMessage(uint8_t * payload) {
                 uint8_t channel = LEG_SERVO_CHANNEL[id][servoId];
                 spinalCord.applyCalibration(channel, angle);
                 Serial.printf("Calibrating servo %d to %d", channel, angle);
-                break;
             }
+            break;  // always break the case — a malformed calibrate is a no-op,
+                    // NOT a fall-through into CMD_MOVE (which would start walking).
         }
-        
+
         case CMD_MOVE: {
             // Extract the direction string
             String dir = doc["dir"] | "";
