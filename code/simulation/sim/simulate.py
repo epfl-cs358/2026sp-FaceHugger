@@ -20,8 +20,8 @@ Geometry sourcing (no duplication of constants in Python):
 
 import argparse
 
-from gaits import run_gait, run_stand
-from kinematics import build_config
+from .gaits import run_gait, run_stand
+from .kinematics import build_config
 
 
 def main():
@@ -29,10 +29,14 @@ def main():
     parser.add_argument("--walk", action="store_true")
     parser.add_argument("--trot", action="store_true")
     parser.add_argument("--headless", action="store_true")
-    parser.add_argument("--settle", type=float, default=0.5,
-                        help="Seconds to hold stance before the main loop "
-                             "begins (lets gravity resolve initial overlap). "
-                             "Default 0.5.")
+    parser.add_argument(
+        "--settle",
+        type=float,
+        default=0.5,
+        help="Seconds to hold stance before the main loop "
+        "begins (lets gravity resolve initial overlap). "
+        "Default 0.5.",
+    )
     args = parser.parse_args()
 
     cfg = build_config()

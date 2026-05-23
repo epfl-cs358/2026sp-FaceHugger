@@ -7,8 +7,8 @@ import time
 import pybullet as p
 import pybullet_data
 
-from constants import TIMESTEP
-from helpers import (
+from .constants import TIMESTEP
+from .helpers import (
     _wrap_pi,
     apply_joint_targets,
     apply_leg_pose,

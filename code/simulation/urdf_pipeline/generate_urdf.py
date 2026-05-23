@@ -30,7 +30,7 @@ except ImportError:
 # Defaults
 # ---------------------------------------------------------------------------
 
-SCRIPT_DIR = Path(__file__).parent
+SCRIPT_DIR = Path(__file__).resolve().parent.parent
 GENERATED_DIR = SCRIPT_DIR / "generated"
 DEFAULT_JSON = GENERATED_DIR / "fusion_export.json"
 DEFAULT_CFG = SCRIPT_DIR / "facehugger_config.yaml"

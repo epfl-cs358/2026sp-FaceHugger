@@ -2,7 +2,7 @@
 
 import os
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GENERATED_DIR = os.path.join(HERE, "generated")
 URDF_PATH = os.path.join(GENERATED_DIR, "facehugger.urdf")
 CONFIG_YAML = os.path.join(HERE, "facehugger_config.yaml")

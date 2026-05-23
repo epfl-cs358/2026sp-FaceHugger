@@ -12,23 +12,23 @@ from pathlib import Path
 SIM_DIR = Path(__file__).resolve().parent.parent.parent / "simulation"
 sys.path.insert(0, str(SIM_DIR))
 
-from kinematics import NEUTRAL_FOOT, leg_ik
+from sim.kinematics import NEUTRAL_FOOT, leg_ik
 
 LEG_FW_TO_SIM = ["fr", "fl", "rr", "rl"]
 
 DELTAS = [
-    (0.000,  0.000,  0.000),
-    (0.020,  0.000,  0.000),
-    (-0.020, 0.000,  0.000),
-    (0.000,  0.020,  0.000),
-    (0.000, -0.020,  0.000),
-    (0.000,  0.000,  0.015),
-    (0.000,  0.000, -0.015),
-    (0.020,  0.020, -0.010),
-    (-0.020,-0.020,  0.010),
-    (0.030,  0.030,  0.000),
-    (-0.030,-0.030,  0.000),
-    (0.040,  0.000,  0.020),
+    (0.000, 0.000, 0.000),
+    (0.020, 0.000, 0.000),
+    (-0.020, 0.000, 0.000),
+    (0.000, 0.020, 0.000),
+    (0.000, -0.020, 0.000),
+    (0.000, 0.000, 0.015),
+    (0.000, 0.000, -0.015),
+    (0.020, 0.020, -0.010),
+    (-0.020, -0.020, 0.010),
+    (0.030, 0.030, 0.000),
+    (-0.030, -0.030, 0.000),
+    (0.040, 0.000, 0.020),
     (-0.040, 0.000, -0.020),
 ]
 
@@ -58,8 +58,10 @@ def main():
         f.write(f"static const int IK_REF_COUNT = {len(cases)};\n\n")
         f.write("static const IKRefCase IK_REF_CASES[IK_REF_COUNT] = {\n")
         for fw_id, name, x, y, z, s, h, k in cases:
-            f.write(f"    {{ {fw_id}, {x:.6f}f, {y:.6f}f, {z:.6f}f, "
-                    f"{s:.6f}f, {h:.6f}f, {k:.6f}f }}, // {name}\n")
+            f.write(
+                f"    {{ {fw_id}, {x:.6f}f, {y:.6f}f, {z:.6f}f, "
+                f"{s:.6f}f, {h:.6f}f, {k:.6f}f }}, // {name}\n"
+            )
         f.write("};\n\n")
         f.write("#endif\n")
     print(f"Wrote {len(cases)} cases to {OUT}")
