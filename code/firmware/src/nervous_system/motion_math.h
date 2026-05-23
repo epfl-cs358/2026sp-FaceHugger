@@ -24,6 +24,13 @@ double easeFraction(uint32_t elapsed_ms, uint32_t dur_ms);
  * the gait or calibration path. Pure, host-tested. */
 float emaStep(float prev, float target, float alpha);
 
+/* Robot-invert mirror, applied once at the servo write point (Change D). When
+ * inverted, mirror the pitch joints (thigh, knee) about 90 — shoulder untouched.
+ * For a pitch servo (translateToServo emits 90±angle) this equals negating the
+ * math-space angle, so routing gait output through it is bit-for-bit identical
+ * to the old math-space th=-th/kn=-kn. Pure, host-tested. */
+ServoTriple applyInvert(ServoTriple s, bool inverted);
+
 /* FhClipFrame is defined in clips_all.h (generated header / test fixture),
  * which uses an anonymous-struct typedef and so cannot be tag-forward-
  * declared. Pull in its definition here. The guard FH_CLIPS_ALL_H is shared

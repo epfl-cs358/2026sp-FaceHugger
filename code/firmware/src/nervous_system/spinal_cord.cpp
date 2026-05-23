@@ -106,19 +106,22 @@ void SpinalCord::relax() {
     leg4.setJointAngles(90, 90, 90);
 }
 
+// Single invert choke point — see header. Mirrors the pitch joints about 90 when
+// inverted (180-x), shoulder untouched. For a pitch servo this equals negating the
+// math-space angle (translateToServo emits 90±angle, and 180-(90±x)=90∓x), so routing
+// gait output through here is bit-for-bit identical to the old math-space th=-th/kn=-kn.
+void SpinalCord::applyServos(Leg* leg, ServoTriple s) {
+    s = applyInvert(s, isInverted);  // pitch-only mirror; pure + host-tested
+    leg->setJointAngles(s.hip, s.thigh, s.knee);
+}
+
 void SpinalCord::stand() {
     // Standing / neutral reference pose — the per-leg NEUTRAL[] table the gaits launch
     // from and ease back to. Mirrors tickGait at zero input (sweep=lift=0).
     robotState = STATE_STAND;
     Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
-    for (uint8_t i = 0; i < LEG_COUNT; ++i) {
-        float sh = NEUTRAL[i].sh;
-        float th = NEUTRAL[i].th;
-        float kn = NEUTRAL[i].kn;
-        if (isInverted) { th = -th; kn = -kn; }
-        ServoTriple s = translateToServo(i, sh, th, kn);
-        legs[i]->setJointAngles(s.hip, s.thigh, s.knee);
-    }
+    for (uint8_t i = 0; i < LEG_COUNT; ++i)
+        applyServos(legs[i], translateToServo(i, NEUTRAL[i].sh, NEUTRAL[i].th, NEUTRAL[i].kn));
 }
 
 void SpinalCord::applyCalibration(int channel, int angle) {
@@ -237,12 +240,10 @@ void SpinalCord::tickGait() {
         th += lift;
         kn -= lift;
 
-        if (isInverted) { th = -th; kn = -kn; }
-
         // Translate math-space angles to servo angles (0–180°).
-        // Mirrors the JS translateToServo() function exactly.
-        ServoTriple s = translateToServo((uint8_t)i, sh, th, kn);
-        legs[i]->setJointAngles(s.hip, s.thigh, s.knee);
+        // Mirrors the JS translateToServo() function exactly. Invert (if any)
+        // is applied centrally in applyServos (servo-space, pitch-only).
+        applyServos(legs[i], translateToServo((uint8_t)i, sh, th, kn));
     }
 }
 
@@ -331,11 +332,9 @@ void SpinalCord::tickTrot() {
         th = NEUTRAL[i].th + (th - NEUTRAL[i].th) * SCALE;
         kn = NEUTRAL[i].kn + (kn - NEUTRAL[i].kn) * SCALE;
 
-        if (isInverted) { th = -th; kn = -kn; }
-
-        // Math → servo, identical to the JS translateToServo().
-        ServoTriple s = translateToServo((uint8_t)i, sh, th, kn);
-        legs[i]->setJointAngles(s.hip, s.thigh, s.knee);
+        // Math → servo, identical to the JS translateToServo(). Invert applied
+        // centrally in applyServos (servo-space, pitch-only).
+        applyServos(legs[i], translateToServo((uint8_t)i, sh, th, kn));
     }
 }
 
@@ -390,10 +389,8 @@ void SpinalCord::tickYawRotation() {
         th = NEUTRAL[i].th + (th - NEUTRAL[i].th) * SCALE;
         kn = NEUTRAL[i].kn + (kn - NEUTRAL[i].kn) * SCALE;
 
-        if (isInverted) { th = -th; kn = -kn; }
-
-        ServoTriple s = translateToServo((uint8_t)i, sh, th, kn);
-        legs[i]->setJointAngles(s.hip, s.thigh, s.knee);
+        // Invert applied centrally in applyServos (servo-space, pitch-only).
+        applyServos(legs[i], translateToServo((uint8_t)i, sh, th, kn));
     }
 }
 
@@ -439,10 +436,11 @@ void SpinalCord::tickClip() {
                 for (uint8_t j = 0; j < 3; ++j)
                     clipSmoothed_[i][j] = emaStep(clipSmoothed_[i][j],
                                                   a[i*3+j], CLIP_EMA_ALPHA);
-                ServoTriple s = translateToServo(i, clipSmoothed_[i][0],
-                                                 clipSmoothed_[i][1],
-                                                 clipSmoothed_[i][2]);
-                legs[i]->setJointAngles(s.hip, s.thigh, s.knee);
+                // EMA smooths the math-space angle; invert (if any) is applied
+                // after, at the servo write point, by applyServos.
+                applyServos(legs[i], translateToServo(i, clipSmoothed_[i][0],
+                                                       clipSmoothed_[i][1],
+                                                       clipSmoothed_[i][2]));
             }
             if (step.action == CLIP_ACT_BEGIN_RETURN) {
                 // Final pose applied; start the non-blocking ease to NEUTRAL.
@@ -466,19 +464,13 @@ void SpinalCord::tickClip() {
 
 void SpinalCord::invertRobot() {
     isInverted = !isInverted;
-
-    if (isInverted) {
-        leg1.setJointAngles(90,  30, 127);  // FR: 180-150, 180-53
-        leg2.setJointAngles(75, 150,  50);  // FL: 180-30,  180-130
-        leg3.setJointAngles(90, 140,  40);  // RR: 180-40,  180-140
-        leg4.setJointAngles(90,  30, 125);  // RL: 180-150, 180-55
-    } else {
-        leg1.returnToDefaultAngles();
-        leg2.returnToDefaultAngles();
-        leg3.returnToDefaultAngles();
-        leg4.returnToDefaultAngles();
-    }
-
+    // Re-assume the neutral pose in the new orientation. The pitch mirror is now
+    // applied centrally in applyServos, so the previously-hardcoded inverted pose
+    // table (which also still held FL's pre-Change-B value) is no longer needed:
+    // applyServos(NEUTRAL) with isInverted set produces the same mirrored stand.
+    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+    for (uint8_t i = 0; i < LEG_COUNT; ++i)
+        applyServos(legs[i], translateToServo(i, NEUTRAL[i].sh, NEUTRAL[i].th, NEUTRAL[i].kn));
     gaitPhaseStartMs_ = millis();
 }
 

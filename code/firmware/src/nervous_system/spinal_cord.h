@@ -70,6 +70,11 @@ class SpinalCord{
         void tickTrot();
         void tickYawRotation();
         void tickClip();
+
+        // Single invert choke point: writes a leg's servo triple, mirroring the
+        // pitch joints (thigh, knee) about 90 when isInverted. Every motion source
+        // (gaits, clips, stand) routes through this so invert is applied uniformly.
+        void applyServos(Leg* leg, ServoTriple s);
 };
 
 #endif

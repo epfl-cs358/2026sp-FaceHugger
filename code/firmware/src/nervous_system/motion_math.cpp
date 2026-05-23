@@ -11,6 +11,14 @@ float emaStep(float prev, float target, float alpha) {
     return alpha * prev + (1.0f - alpha) * target;
 }
 
+ServoTriple applyInvert(ServoTriple s, bool inverted) {
+    if (inverted) {
+        s.thigh = 180.0 - s.thigh;
+        s.knee  = 180.0 - s.knee;
+    }
+    return s;
+}
+
 ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn) {
     ServoTriple out = {90.0, 90.0, 90.0};
     switch (legId) {
