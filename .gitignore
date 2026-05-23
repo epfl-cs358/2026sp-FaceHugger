@@ -861,3 +861,7 @@ animation/blend-iterations/
 # baked output is reviewable in PRs (text, ideal for plain git).
 
 .claude/settings.local.json
+
+# Agent scratch space: research notes, sub-agent output, working files.
+# Regenerated on demand; not source control material.
+.work/
