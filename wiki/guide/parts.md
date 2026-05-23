@@ -198,9 +198,7 @@ to the corresponding angle and holds it against external force.
 
 The DSS 230mg are **metal-gear, high-voltage digital servos**. Metal gears matter
 here because the hip and thigh joints sustain significant shock loads every time a
-foot strikes the ground — plastic gears would strip within hours. The 230mg torque
-rating (roughly 2.3 Nm) is the minimum viable torque for a robot of this weight at
-the leg geometry used.
+foot strikes the ground — plastic gears would strip within hours.
 
 FaceHugger uses 3 servos per leg — one for each joint (Hip, Thigh, Knee) — for
 12 servos total.
@@ -271,8 +269,9 @@ with the PCA9685's onboard capacitor to increase the total reserve.
 
 The IMU (an MPU-6050) combines a 3-axis accelerometer and a 3-axis gyroscope on
 a single I²C chip. It measures the robot's orientation and angular velocity in
-real time. In FaceHugger, its primary role is detecting when the robot has been
-flipped upside-down and triggering the `STATE_FAILSAFE` state to cut movement and
+real time. We didn't have the time to implement the software for it but in FaceHugger, 
+its primary role would have been to detect when the robot has been
+flipped upside-down, and trigger the `STATE_FAILSAFE` state to cut movement and
 switch the OLED to the confused expression.
 
 ---
@@ -284,4 +283,4 @@ long it takes to reflect back from a surface. Three sensors are mounted on the
 body bridges, giving the robot basic spatial awareness of its immediate
 surroundings. Unlike ultrasonic sensors, ToF sensors have a very narrow beam and
 high precision at short range, making them well suited for detecting obstacles at
-leg-height.
+leg-height. Just like the IMU, we didn't have the time to implement the software for them.
