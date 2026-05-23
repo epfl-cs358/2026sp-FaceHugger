@@ -23,7 +23,7 @@ import sys
 import types
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SCRIPT = os.path.join(REPO_ROOT, "animation/scripts/fh_clip_panel.py")
+SCRIPT = os.path.join(REPO_ROOT, "animation/addons/fh_clip_panel.py")
 CONV_PATH = os.path.join(REPO_ROOT, "animation/convention.json")
 
 
