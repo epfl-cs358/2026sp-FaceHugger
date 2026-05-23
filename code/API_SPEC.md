@@ -48,6 +48,11 @@ Requests a change in high-level behavior.
 | **1** | **WALK** | Gait engine active.                            |
 | **2** | **ACTION** | Triggers Wall-Flip / Specialized maneuvers.    |
 | **3** | **FAILSAFE**| Emergency software interrupt.                  |
+| **4** | **REST** | Flat / all-servos-90 calibration pose; clears the invert flag. Safe to power off. |
+| **5** | **STAND** | Standing / neutral pose (per-leg `NEUTRAL[]`); the gait launch reference. |
+
+Out-of-range `s` is ignored. State 4 (REST) is the pose to assume when physically
+calibrating the robot: all servos go to mid-travel and you mount the links to match.
 
 ---
 

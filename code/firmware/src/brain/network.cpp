@@ -77,12 +77,14 @@ void handleParsedMessage(uint8_t * payload) {
         case CMD_STATE:
             if(doc.containsKey("s")){
                 int newState = doc["s"];
-                if(newState >= STATE_IDLE && newState <= STATE_FAILSAFE){
+                if(isValidStateCommand(newState)){
                     switch(newState){
                         case STATE_IDLE: spinalCord.rest(); break;
                         case STATE_WALK: spinalCord.walk(); break;
                         case STATE_ACTION: spinalCord.wallFlip(); break;
-                        default: break;
+                        case STATE_REST: spinalCord.relax(); break;   // flat / all-90 calibration
+                        case STATE_STAND: spinalCord.stand(); break;  // standing / neutral
+                        default: break;                               // FAILSAFE: no-op (unchanged)
                     }
                 }
             }

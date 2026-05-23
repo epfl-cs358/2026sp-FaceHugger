@@ -19,7 +19,14 @@ enum RobotState {
     STATE_WALK     = 1,
     STATE_ACTION   = 2,
     STATE_FAILSAFE = 3,
-    STATE_REST     = 4,  // All servos at 90° — safe to power off
+    STATE_REST     = 4,  // All servos at 90° — flat/spread calibration pose, safe to power off
+    STATE_STAND    = 5,  // Standing/neutral pose (per-leg NEUTRAL[]), gait launch reference
 };
+
+// Range of RobotState values the CMD_STATE (T:2) handler accepts off the wire.
+// Used to reject out-of-range states before the dispatch switch.
+constexpr bool isValidStateCommand(int s) {
+    return s >= STATE_IDLE && s <= STATE_STAND;
+}
 
 #endif

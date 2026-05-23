@@ -91,11 +91,30 @@ void SpinalCord::rest()     { robotState = STATE_IDLE; }
 void SpinalCord::wallFlip() { robotState = STATE_ACTION; }
 
 void SpinalCord::relax() {
+    // Flat / all-90 calibration pose: every servo at mechanical mid-travel. This is
+    // the original calibration pose (restored — it predates the standing-NEUTRAL gait
+    // engine). Calibration is done upright, so clear the invert flag too.
     robotState = STATE_REST;
+    isInverted = false;
     leg1.setJointAngles(90, 90, 90);
     leg2.setJointAngles(90, 90, 90);
     leg3.setJointAngles(90, 90, 90);
     leg4.setJointAngles(90, 90, 90);
+}
+
+void SpinalCord::stand() {
+    // Standing / neutral reference pose — the per-leg NEUTRAL[] table the gaits launch
+    // from and ease back to. Mirrors tickGait at zero input (sweep=lift=0).
+    robotState = STATE_STAND;
+    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+    for (uint8_t i = 0; i < LEG_COUNT; ++i) {
+        float sh = NEUTRAL[i].sh;
+        float th = NEUTRAL[i].th;
+        float kn = NEUTRAL[i].kn;
+        if (isInverted) { th = -th; kn = -kn; }
+        ServoTriple s = translateToServo(i, sh, th, kn);
+        legs[i]->setJointAngles(s.hip, s.thigh, s.knee);
+    }
 }
 
 void SpinalCord::applyCalibration(int channel, int angle) {
@@ -128,6 +147,7 @@ void SpinalCord::update() {
             break;
         case STATE_IDLE:
         case STATE_REST:
+        case STATE_STAND:
             break;
         case STATE_FAILSAFE:
             leg1.returnToDefaultAngles();

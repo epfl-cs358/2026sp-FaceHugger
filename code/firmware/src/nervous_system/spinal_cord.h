@@ -16,6 +16,7 @@ class SpinalCord{
         void walk();
         void rest();
         void relax();
+        void stand();
         void wallFlip();
         void update();
         void invertRobot();
