@@ -1625,6 +1625,30 @@ _SELECTION_PRESETS = {
 _SELECTION_ORDER = ("ALL", "BODY", "FRONT", "BACK", "LEGS", "FL", "FR", "BL", "BR")
 
 
+def _clip_interpolation_mode(clip):
+    """Current keyframe interpolation of `clip`, as the panel toggle shows
+    it: "LINEAR", "BEZIER", or None (no clip / no keyframes). Reads the
+    FIRST keyframe found across the clip's layered f-curves — the same
+    first-keyframe heuristic FH_OT_toggle_preview uses to decide its flip
+    direction, so the displayed state and the toggle's action never
+    disagree. Derived from the curves, never stored, so it can't drift."""
+    if clip is None:
+        return None
+    for target in CLIP_TARGETS:
+        action = clip_action(clip, target)
+        if action is None:
+            continue
+        for layer in action.layers:
+            for strip in layer.strips:
+                for channelbag in strip.channelbags:
+                    for fcurve in channelbag.fcurves:
+                        for kp in fcurve.keyframe_points:
+                            return (
+                                "LINEAR" if kp.interpolation == "LINEAR" else "BEZIER"
+                            )
+    return None
+
+
 class FH_OT_toggle_preview(bpy.types.Operator):
     """Toggle the active clip's F-curves between BEZIER (authoring) and
     LINEAR (exactly what the robot plays). Non-destructive: Bezier handles
@@ -2521,10 +2545,24 @@ class FH_PT_clips(_FH_PT_child, bpy.types.Panel):
         # Toggle the active clip's keyframe interpolation between BEZIER
         # (authoring) and LINEAR (what the robot plays). Non-destructive:
         # Bezier handles are preserved so toggling back restores the curves.
+        # The button reflects the active clip's CURRENT mode (read live from
+        # the f-curves) so you can always see which one you're in: depressed
+        # + "LINEAR" when previewing robot motion, raised + "BEZIER" when
+        # authoring.
         layout.separator()
+        mode = _clip_interpolation_mode(active)
+        is_linear = mode == "LINEAR"
+        if mode is None:
+            label, icon = "Preview Robot Motion", "PREVIEW_RANGE"
+        elif is_linear:
+            label, icon = "Preview Robot Motion: LINEAR", "IPO_LINEAR"
+        else:
+            label, icon = "Preview Robot Motion: BEZIER", "IPO_BEZIER"
         preview_row = layout.row()
         preview_row.enabled = bool(active)
-        preview_row.operator(FH_OT_toggle_preview.bl_idname, icon="PREVIEW_RANGE")
+        preview_row.operator(
+            FH_OT_toggle_preview.bl_idname, text=label, icon=icon, depress=is_linear
+        )
 
 
 class FH_PT_selection(_FH_PT_child, bpy.types.Panel):
