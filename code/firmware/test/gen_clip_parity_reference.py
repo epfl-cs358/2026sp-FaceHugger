@@ -15,7 +15,9 @@ import sys
 REPO = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
-PANEL = os.path.join(REPO, "animation/scripts/fh_clip_panel.py")
+PANEL = os.path.join(
+    REPO, "animation/addons/fh_clip_panel.py"
+)  # moved scripts/->addons/ (2f627a1)
 CONV = json.load(open(os.path.join(REPO, "animation/convention.json")))
 OUT = os.path.join(
     os.path.dirname(__file__), "test_clip_parity", "clip_parity_reference.h"

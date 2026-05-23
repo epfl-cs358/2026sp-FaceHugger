@@ -16,7 +16,7 @@ static const uint32_t CLIP_RETURN_MS = 500;  // ease to NEUTRAL at clip end
 // These are the JS N[] values that have been physically tested on hardware.
 static const struct { float sh, th, kn; } NEUTRAL[LEG_COUNT] = {
     {  45.0f, -60.0f, -37.0f },  // LEG_FR (0)
-    {  75.0f, -60.0f, -40.0f },  // LEG_FL (1)
+    { 135.0f, -60.0f, -40.0f },  // LEG_FL (1)  Change B: shoulder 75 -> 135 (outward); see motion_math FL branch
     { -45.0f, -50.0f, -50.0f },  // LEG_RR / BR (2)
     {-135.0f, -60.0f, -35.0f },  // LEG_RL / BL (3)
 };

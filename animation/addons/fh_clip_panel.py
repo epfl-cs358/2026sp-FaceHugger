@@ -1900,7 +1900,9 @@ def _frame_to_servo(row, convention):
         sh, th, kn = (n[j] + (raw[j] - n[j]) * scale for j in range(3))
         # 2. translateToServo (mirror/offset per leg side)
         if leg == "fl":
-            servo = [sh, 90 + th, 90 - kn]
+            # Change B: FL shoulder regularized to 90 + (sh - 135) so servo 90 = outward,
+            # matching fr/bl/br. Byte-identical to firmware motion_math.cpp FL branch.
+            servo = [90 + (sh - 135), 90 + th, 90 - kn]
         elif leg == "fr":
             servo = [90 + (sh - 45), 90 - th, 90 + kn]
         elif leg == "bl":

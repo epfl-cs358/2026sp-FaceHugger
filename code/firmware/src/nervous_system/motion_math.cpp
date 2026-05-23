@@ -10,7 +10,8 @@ ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn) {
             out.knee  = 90.0 + kn;
             break;
         case 1:  // LEG_FL
-            out.hip   = sh;
+            out.hip   = 90.0 + (sh - 135.0);  // Change B: regularized so servo 90 = outward (+135),
+                                              // matching FR/BR/BL. Requires FL horn remount on hardware.
             out.thigh = 90.0 + th;
             out.knee  = 90.0 - kn;
             break;
