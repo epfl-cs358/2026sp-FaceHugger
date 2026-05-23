@@ -1912,7 +1912,15 @@ def _frame_to_servo(row, convention):
     return out
 
 
-def to_js(frames, clip_name, convention, loop=False, dry_run=False, write=True):
+def to_js(
+    frames,
+    clip_name,
+    convention,
+    loop=False,
+    dry_run=False,
+    write=True,
+    esp_ip="192.168.4.1",
+):
     """Self-contained browser-console JS that plays the clip.
 
     Spec: doc/animation-pipeline/onboard-clip-player-design.md
@@ -1931,6 +1939,12 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False, write=True):
     filesystem (useful for tests/validation). Default (`write=True`) writes
     the file to `animation/exported_clips/<clip_name>/` and returns its path.
 
+    `esp_ip` is the robot's address baked into the WebSocket URL
+    (`ws://<esp_ip>:81`) and the HOW-TO-RUN comment. The board IP can change
+    (AP-mode default 192.168.4.1, or a DHCP lease on a shared network), so the
+    animator sets it at export time. Empty/blank falls back to 192.168.4.1.
+    Port 81 is fixed (see code/API_SPEC.md). Ignored in dry-run (no socket).
+
     Math: applies the full hardware conversion (scale-from-NEUTRAL +
     per-leg translateToServo + round) at bake time via
     `_frame_to_servo`. N/SCALE come from convention.json (the single
@@ -1942,6 +1956,9 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False, write=True):
     convention.json's `channels` is no longer on the wire."""
     path = os.path.join(_exported_clips_dir(clip_name), f"{clip_name}.js")
     today = datetime.date.today().isoformat()
+    # Blank IP -> AP-mode default; no strict regex so mDNS names
+    # (facehugger.local) stay valid too.
+    esp_ip = (esp_ip or "").strip() or "192.168.4.1"
 
     # Derive the playback wall-clock period from the baked time_ms
     # column — the median delta between consecutive frames gives the
@@ -1996,7 +2013,7 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False, write=True):
     else:
         header_block = (
             "// HOW TO RUN (browser):\n"
-            "//   1. Join the robot Wi-Fi (FaceHugger_Net); robot at 192.168.4.1.\n"
+            f"//   1. Join the robot Wi-Fi (FaceHugger_Net); robot at {esp_ip}.\n"
             "//   2. Open a console on a NON-HTTPS page (http://, file://, or\n"
             "//      about:blank). ws:// is BLOCKED from https:// (mixed content)\n"
             '//      — the #1 reason "nothing happens".\n'
@@ -2006,7 +2023,7 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False, write=True):
             "//   {T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}\n"
             "// Firmware does PCA-channel mapping via LEG_SERVO_CHANNEL."
         )
-        transport_decl = 'const ws = new WebSocket("ws://192.168.4.1:81");'
+        transport_decl = f'const ws = new WebSocket("ws://{esp_ip}:81");'
         open_guard = "if (ws.readyState !== WebSocket.OPEN) return;"
         send_call = "ws.send(JSON.stringify(msg));"
         stop_close = "try { ws.close(); } catch (e) {}"
@@ -2282,6 +2299,7 @@ def _bake_and_write(clip, context, convention):
             convention,
             loop=scene.fh_export_js_loop,
             dry_run=scene.fh_export_js_dryrun,
+            esp_ip=scene.fh_esp_ip,
         )
         written.append("js-dry" if scene.fh_export_js_dryrun else "js")
     return written, len(rows), max_seen, warning_count
@@ -2613,6 +2631,9 @@ class FH_PT_export(_FH_PT_child, bpy.types.Panel):
         if context.scene.fh_export_js:
             sub = col.column(align=True)
             sub.active = True
+            iprow = sub.row(align=True)
+            iprow.separator()
+            iprow.prop(context.scene, "fh_esp_ip", text="ESP IP")
             jsrow = sub.row(align=True)
             jsrow.separator()
             jsrow.prop(context.scene, "fh_export_js_dryrun", text="Dry run")
@@ -2758,6 +2779,16 @@ def register():
         ),
         default=False,
     )
+    bpy.types.Scene.fh_esp_ip = bpy.props.StringProperty(
+        name="ESP IP",
+        description=(
+            "Robot board IP baked into the exported .js WebSocket URL "
+            "(ws://<ip>:81). Change it when the board's address changes "
+            "(AP-mode default 192.168.4.1, or a DHCP lease). Blank falls back "
+            "to 192.168.4.1; port 81 is fixed (see code/API_SPEC.md)"
+        ),
+        default="192.168.4.1",
+    )
     bpy.types.Scene.fh_export_selected_clips = bpy.props.StringProperty(
         name="Selected clips for export",
         description=(
@@ -2825,6 +2856,7 @@ def unregister():
         "fh_export_js",
         "fh_export_js_loop",
         "fh_export_js_dryrun",
+        "fh_esp_ip",
         "fh_export_selected_clips",
         "fh_heatmap_active",
     ):
