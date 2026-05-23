@@ -1907,7 +1907,18 @@ def _frame_to_servo(row, convention):
             servo = [90 + (sh + 135), 90 - th, 90 + kn]
         else:  # br
             servo = [90 - (sh + 45), 90 + th, 90 - kn]
-        # 3. integer servo degrees
+        # 3. clamp to the servo range, surfacing authoring errors at export
+        # time rather than relying on the JS / firmware clamp as the only
+        # backstop (the FRAME_DELTA_WARN_DEG warning's range companion).
+        for i, v in enumerate(servo):
+            if v < 0 or v > 180:
+                bone_name = ["shoulder", "hip", "knee"][i]
+                print(
+                    f"WARNING: {leg} {bone_name} servo {v:.1f} out of range "
+                    f"[0-180] at frame {row.get('frame', '?')} — clamped"
+                )
+                servo[i] = max(0, min(180, v))
+        # 4. integer servo degrees
         out[leg] = [round(v) for v in servo]
     return out
 

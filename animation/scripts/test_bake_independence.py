@@ -76,6 +76,37 @@ def main() -> int:
         print("RESULT RED: frame-delta warning did not fire as expected")
         return 1
 
+    # Out-of-range servo values are clamped to [0,180] AT EXPORT, with a
+    # visible WARNING — rather than silently riding to the .js/firmware and
+    # relying on the downstream clamp as the only backstop (G4/G5).
+    import io
+    import contextlib
+
+    # BL shoulder = 90 + (sh + 135) with sh scaled from NEUTRAL[bl][0]=-135;
+    # any positive bl_link1 raw drives the scaled shoulder past 180.
+    clamp_row = {b: 0.0 for b in mod.JOINT_BONES}
+    clamp_row["frame"] = 7
+    clamp_row["bl_link1"] = 90.0  # comfortably over the 180 threshold
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        clamped = mod._frame_to_servo(clamp_row, conv)
+    warn_out = buf.getvalue()
+    bl_shoulder = clamped["bl"][0]
+    ok_clamp = (
+        bl_shoulder == 180
+        and "WARNING" in warn_out
+        and "bl" in warn_out
+        and "shoulder" in warn_out
+        and "7" in warn_out  # frame number surfaced in the warning
+    )
+    print(
+        f"out-of-range clamp: bl shoulder -> {bl_shoulder} "
+        f"(warned={'WARNING' in warn_out})"
+    )
+    if not ok_clamp:
+        print("RESULT RED: out-of-range servo not clamped to 180 / not warned")
+        return 1
+
     import re
 
     # JS export wire-contract checks (semantic — robust to template formatting).
