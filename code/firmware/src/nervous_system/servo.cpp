@@ -3,6 +3,7 @@
 #include <Adafruit_PWMServoDriver.h>
 #include "../shared/config.h"
 #include "servo.h"
+#include "motion_math.h"  // easeFraction (smoothstep)
 
 Servo::Servo(Adafruit_PWMServoDriver &pwm, uint8_t pcaChannel, uint16_t servoDefaultAngle)
     : pwm(pwm),
@@ -42,7 +43,7 @@ void Servo::tickEase() {
         easeActive = false;
         return;
     }
-    double frac = (double)t / (double)easeDurMs;
+    double frac = easeFraction(t, easeDurMs);  // smoothstep ease-in-out
     setServoAngle(easeStartAngle + (easeTargetAngle - easeStartAngle) * frac);
 }
 

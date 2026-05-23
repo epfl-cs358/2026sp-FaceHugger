@@ -1,6 +1,12 @@
 #include "motion_math.h"
 #include "clips_all.h"
 
+double easeFraction(uint32_t elapsed_ms, uint32_t dur_ms) {
+    if (dur_ms == 0 || elapsed_ms >= dur_ms) return 1.0;
+    double t = (double)elapsed_ms / (double)dur_ms;
+    return t * t * (3.0 - 2.0 * t);  // smoothstep
+}
+
 ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn) {
     ServoTriple out = {90.0, 90.0, 90.0};
     switch (legId) {

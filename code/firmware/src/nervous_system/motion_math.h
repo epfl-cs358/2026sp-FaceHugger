@@ -12,6 +12,12 @@ typedef struct { double hip; double thigh; double knee; } ServoTriple;
  * NOT a clamp and NOT IK. legId is the firmware LegId (0=FR,1=FL,2=RR,3=RL). */
 ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn);
 
+/* Smoothstep ease-in-out fraction for a timed servo move (Servo::tickEase).
+ * smoothstep(t) = t*t*(3-2t): slow at both ends, fast through the middle, and
+ * reaches exactly 1.0 at elapsed_ms == dur_ms (so the move lands on target).
+ * dur_ms == 0 -> 1.0 (instantaneous). Pure, host-tested. */
+double easeFraction(uint32_t elapsed_ms, uint32_t dur_ms);
+
 /* FhClipFrame is defined in clips_all.h (generated header / test fixture),
  * which uses an anonymous-struct typedef and so cannot be tag-forward-
  * declared. Pull in its definition here. The guard FH_CLIPS_ALL_H is shared
