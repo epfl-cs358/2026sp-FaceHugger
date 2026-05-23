@@ -92,6 +92,13 @@ void handleParsedMessage(uint8_t * payload) {
                 int id = doc["id"];
                 int servoId = doc["servo_id"];
                 int angle = doc["a"];
+                // Reject out-of-range indices before touching LEG_SERVO_CHANNEL[4][3] —
+                // a malformed packet (id:7, servo_id:9, negatives) would otherwise read OOB.
+                if (!isValidServoIndex(id, servoId)) {
+                    Serial.printf("[WARN] T:4 ignored: id=%d servo_id=%d out of range\n",
+                                  id, servoId);
+                    break;
+                }
                 //create a mapping between the channels and leg servo id
                 uint8_t channel = LEG_SERVO_CHANNEL[id][servoId];
                 spinalCord.applyCalibration(channel, angle);

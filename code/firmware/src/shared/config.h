@@ -67,6 +67,12 @@ constexpr uint8_t LEG_SERVO_CHANNEL[4][3] = {
     {BOTTOM_RIGHT_LEG_HIP_PCA_CHANNEL, BOTTOM_RIGHT_LEG_THIGH_PCA_CHANNEL, BOTTOM_RIGHT_LEG_KNEE_PCA_CHANNEL},
     {BOTTOM_LEFT_LEG_HIP_PCA_CHANNEL,  BOTTOM_LEFT_LEG_THIGH_PCA_CHANNEL,  BOTTOM_LEFT_LEG_KNEE_PCA_CHANNEL},
 };
+
+// Single source of truth for indexing LEG_SERVO_CHANNEL from untrusted input
+// (e.g. T:4 / CMD_CALIBRATE packets). Bounds match the [4][3] dimensions above.
+constexpr bool isValidServoIndex(int leg_id, int servo_id) {
+    return leg_id >= 0 && leg_id < 4 && servo_id >= 0 && servo_id < 3;
+}
 #endif
 
 #endif
