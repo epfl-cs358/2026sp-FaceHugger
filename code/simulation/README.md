@@ -45,7 +45,6 @@ Re-runs preserve user edits to `mesh_files._servo_role_assignment` in the JSON.
 cd code/simulation
 
 python facehugger.py urdf                 # regenerate generated/facehugger.urdf
-python facehugger.py view                 # open URDF in PyBullet's viewer (no physics)
 python facehugger.py sim                  # GUI, standing pose
 python facehugger.py sim --walk           # walk gait
 python facehugger.py sim --trot           # trot gait
@@ -63,8 +62,8 @@ Loads `generated/facehugger.urdf` into Blender. Requires **Blender 5.0+**. Two m
 
 | Mode | Wrapped script | What you get | When to use |
 |---|---|---|---|
-| **placement-only** (default) | [animation/scripts/visualize_urdf.py](../../animation/scripts/visualize_urdf.py) | Walks the joint chain at rest pose (the same math PyBullet uses on `loadURDF`) and places each of the 29 STL visuals at `link_world @ visual_origin`. No armature, no Empties, no parenting. | Cross-check: does the URDF chain reproduce PyBullet's `loadURDF` rest pose? Spot bad joint origins / axes visually. |
-| **rigged** (`--rigged`) | [animation/scripts/urdf_to_blender_rigged.py](../../animation/scripts/urdf_to_blender_rigged.py) | Real Armature: 13 bones, FK shoulder + IK on hip+knee, foot-target Empties parented to each `link1`. URDF `<limit>` clamps applied per bone. Matches the placement-only baseline within 0.5 mm at zero pose. | Animator workflow — pose the rig in pose mode, drag foot targets, bake clips. |
+| **placement-only** (default) | [animation/pipeline/visualize_urdf.py](../../animation/pipeline/visualize_urdf.py) | Walks the joint chain at rest pose (the same math PyBullet uses on `loadURDF`) and places each of the 29 STL visuals at `link_world @ visual_origin`. No armature, no Empties, no parenting. | Cross-check: does the URDF chain reproduce PyBullet's `loadURDF` rest pose? Spot bad joint origins / axes visually. |
+| **rigged** (`--rigged`) | [animation/pipeline/urdf_to_blender_rigged.py](../../animation/pipeline/urdf_to_blender_rigged.py) | Real Armature: 13 bones, FK shoulder + IK on hip+knee, foot-target Empties parented to each `link1`. URDF `<limit>` clamps applied per bone. Matches the placement-only baseline within 0.5 mm at zero pose. | Animator workflow — pose the rig in pose mode, drag foot targets, bake clips. |
 
 | Flag | Default | What it does |
 |---|---|---|
@@ -98,18 +97,7 @@ Common pitfalls:
 
 - **"Could not locate Blender 5.1"** — your install path isn't in the `/Applications` candidates. Set `BLENDER_BIN` or pass `--blender-version` matching what you actually have installed.
 - **STL imports silently fail in `--background`** — make sure you're on Blender 5.0+. The placement-only script's `clear_scene` works around a `wm.read_factory_settings(use_empty=True)` quirk that bricked STL import on older versions.
-- **Rigged scene drifts from placement baseline** — at all-zero pose the two should match within 0.5 mm. If they don't, the rig is composing transforms wrong; open both `.blend` outputs and overlay. See [animation/scripts/README.md](../../animation/scripts/README.md) for the rig-build details.
-
-`view` mouse controls:
-
-| Action | How |
-| --- | --- |
-| Orbit | left-drag |
-| Pan | ctrl + left-drag |
-| Zoom | scroll |
-| Quit | close window or Ctrl+C |
-
-The viewer holds the body fixed with gravity off — nothing moves on its own.
+- **Rigged scene drifts from placement baseline** — at all-zero pose the two should match within 0.5 mm. If they don't, the rig is composing transforms wrong; open both `.blend` outputs and overlay. See [animation/pipeline/README.md](../../animation/pipeline/README.md) for the rig-build details.
 
 The `sim` simulator reads geometry from the URDF + `facehugger_config.yaml`; no hardcoded leg lengths or stances in Python.
 
@@ -145,10 +133,15 @@ Angles are in degrees in the yaml; `generate_urdf.py` converts to the URDF's rad
 code/simulation/
   facehugger.py                 CLI entry point — wraps the scripts below
   facehugger_config.yaml        semantic config (hand-edited)
-  generate_urdf.py              URDF generator
-  simulate.py                   PyBullet simulator (constants/helpers/kinematics/gaits)
-  view_urdf.py                  PyBullet URDF viewer (no physics)
   README.md                     this file
+  urdf_pipeline/
+    generate_urdf.py            URDF generator
+  sim/
+    simulate.py                 PyBullet simulator
+    kinematics.py               FK/IK + RobotConfig
+    gaits.py                    gait registry + foot trajectories
+    helpers.py                  shared utilities
+    constants.py                shared path + physics constants
   docs/                         pipeline docs (PIPELINE_SPEC, ASSEMBLY_HIERARCHY, …)
   generated/                    artifacts produced by the Fusion add-in / generator
     fusion_export.json          CAD tree (do not edit)
@@ -156,9 +149,10 @@ code/simulation/
     exported_meshes/*.stl       generated STLs (do not edit)
     facehugger.urdf             generated URDF (do not edit)
 
-../../animation/scripts/
+../../animation/pipeline/
   visualize_urdf.py             Blender 5.x scene builder (URDF → placement + joint markers)
   visualize_fusion_export.py    Blender 5.x scene builder (fusion_export.json → meshes + landmarks)
+  urdf_to_blender_rigged.py     Blender 5.x scene builder (URDF → armature + IK rig)
 ```
 
 ## Design notes
