@@ -30,7 +30,36 @@ The firmware is divided into 5 modules:
 
 **`brain/`**
 
-- `network.cpp/h` — handles all external communication with the app: receives and parses packets, creates the Wi-Fi hotspot, manages WebSocket connections
+- `network.cpp/h` — handles all external communication with the app: receives and
+  parses packets, creates the Wi-Fi hotspot, manages WebSocket connections
+- `diagnostics.cpp/h` — spins up a lightweight HTTP server (port defined by
+  `diagnostics::kHttpPort`) that exposes a rolling CSV log of the robot's internal
+  state; samples a `SpinalCord::Snapshot` at a fixed interval and appends it to an
+  in-memory ring buffer
+- `csv_log.h / csv_log.cpp` — ring buffer and CSV serialisation layer used by
+  `diagnostics`; each row captures a full snapshot of the robot at a point in time
+
+    The diagnostics HTTP endpoints are:
+
+    | Endpoint | Method | Description |
+    |---|---|---|
+    | `/` | `GET` | Lists available endpoints |
+    | `/log` | `GET` | Returns the CSV header followed by the full rolling buffer |
+    | `/log/clear` | `POST` | Clears the ring buffer |
+
+    The CSV log contains the following columns:
+
+    | Column | Description |
+    |---|---|
+    | `millis` | Timestamp in milliseconds since boot |
+    | `robot_state` | Current FSM state |
+    | `gait` | Active gait type |
+    | `is_moving` | `1` if the robot is executing a gait, `0` if standing |
+    | `is_inverted` | `1` if the robot is detected as upside-down |
+    | `last_cmd_ms` | Timestamp of the last received command |
+    | `target_x/y/yaw` | Commanded velocity setpoints |
+    | `active_x/y/yaw` | Currently executing velocity values |
+    | `fr/fl/br/bl_hip/thigh/knee` | Servo angles (°) for all 12 joints |
 
 **`shared/`**
 
