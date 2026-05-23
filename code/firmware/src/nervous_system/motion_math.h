@@ -18,6 +18,12 @@ ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn);
  * dur_ms == 0 -> 1.0 (instantaneous). Pure, host-tested. */
 double easeFraction(uint32_t elapsed_ms, uint32_t dur_ms);
 
+/* One per-channel exponential-moving-average step for clip-playback smoothing:
+ * smoothed = alpha*prev + (1-alpha)*target. alpha in [0,1) — higher is smoother
+ * and laggier; alpha==0 is pass-through. Used ONLY inside tickClip(); never on
+ * the gait or calibration path. Pure, host-tested. */
+float emaStep(float prev, float target, float alpha);
+
 /* FhClipFrame is defined in clips_all.h (generated header / test fixture),
  * which uses an anonymous-struct typedef and so cannot be tag-forward-
  * declared. Pull in its definition here. The guard FH_CLIPS_ALL_H is shared

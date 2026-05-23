@@ -12,6 +12,10 @@
 
 static const uint32_t CLIP_RETURN_MS = 500;  // ease to NEUTRAL at clip end
 
+// Per-channel EMA smoothing applied to clip-playback angles ONLY (inside tickClip).
+// smoothed = alpha*prev + (1-alpha)*target. Higher = smoother but laggier. Tunable.
+static const float CLIP_EMA_ALPHA = 0.75f;
+
 // Math-space neutral poses (shoulder, thigh, knee in degrees), indexed by LegId.
 // These are the JS N[] values that have been physically tested on hardware.
 static const struct { float sh, th, kn; } NEUTRAL[LEG_COUNT] = {
@@ -407,6 +411,11 @@ void SpinalCord::playClip(uint8_t id) {
     clipState_.returnStartMs = 0;
     clipState_.cursor      = 0;
     clipState_.phase       = CLIP_PLAYING;
+    // Seed the EMA from frame 0 so playback starts on the true first pose
+    // (no ramp-up from a stale value).
+    for (uint8_t i = 0; i < LEG_COUNT; ++i)
+        for (uint8_t j = 0; j < 3; ++j)
+            clipSmoothed_[i][j] = FH_CLIPS[id].frames[0].a[i * 3 + j];
     robotState = STATE_ACTION;   // pre-empts any running gait (single motion owner)
     Serial.printf("[clip] play %s (%u frames)\n",
                   FH_CLIPS[id].name, FH_CLIPS[id].frame_count);
@@ -424,8 +433,15 @@ void SpinalCord::tickClip() {
             float a[12];
             clipPoseAt(clip.frames, clip.frame_count, step.elapsed_ms,
                        &clipState_.cursor, a);
+            // Per-channel EMA on the math-space angle, BEFORE translateToServo —
+            // clip path only; gaits and calibration never touch clipSmoothed_.
             for (uint8_t i = 0; i < LEG_COUNT; ++i) {
-                ServoTriple s = translateToServo(i, a[i*3+0], a[i*3+1], a[i*3+2]);
+                for (uint8_t j = 0; j < 3; ++j)
+                    clipSmoothed_[i][j] = emaStep(clipSmoothed_[i][j],
+                                                  a[i*3+j], CLIP_EMA_ALPHA);
+                ServoTriple s = translateToServo(i, clipSmoothed_[i][0],
+                                                 clipSmoothed_[i][1],
+                                                 clipSmoothed_[i][2]);
                 legs[i]->setJointAngles(s.hip, s.thigh, s.knee);
             }
             if (step.action == CLIP_ACT_BEGIN_RETURN) {

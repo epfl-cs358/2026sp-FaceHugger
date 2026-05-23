@@ -7,6 +7,10 @@ double easeFraction(uint32_t elapsed_ms, uint32_t dur_ms) {
     return t * t * (3.0 - 2.0 * t);  // smoothstep
 }
 
+float emaStep(float prev, float target, float alpha) {
+    return alpha * prev + (1.0f - alpha) * target;
+}
+
 ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn) {
     ServoTriple out = {90.0, 90.0, 90.0};
     switch (legId) {
