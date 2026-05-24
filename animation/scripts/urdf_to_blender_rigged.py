@@ -1768,9 +1768,10 @@ def main():
     # with a security banner and the panel won't appear.
     #
     # The embedded text resolves fh_clip_panel.py *at load time* relative
-    # to the opened .blend (blend_dir/scripts), so it works on any machine
+    # to the opened .blend (blend_dir/addons), so it works on any machine
     # or checkout with no absolute path baked in — fh_rigged_latest.blend
-    # lives in animation/ and the panel in animation/scripts/.
+    # lives in animation/ and the panel in animation/addons/ (moved from
+    # animation/scripts/ in 2f627a1).
     # ------------------------------------------------------------------
     text_name = "fh_startup.py"
     if text_name in bpy.data.texts:
@@ -1779,7 +1780,7 @@ def main():
     startup_text.write(
         "import os, sys, bpy\n"
         "blend_dir = os.path.dirname(bpy.data.filepath)\n"
-        'addon_path = os.path.join(blend_dir, "scripts")\n'
+        'addon_path = os.path.join(blend_dir, "addons")\n'
         "if addon_path not in sys.path:\n"
         "    sys.path.insert(0, addon_path)\n"
         "import fh_clip_panel\n"
