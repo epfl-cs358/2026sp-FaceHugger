@@ -19,3 +19,18 @@ export const CrabGaitPacket = {T: 5, g: GaitMode.CRAB} as GaitIntegration;
 
 //Action packets
 export const InvertRobotPacket = {T: 6, a: ActionTypes.INVERT_ROBOT} as ActionPacket;
+
+//Calibration packets
+export const calibrationPacket = (leg: number, servo: number, angle: number) =>
+    ({T: 4, id: leg, servo_id: servo, a: angle} as ServoCalibration);
+
+// One CMD_CALIBRATE per (leg 0-3, servo 0-2) at 90° — resets every servo.
+export const restAllServosPackets = (angle: number = 90) => {
+    const packets: ServoCalibration[] = [];
+    for (let leg = 0; leg < 4; leg++) {
+        for (let servo = 0; servo < 3; servo++) {
+            packets.push(calibrationPacket(leg, servo, angle));
+        }
+    }
+    return packets;
+};
