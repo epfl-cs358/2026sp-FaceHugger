@@ -40,7 +40,7 @@
 
 #define BOTTOM_RIGHT_LEG_HIP_DEFAULT_ANGLE 90
 #define BOTTOM_RIGHT_LEG_THIGH_DEFAULT_ANGLE 40
-#define BOTTOM_RIGHT_LEG_KNEE_DEFAULT_ANGLE 130
+#define BOTTOM_RIGHT_LEG_KNEE_DEFAULT_ANGLE 140  // = translateToServo(NEUTRAL[BR].kn=-50); was 130, caused rear-knee twitch on gait stop
 
 // Bottom left leg (Leg 3 in spinal_cord.cpp)
 #define BOTTOM_LEFT_LEG_HIP_PCA_CHANNEL 0
@@ -49,7 +49,7 @@
 
 #define BOTTOM_LEFT_LEG_HIP_DEFAULT_ANGLE 90
 #define BOTTOM_LEFT_LEG_THIGH_DEFAULT_ANGLE 150
-#define BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE 50
+#define BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE 55  // = translateToServo(NEUTRAL[BL].kn=-35); was 50, caused rear-knee twitch on gait stop
 
 // Servo ID constants for use as indices
 #define SERVO_HIP   0

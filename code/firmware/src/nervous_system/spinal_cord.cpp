@@ -7,6 +7,7 @@
 #include "servo.h"
 #include "motion_math.h"
 #include "movements.h"
+#include "neutral_pose.h"   // NEUTRAL[] — single source of truth (FL=135 post-Change-B)
 #include "../shared/config.h"
 #include "clips_all.h"   // generated FH_CLIPS[] (placeholder until export, see B6)
 
@@ -15,15 +16,6 @@ static const uint32_t CLIP_RETURN_MS = 500;  // ease to NEUTRAL at clip end
 // Per-channel EMA smoothing applied to clip-playback angles ONLY (inside tickClip).
 // smoothed = alpha*prev + (1-alpha)*target. Higher = smoother but laggier. Tunable.
 static const float CLIP_EMA_ALPHA = 0.75f;
-
-// Math-space neutral poses (shoulder, thigh, knee in degrees), indexed by LegId.
-// These are the JS N[] values that have been physically tested on hardware.
-static const struct { float sh, th, kn; } NEUTRAL[LEG_COUNT] = {
-    {  45.0f, -60.0f, -37.0f },  // LEG_FR (0)
-    { 135.0f, -60.0f, -40.0f },  // LEG_FL (1)  Change B: shoulder 75 -> 135 (outward); see motion_math FL branch
-    { -45.0f, -50.0f, -50.0f },  // LEG_RR / BR (2)
-    {-135.0f, -60.0f, -35.0f },  // LEG_RL / BL (3)
-};
 
 // Gait parameters (step values are in degrees, pre-scaled to 2/3 of raw JS values).
 // Offsets order: [LEG_FR, LEG_FL, LEG_RR, LEG_RL]
@@ -436,11 +428,13 @@ void SpinalCord::tickClip() {
                 for (uint8_t j = 0; j < 3; ++j)
                     clipSmoothed_[i][j] = emaStep(clipSmoothed_[i][j],
                                                   a[i*3+j], CLIP_EMA_ALPHA);
-                // EMA smooths the math-space angle; invert (if any) is applied
-                // after, at the servo write point, by applyServos.
-                applyServos(legs[i], translateToServo(i, clipSmoothed_[i][0],
-                                                       clipSmoothed_[i][1],
-                                                       clipSmoothed_[i][2]));
+                // EMA smooths the math-space angle; clampClipServos keeps the clip
+                // off each leg's mechanical stop (clip path only); invert (if any)
+                // applied last at the write point.
+                applyServos(legs[i], clampClipServos(
+                    translateToServo(i, clipSmoothed_[i][0],
+                                     clipSmoothed_[i][1],
+                                     clipSmoothed_[i][2])));
             }
             if (step.action == CLIP_ACT_BEGIN_RETURN) {
                 // Final pose applied; start the non-blocking ease to NEUTRAL.

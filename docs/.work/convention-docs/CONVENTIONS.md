@@ -1,5 +1,17 @@
 # FaceHugger servo & control conventions
 
+> **Branch note (read first):** this document describes the **post-Change-B** world on
+> `feat/animation-flow-integration` — i.e. the FL shoulder *regularized* so servo 90 =
+> outward for all four legs (`90 + (sh − 135)`, `NEUTRAL[FL]=135`, config FL hip = 90).
+> The **`feat/safe-flash`** branch (what's flashed for testing) is **pre-B**: there FL is
+> still `servo = sh`, `NEUTRAL[FL]=75`, `convention.json` fl = 75. Everything else
+> (the C poses, D's pitch-only invert, 3a/3b smoothing, the direction signs, FR/BR/BL) is
+> identical on both branches. On safe-flash the exporter and firmware still agree with each
+> other (both old FL) — they're consistent; this doc is simply *ahead* on the FL bits.
+> safe-flash also carries a **temporary `clampClipServos`** safeguard (clip-path only:
+> shoulder→[38,142], thigh→[30,150]) not yet reflected below; it does not exist on the
+> integration branch yet.
+
 This is the reference for how FaceHugger's control and servo conventions work — what a
 teammate (or future-you) wiring an animation exporter, an API client, or a new gait needs
 to know. It documents the conventions **as the code is today**, on

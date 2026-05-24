@@ -7,6 +7,16 @@ double easeFraction(uint32_t elapsed_ms, uint32_t dur_ms) {
     return t * t * (3.0 - 2.0 * t);  // smoothstep
 }
 
+ServoTriple clampClipServos(ServoTriple s) {
+    auto cl = [](double v, double lo, double hi) {
+        return v < lo ? lo : (v > hi ? hi : v);
+    };
+    s.hip   = cl(s.hip,   38.0, 142.0);  // shoulder: 90 +/- 52 (every leg's tight side)
+    s.thigh = cl(s.thigh, 30.0, 150.0);  // 90 +/- 60
+    s.knee  = cl(s.knee,   0.0, 180.0);  // 90 +/- 90
+    return s;
+}
+
 float emaStep(float prev, float target, float alpha) {
     return alpha * prev + (1.0f - alpha) * target;
 }

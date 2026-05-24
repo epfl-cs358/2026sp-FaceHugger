@@ -12,6 +12,15 @@ typedef struct { double hip; double thigh; double knee; } ServoTriple;
  * NOT a clamp and NOT IK. legId is the firmware LegId (0=FR,1=FL,2=RR,3=RL). */
 ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn);
 
+/* TEMPORARY conservative servo clamp for the CLIP PLAYBACK path only (see
+ * tickClip). servo 90 = outward for every leg; each leg's URDF shoulder range is
+ * asymmetric (52° one side, 90° the other), so 90±52 = [38,142] is inside EVERY
+ * leg's reach regardless of side — a clip can never drive a shoulder past its
+ * mechanical stop. Thigh 90±60 = [30,150]; knee 90±90 = [0,180]. Conservative on
+ * each leg's wide (90°) side; the precise per-leg window is the future 3c work.
+ * NOT applied to gaits or T:4 — gait output stays bit-for-bit. */
+ServoTriple clampClipServos(ServoTriple s);
+
 /* Smoothstep ease-in-out fraction for a timed servo move (Servo::tickEase).
  * smoothstep(t) = t*t*(3-2t): slow at both ends, fast through the middle, and
  * reaches exactly 1.0 at elapsed_ms == dur_ms (so the move lands on target).
