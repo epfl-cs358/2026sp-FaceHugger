@@ -34,3 +34,24 @@ export const restAllServosPackets = (angle: number = 90) => {
     }
     return packets;
 };
+
+// Neutral standing pose — raw servo angles per [leg id][servo_id] = [hip, thigh, knee].
+// Mirrors the firmware per-servo *_DEFAULT_ANGLE in config.h (returnToDefaultAngles()).
+// Keep in sync if the firmware defaults change.
+const NEUTRAL_STANCE_ANGLES: number[][] = [
+    [90, 150, 53],  // leg 0 - front right
+    [75, 30, 130],  // leg 1 - front left
+    [90, 40, 130],  // leg 2 - rear right
+    [90, 150, 50],  // leg 3 - rear left
+];
+
+// One CMD_CALIBRATE per joint to drive every servo to the neutral stance.
+export const neutralStancePackets = () => {
+    const packets: ServoCalibration[] = [];
+    NEUTRAL_STANCE_ANGLES.forEach((servos, leg) => {
+        servos.forEach((angle, servo) => {
+            packets.push(calibrationPacket(leg, servo, angle));
+        });
+    });
+    return packets;
+};
