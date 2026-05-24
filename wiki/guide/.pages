@@ -6,4 +6,5 @@ nav:
   - wiring.md
   - assembly.md
   - software.md
+  - calibration.md
   - toolchain

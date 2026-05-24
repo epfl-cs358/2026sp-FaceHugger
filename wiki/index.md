@@ -1,5 +1,8 @@
 # FaceHugger - Quadruped Robot
 
+!!! warning "Work in progress"
+    This wiki is being actively developed. Some pages are incomplete or may change.
+
 !!! todo "Stub - to be written"
     Quick-start landing page. One-paragraph "what is FaceHugger", a hero
     photo of the assembled robot, "what you'll need" at a glance, and a
