@@ -46,7 +46,9 @@ Each leg has three joints, in order: **shoulder** (`_link1_joint`, yaw about Z, 
 
 FaceHugger uses two distinct angle spaces. Confusing them is the most common source of bugs.
 
-**Math-space** is the abstract joint angle centered on the `NEUTRAL[]` rest pose. Values can be negative (e.g., thigh = -60 deg means the leg drops below rest). The same math-space value produces the same physical motion on all four legs when passed through `translateToServo()`. This is the space used by gaits, clips, URDF limits, and all animation tooling.
+**Math-space** is the abstract joint-angle space shared by all four legs. Its zero is the URDF/CAD calibration pose: every URDF joint angle is zero and the pitch servos sit at their 90 deg mid-scale (legs extended, the flat "spread out" calibration position). It is **not** centered on the `NEUTRAL[]` standing pose. The same math-space value produces the same physical motion on all four legs when passed through `translateToServo()`. This is the space used by gaits, clips, URDF limits, and all animation tooling.
+
+`NEUTRAL[]` is one specific pose expressed in this space, not its origin. Its values are nonzero (e.g., FR thigh = -60 deg), so a thigh angle of -60 deg is measured from the calibration zero, not "below NEUTRAL". Gaits and clips treat `NEUTRAL[]` as a reference to add deltas onto and to scale around (`value = NEUTRAL + (raw - NEUTRAL) * SCALE`); this only works because the raw angles are absolute math-space measured from the calibration zero.
 
 **Servo-space** is the physical 0-180 deg angle written to each servo via the PCA9685 I2C driver. It is always positive, hardware-only, and never stored in clips or gaits. The firmware clamps it via `constrain(angle, 0, 180)` inside `Servo::setServoAngle()`, then maps to pulse width with `map(angle, 0, 180, MIN_PULSE, MAX_PULSE)` where `MIN_PULSE=150` and `MAX_PULSE=600` microseconds (`config.h`).
 
@@ -61,9 +63,9 @@ FaceHugger uses two distinct angle spaces. Confusing them is the most common sou
 | Is this in Fusion CAD? | Yes | **CAD frame** (specific to Fusion origin) |
 | Does this describe servo mounting? | Yes | **Firmware hardware** (PCA channel, calibration) |
 
-### NEUTRAL Rest Pose
+### NEUTRAL Standing Pose
 
-The rest pose is defined in math-space and indexed by firmware `LegId`. Source of truth: `code/firmware/src/nervous_system/spinal_cord.cpp`, `NEUTRAL[]` array (lines 17-22), physically tested on hardware.
+This is the default standing posture, defined in math-space and indexed by firmware `LegId`. It is distinct from the calibration zero (math-space origin) described above: the values below are the math-space coordinates of the standing pose, not zeros. Source of truth: `code/firmware/src/nervous_system/spinal_cord.cpp`, `NEUTRAL[]` array (lines 17-22), physically tested on hardware.
 
 | Leg | LegId | Name | Shoulder (deg) | Thigh (deg) | Knee (deg) | Physical pose |
 |---|:---:|---|---|---|---|---|

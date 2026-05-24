@@ -105,3 +105,10 @@ All implementations are in `doc/torque-analysis/torque_calculations.py`:
 
 !!! note
     An interactive version with sliders is available as the rendered Jupyter notebook on the [torque notebook page](torque_calculations.ipynb). The sliders require a live Python kernel; the static site has none. Run `doc/torque-analysis/torque_calculations.ipynb` locally for live interaction.
+
+## Interactive explorer
+
+The widget below runs entirely in the browser; no Python kernel required. Adjust link lengths, joint angles, and servo parameters to explore how geometry affects the maximum supported body weight.
+
+<iframe src="../torque_widget.html" width="100%" height="820px"
+  style="border:none;border-radius:6px"></iframe>

@@ -872,3 +872,4 @@ animation/exported_gaits/
 
 # Claude Code working directory — local-only scratch space
 .work/
+.claude/settings.json
