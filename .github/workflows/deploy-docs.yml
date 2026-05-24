@@ -2,7 +2,7 @@ name: Deploy wiki to GitHub Pages
 
 on:
   push:
-    branches: [feat/wiki-setup]
+    branches: [main]
     paths:
       - 'wiki/**'
       - 'mkdocs.yml'
