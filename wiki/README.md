@@ -32,10 +32,11 @@ git checkout feat/wiki-setup
 
 # one-time: docs toolchain in an isolated venv
 python -m venv .venv-docs
-.venv-docs/bin/pip install -r requirements-docs.txt
+source .venv-docs/bin/activate
+pip install -r requirements-docs.txt
 
 # live preview at http://127.0.0.1:8000 (rebuilds as you save)
-.venv-docs/bin/mkdocs serve
+source .venv-docs/bin/activate && mkdocs serve
 ```
 
 Edit your pages, then:
