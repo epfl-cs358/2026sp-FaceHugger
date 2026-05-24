@@ -6,6 +6,7 @@
 #include <cstdint>
 #include "leg.h"
 #include "movements.h"
+#include "face.h"
 #include "../shared/data.h"
 
 class SpinalCord{
@@ -22,6 +23,7 @@ class SpinalCord{
         void setGait(GaitType g);
         GaitType currentGait() const;
         void processCommand(String dir);
+        Face& getFace() { return face; }
 
         // POD bundle of read-only state for the diagnostics CSV logger.
         // Field names match CSV column names (snake_case is intentional).
@@ -40,6 +42,7 @@ class SpinalCord{
     private:
         volatile RobotState robotState;
         Adafruit_PWMServoDriver driver;
+        Face face;
         Leg leg1;
         Leg leg2;
         Leg leg3;
