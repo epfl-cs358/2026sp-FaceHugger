@@ -98,11 +98,16 @@ def test_frames_in_ascending_order(all_clips):
 def test_first_frame_lie_down_fr_shoulder(all_clips):
     """Spot-check FR shoulder first frame of 'lie down and stand up'.
 
-    Value read directly from clips_all.h line 21:
-      { 0, { 14.2933f, ... } }  → a[0] = FR shoulder = 14.2933
+    Value read directly from clips_all.h:
+      { 0, { 44.2948f, ... } }  → a[0] = FR shoulder ≈ 44.29
+
+    ≈ FR neutral (45) minus the small rest-yaw residual, after the link1
+    delta-to-absolute exporter fix. Pre-fix it was ~14.29 (= 45/3), which
+    clamped fl/bl shoulders and collapsed the robot — see
+    docs/CLIP_SHOULDER_CONVENTION.md.
     """
     clip = get_clip_by_name(all_clips, "lie down and stand up")
-    assert abs(clip.frames[0].a[0] - 14.2933) < 0.001
+    assert abs(clip.frames[0].a[0] - 44.2948) < 0.01
 
 
 def test_get_clip_by_name_case_insensitive(all_clips):
