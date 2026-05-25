@@ -79,10 +79,12 @@ void SpinalCord::processCommand(String dir) {
     else if (dir == "BW")   { targetX =  0.0f; targetY = -1.0f; targetYaw =  0.0f; face.setState(EYES_FRONT); }
     else if (dir == "L")    { targetX = -1.0f; targetY =  0.0f; targetYaw =  0.0f; face.setState(EYES_LEFT); }
     else if (dir == "R")    { targetX =  1.0f; targetY =  0.0f; targetYaw =  0.0f; face.setState(EYES_RIGHT); }
-    else if (dir == "FW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; face.setState(EYES_RIGHT); }
-    else if (dir == "FW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; face.setState(EYES_LEFT); }
-    else if (dir == "BW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; face.setState(EYES_RIGHT); }
-    else if (dir == "BW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; face.setState(EYES_LEFT); }
+    // Eyes look opposite the rotation: turning left shows the right-eye image
+    // and vice versa (rotation direction / targetYaw itself is unchanged).
+    else if (dir == "FW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; face.setState(EYES_LEFT); }
+    else if (dir == "FW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; face.setState(EYES_RIGHT); }
+    else if (dir == "BW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; face.setState(EYES_LEFT); }
+    else if (dir == "BW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; face.setState(EYES_RIGHT); }
     else if (dir == "STOP") { targetX =  0.0f; targetY =  0.0f; targetYaw =  0.0f; face.setState(EYES_FRONT); }
 }
 
