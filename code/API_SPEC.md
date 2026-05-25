@@ -91,6 +91,22 @@ Gait mode change
 | 'a' | int  | Action ID | 0,1,2...|
 **Example:** '{"T": 6, "a": 1}'
 
+### 9. Set Invert Flag (`T: 9`)
+Set the robot's invert flag without triggering any servo movement or pose change.
+The mirror is applied transparently on the next motion tick (gait, clip, or stand)
+via `applyServos`. Use this when you want to arm or disarm invert mid-animation
+without interrupting clip playback.
+
+| Key        | Type | Description                              |
+| :--------- | :--- | :--------------------------------------- |
+| `inverted` | bool | `true` = inverted (upside-down), `false` = upright |
+
+Missing or non-bool `inverted` key → silent no-op with Serial warning.
+
+**Example:** `{"T": 9, "inverted": true}` *(arm invert; next motion tick applies the mirror)*
+
+---
+
 ### 7. Play Clip ('T: 7')
 Play a bundled one-shot animation clip by id. The robot plays the clip once on
 its baked timeline, then auto-returns to the neutral standing pose over 500 ms

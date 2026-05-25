@@ -456,6 +456,10 @@ void SpinalCord::tickClip() {
     }
 }
 
+void SpinalCord::setInverted(bool flag) {
+    isInverted = flag;
+}
+
 void SpinalCord::invertRobot() {
     isInverted = !isInverted;
     // Re-assume the neutral pose in the new orientation. The pitch mirror is now
