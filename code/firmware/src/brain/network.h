@@ -11,7 +11,7 @@ void initNetwork();
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length);
 
 // Parses JSON payload and executes logic
-void handleParsedMessage(uint8_t * payload);
+void handleParsedMessage(uint8_t num, uint8_t * payload);
 
 // Background task to be called in loop()
 void updateNetwork();
