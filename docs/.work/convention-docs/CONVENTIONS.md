@@ -89,8 +89,10 @@ hardware mirroring is hidden one layer down (§3).
 The caller works in a **uniform, leg-agnostic math-space**: `+sh` = CCW yaw, `+th`/`+kn` = up
 pitch, identically for all four legs. A single function, `translateToServo`
 (`motion_math.cpp:22-50`), absorbs *all* hardware asymmetry and maps that uniform math-space
-onto each physical servo's polarity and centring — the per-leg shoulder offsets, the BR
-shoulder sign-flip, and the FR/BL vs FL/BR thigh/knee L/R mirror.
+onto each physical servo's polarity and centring — the per-leg shoulder offsets and the
+FR/BL vs FL/BR thigh/knee L/R mirror. (Shoulder yaw is **not** mirrored: all four shoulder
+servos share the same vertical shaft axis, so `+sh` = `+servo` for every leg — BR's old
+shoulder sign-flip was removed 2026-05-25; see DRAFT-delta-conventions.md §6.)
 
 The exporter has a byte-identical twin, `_frame_to_servo` (`fh_clip_panel.py:1902-1911`),
 locked to the firmware by `test_servo_parity.py`. Both now read identically across all four
@@ -99,7 +101,7 @@ legs:
 ```
 FL:  hip = 90 + (sh - 135);  thigh = 90 + th;   knee = 90 - kn
 FR:  hip = 90 + (sh - 45);   thigh = 90 - th;   knee = 90 + kn
-BR:  hip = 90 - (sh + 45);   thigh = 90 + th;   knee = 90 - kn
+BR:  hip = 90 + (sh + 45);   thigh = 90 + th;   knee = 90 - kn
 BL:  hip = 90 + (sh + 135);  thigh = 90 - th;   knee = 90 + kn
 ```
 
@@ -115,16 +117,17 @@ down (−1):
 | FL  | **+1** | **+1** | **−1** |
 | FR  | **+1** | **−1** | **+1** |
 | BL  | **+1** | **−1** | **+1** |
-| BR  | **−1** | **+1** | **−1** |
+| BR  | **+1** | **+1** | **−1** |
 
 Two things to read off this table:
 
-- **Shoulder is +1 for three legs and −1 only for BR.** BR is the single leg whose hip
-  formula inverts `sh`. So to nudge a shoulder CCW-from-above by one degree, you send `+1` on
-  FR/FL/BL but `−1` on BR. (This is exactly why `tickYawRotation` carries a per-leg `YAW_COEF`
-  with BR flipped, `spinal_cord.cpp:359`.)
+- **Shoulder is +1 for all four legs.** Every shoulder servo's shaft is on the same vertical
+  yaw axis, so to nudge any shoulder CCW-from-above by one degree you send `+1`. (BR's old
+  `−1` was removed 2026-05-25; `tickYawRotation`'s `YAW_COEF` is now uniform `{-1,-1,-1,-1}`,
+  and `tickGait`'s `fwdDir` puts BR in the `+1` group — see DRAFT-delta-conventions.md §6.)
 - **Thigh and knee are always anti-correlated within a leg** (+1/−1 or −1/+1). That matches
-  the lift convention every gait uses: `th += lift; kn -= lift`.
+  the lift convention every gait uses: `th += lift; kn -= lift`. Pitch *does* mirror on the
+  {FL,BR}↔{FR,BL} diagonal because those servos face opposite ways.
 
 B is a pure *offset* change on FL's hip, not a sign flip — the table above is identical before
 and after B.
