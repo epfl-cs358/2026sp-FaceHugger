@@ -1995,7 +1995,7 @@ def to_c_header(frames, clip_name, convention):
     return path
 
 
-def _frame_to_servo(row, convention):
+def _frame_to_servo(row, convention, warn=True):
     """One baked row -> {leg: [hip, thigh, knee] ints} where the per-leg
     list index IS the firmware `servo_id` (0=hip, 1=thigh, 2=knee —
     matching LEG_SERVO_CHANNEL[leg_id][servo_id] in
@@ -2033,15 +2033,36 @@ def _frame_to_servo(row, convention):
         # backstop (the FRAME_DELTA_WARN_DEG warning's range companion).
         for i, v in enumerate(servo):
             if v < 0 or v > 180:
-                bone_name = ["shoulder", "hip", "knee"][i]
-                print(
-                    f"WARNING: {leg} {bone_name} servo {v:.1f} out of range "
-                    f"[0-180] at frame {row.get('frame', '?')} — clamped"
-                )
+                if warn:
+                    bone_name = ["shoulder", "hip", "knee"][i]
+                    print(
+                        f"WARNING: {leg} {bone_name} servo {v:.1f} out of range "
+                        f"[0-180] at frame {row.get('frame', '?')} — clamped"
+                    )
                 servo[i] = max(0, min(180, v))
         # 4. integer servo degrees
         out[leg] = [round(v) for v in servo]
     return out
+
+
+def _current_servo_angles(context):
+    """Live servo degrees for the CURRENT rig pose, per leg, via the exact
+    export pipeline (link1 delta->absolute, scale-from-NEUTRAL, translateToServo)
+    so the numbers match what would be baked/flashed. Returns
+    {leg: [shoulder, thigh, knee]} (ints) or None if the rig/convention isn't
+    available. warn=False so a panel redraw never spams the clamp warning."""
+    arm = _find_arm_obj()
+    if arm is None:
+        return None
+    try:
+        convention = _load_convention()
+        dg = context.evaluated_depsgraph_get()
+        angles = _link1_delta_to_absolute(
+            _read_bone_angles(arm.evaluated_get(dg)), convention
+        )
+        return _frame_to_servo(angles, convention, warn=False)
+    except Exception:
+        return None
 
 
 def to_js(
@@ -2897,6 +2918,55 @@ class FH_PT_display(_FH_PT_child, bpy.types.Panel):
         )
 
 
+# Per-joint safe servo range (= clampClipServos in the firmware / sim). A value
+# at or beyond these bounds is flagged red in the Servo Angles panel: it means
+# the joint is being driven into its mechanical stop.
+_SERVO_SAFE_RANGE = {
+    "shoulder": (38, 142),
+    "thigh": (30, 150),
+    "knee": (0, 180),
+}
+
+
+class FH_PT_servos(_FH_PT_child, bpy.types.Panel):
+    """Live read-out of the 12 servo angles for the current rig pose — the
+    exact degrees that would be exported / flashed. Updates as the animation
+    plays so you can see, frame by frame, what each leg's servos are commanded.
+    A value at/beyond its safe range is shown red (driven into the stop)."""
+
+    bl_idname = "VIEW3D_PT_fh_servos"
+    bl_label = "Servo Angles"
+    bl_order = 5
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
+        servos = _current_servo_angles(context)
+        if servos is None:
+            layout.label(text="(rig or convention.json unavailable)", icon="INFO")
+            return
+
+        layout.label(
+            text=f"Frame {context.scene.frame_current} — exported servo degrees"
+        )
+        # header
+        hdr = layout.row(align=True)
+        hdr.label(text="Leg")
+        for t in ("Shldr", "Thigh", "Knee"):
+            hdr.label(text=t)
+
+        joints = ("shoulder", "thigh", "knee")
+        col = layout.column(align=True)
+        for leg in ("fr", "fl", "br", "bl"):
+            row = col.row(align=True)
+            row.label(text=leg.upper())
+            for j, v in zip(joints, servos[leg]):
+                lo, hi = _SERVO_SAFE_RANGE[j]
+                cell = row.row(align=True)
+                cell.alert = v <= lo or v >= hi  # red when at/over the stop
+                cell.label(text=f"{v}°")
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -2929,6 +2999,7 @@ CLASSES = (
     FH_PT_selection,
     FH_PT_export,
     FH_PT_display,
+    FH_PT_servos,
 )
 
 
