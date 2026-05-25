@@ -2044,7 +2044,10 @@ def _frame_to_servo(row, convention, warn=True):
         elif leg == "bl":
             servo = [90 + (sh + 135), 90 - th, 90 + kn]
         else:  # br
-            servo = [90 - (sh + 45), 90 + th, 90 - kn]
+            # BR shoulder un-mirrored (2026-05-25): +sh = +servo like fr/fl/bl
+            # (identical motor, yaw shaft on the same vertical axis). Kept
+            # byte-identical to firmware translateToServo by test_servo_parity.
+            servo = [90 + (sh + 45), 90 + th, 90 - kn]
         # 3. clamp to the servo range, surfacing authoring errors at export
         # time rather than relying on the JS / firmware clamp as the only
         # backstop (the FRAME_DELTA_WARN_DEG warning's range companion).

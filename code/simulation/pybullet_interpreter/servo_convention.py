@@ -105,7 +105,10 @@ def translate_to_servo(leg_id: int, sh: float, th: float, kn: float) -> ServoTri
         out.thigh = 90.0 + th
         out.knee = 90.0 - kn
     elif leg_id == LEG_RR:
-        out.hip = 90.0 - (sh + 45.0)
+        # BR shoulder un-mirrored (2026-05-25): +sh = +servo like fr/fl/bl
+        # (identical motor, yaw shaft on the same vertical axis). Byte-identical
+        # to firmware translateToServo / exporter _frame_to_servo.
+        out.hip = 90.0 + (sh + 45.0)
         out.thigh = 90.0 + th
         out.knee = 90.0 - kn
     elif leg_id == LEG_RL:

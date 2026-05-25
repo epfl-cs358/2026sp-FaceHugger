@@ -215,7 +215,11 @@ void SpinalCord::tickGait() {
         // Front legs add the combined signal, rear legs subtract it.
         // Right side (FR, RR) adds yaw contribution; left side (FL, RL) subtracts it.
         {
-            const float fwdDir     = (i == LEG_FR || i == LEG_FL) ? 1.0f : -1.0f;
+            // BR (LEG_RR) shoulder un-mirrored (2026-05-25): its whole shoulder
+            // deviation must negate vs the old convention to keep servo output
+            // identical, so BR joins the +1 group here (the old "front/rear"
+            // split partly encoded BR's servo mirror).
+            const float fwdDir     = (i == LEG_FR || i == LEG_FL || i == LEG_RR) ? 1.0f : -1.0f;
             const float yawDir     = (i == LEG_FR || i == LEG_RR) ? 1.0f : -1.0f;
             const float fwdContrib = isCrab ? 0.0f : activeY;
             sh += fwdDir * sweep * (fwdContrib + yawDir * activeYaw);
@@ -346,9 +350,11 @@ void SpinalCord::tickYawRotation() {
     // Diagonal trot pairing: FL+RR in stance during one half, FR+RL the other.
     static const float OFFSETS[LEG_COUNT] = { 0.5f, 0.0f, 0.0f, 0.5f };
 
-    // RR is flipped because its servoHip = 90 - (sh + 45) inverts sh;
-    // the other three have servoHip = sh + const (no flip).
-    static const float YAW_COEF[LEG_COUNT] = { -1.0f, -1.0f, +1.0f, -1.0f };
+    // All four shoulders now have servoHip = sh + const (BR un-mirrored
+    // 2026-05-25), so YAW_COEF is uniform. The old BR=+1 cancelled BR's former
+    // servo mirror; flipping it to -1 in tandem with translateToServo keeps the
+    // servo output (and thus the turn) byte-identical.
+    static const float YAW_COEF[LEG_COUNT] = { -1.0f, -1.0f, -1.0f, -1.0f };
 
     const float t           = (millis() - gaitPhaseStartMs_) / 1000.0f;
     const float globalPhase = fmodf(t / PERIOD_S, 1.0f);

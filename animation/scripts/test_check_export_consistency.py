@@ -59,10 +59,11 @@ H_ROW_F0 = [
 ]
 # Expected values computed from H_ROW_F0 via current _frame_to_servo + convention.json.
 # fl hip = 0 (clamped from -0.71 — fl shoulder raw -1.0577 is just below neutral 135).
+# br shoulder 61 -> 119 after BR un-mirror (2026-05-25): 90 + (sh + 45) not 90 - (sh + 45).
 JS_F0 = {
     "fr": [59, 131, 33],
     "fl": [0, 49, 148],
-    "br": [61, 52, 151],
+    "br": [119, 52, 151],
     "bl": [179, 131, 34],
 }
 
@@ -183,10 +184,9 @@ def test_body_rotation_uniform_mathspace_yaw():
     bone axis_sign (URDF link1 <axis z>: fr -1, fl +1, br +1, bl -1); the export
     must cancel that sign so math-space comes out uniform.
 
-    Documented consequence (NOT asserted as "all same"): through the slope table
-    BR's hardware-mirrored servo (-1) moves opposite the other three. Whether BR
-    should be un-mirrored is a separate hardware question. Regression for both
-    the FL inversion and the (wrong) "all servos same" target.
+    Since BR's shoulder was un-mirrored (2026-05-25, slope -1 -> +1), all four
+    shoulder SERVOS now move the same direction for a body yaw too. Regression
+    for both the FL inversion and the BR-mirror.
     """
     from check_export_consistency import _mod
 
@@ -209,17 +209,15 @@ def test_body_rotation_uniform_mathspace_yaw():
         f"direction); got deltas {sh_delta}"
     )
 
-    # Documented servo consequence: FR/FL/BL move together, BR opposite.
+    # Servo consequence after un-mirroring BR: ALL four move the same direction.
     servo = _mod._frame_to_servo(row, CONVENTION, warn=False)
     base = _mod._frame_to_servo(
         {**{f"{leg}_link1": n[leg][0] for leg in n}, **_neutral_pitch(n)}, CONVENTION
     )
     sdelta = {leg: servo[leg][0] - base[leg][0] for leg in ("fr", "fl", "br", "bl")}
-    assert (sdelta["fr"] > 0) == (sdelta["fl"] > 0) == (sdelta["bl"] > 0), (
-        f"FR/FL/BL shoulders must move together; got {sdelta}"
-    )
-    assert (sdelta["br"] > 0) != (sdelta["fr"] > 0), (
-        f"BR shoulder servo must move opposite (hardware mirror); got {sdelta}"
+    first = sdelta["fr"] > 0
+    assert all((sdelta[leg] > 0) == first for leg in ("fl", "br", "bl")), (
+        f"all four shoulder servos must move the same direction now; got {sdelta}"
     )
 
 

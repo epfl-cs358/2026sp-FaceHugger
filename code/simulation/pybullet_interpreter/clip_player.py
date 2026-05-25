@@ -59,7 +59,11 @@ def frame_to_joint_targets(a: list[float]) -> dict[str, float]:
         servo = clamp_clip_servos(translate_to_servo(leg_id, sh, th, kn))
         urdf_name = LEG_ID_TO_SIM_NAME[leg_id]
         axis = LEG_ID_TO_URDF_AXIS_SIGN[leg_id]
-        targets[f"{urdf_name}_link1_joint"] = servo_to_radians(servo.hip)
+        # link1 (yaw) shares the same diagonal URDF axis sign as link2 (its
+        # <axis z> is ±1 with the same {fl,br}=+ / {fr,bl}=− pattern), so the
+        # commanded joint angle needs the axis factor too — without it the sim
+        # rendered fr/bl shoulder yaw backwards.
+        targets[f"{urdf_name}_link1_joint"] = axis * servo_to_radians(servo.hip)
         targets[f"{urdf_name}_link2_joint"] = axis * servo_to_radians(servo.thigh)
         targets[f"{urdf_name}_link3_joint"] = -axis * servo_to_radians(servo.knee)
     return targets

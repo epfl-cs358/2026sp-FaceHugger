@@ -41,7 +41,8 @@ def _firmware_translate(
     if leg_id == 1:  # LEG_FL — Change B: 90 + (sh - 135)
         return (90.0 + (sh - 135.0), 90.0 + th, 90.0 - kn)
     if leg_id == 2:  # LEG_RR / BR
-        return (90.0 - (sh + 45.0), 90.0 + th, 90.0 - kn)
+        # BR shoulder un-mirrored (2026-05-25): +sh = +servo like the others.
+        return (90.0 + (sh + 45.0), 90.0 + th, 90.0 - kn)
     if leg_id == 3:  # LEG_RL / BL
         return (90.0 + (sh + 135.0), 90.0 - th, 90.0 + kn)
     raise ValueError(f"unknown leg_id {leg_id}")
