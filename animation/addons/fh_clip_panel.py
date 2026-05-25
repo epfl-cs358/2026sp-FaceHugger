@@ -515,8 +515,21 @@ def _autocomplete_clip(clip, context):
 
 
 def _redraw_view3d(context):
-    for area in context.screen.areas:
-        if area.type == "VIEW_3D":
+    """Force panels to redraw so they reflect data changes immediately.
+
+    Tags every area in every open window — not just one VIEW_3D via
+    `context.screen` — because the Clips panel's per-row include/exclude
+    checkbox is an operator button whose icon is computed in draw(); without a
+    redraw of the N-panel's region it keeps a stale visual (the toggle data
+    updates, the tick doesn't move) until the next mouse event."""
+    wm = getattr(bpy.context, "window_manager", None)
+    if wm is None:
+        if context.screen is not None:
+            for area in context.screen.areas:
+                area.tag_redraw()
+        return
+    for window in wm.windows:
+        for area in window.screen.areas:
             area.tag_redraw()
 
 
@@ -881,23 +894,37 @@ _FRAME_RANGE_MSGBUS_OWNER = object()
 
 
 def _sync_scene_frame_range(context, clip=None):
-    """Set the scene playback range to the active clip's body_ctrl range.
+    """Set the scene playback range to the active clip's frame span.
 
-    Uses `action.frame_range` (not frame_start/end directly): it returns the
-    manual range when `use_frame_range` is set, else the actual keyframe span
-    — the correct "intended playback range of this action". No-op (returns
-    False) if there's no active clip / body_ctrl action."""
+    Uses the UNION of `action.frame_range` over ALL of the clip's actions
+    (body_ctrl + the four foot_targets), not just body_ctrl: a clip's real
+    span is wherever ANY target is keyed, and body_ctrl alone can be sparse
+    or single-keyed (e.g. a freshly-created clip), which previously collapsed
+    the scene range to 0-0. `frame_range` honours `use_frame_range` per action.
+
+    Refuses to set a degenerate range (end <= start) — returns False and
+    leaves the scene untouched rather than zeroing it. Returns True on a
+    successful, non-degenerate sync."""
     if clip is None:
         clip = active_clip()
     if clip is None:
         return False
-    action = clip_action(clip, "body_ctrl")
-    if action is None:
+    starts, ends = [], []
+    for target in CLIP_TARGETS:
+        action = clip_action(clip, target)
+        if action is None:
+            continue
+        s, e = action.frame_range
+        starts.append(s)
+        ends.append(e)
+    if not starts:
         return False
-    start, end = action.frame_range
+    start, end = int(min(starts)), int(max(ends))
+    if end <= start:
+        return False  # degenerate (single/no keyframes) — don't zero the scene
     scene = context.scene
-    scene.frame_start = int(start)
-    scene.frame_end = int(end)
+    scene.frame_start = start
+    scene.frame_end = end
     return True
 
 
