@@ -300,6 +300,39 @@ def run_stand(cfg, gui=True, settle_s=0.5):
             p.disconnect()
 
 
+def run_clip(cfg, clip_name, gui=True, settle_s=0.5):
+    """Load and play an animation clip by name in PyBullet.
+
+    Looks up clip_name in animation/exported_clips/clips_all.h,
+    settles the robot to stance, then plays the clip via ClipPlayer.
+    """
+    from pybullet_interpreter.clip_loader import (
+        DEFAULT_CLIPS_H,
+        get_clip_by_name,
+        load_clips_all_h,
+    )
+    from pybullet_interpreter.clip_player import ClipPlayer
+
+    clips = load_clips_all_h(DEFAULT_CLIPS_H)
+    clip = get_clip_by_name(clips, clip_name)
+
+    robot_id, joint_map = _connect_and_setup(cfg, gui)
+    _print_banner(cfg)
+    if settle_s > 0:
+        print(f"\n[settle] holding stance for {settle_s:.2f}s before clip")
+        _settle(robot_id, joint_map, cfg, settle_s)
+
+    print(f"\n[clip] playing '{clip.name}' ({clip.duration_ms} ms)")
+    player = ClipPlayer(robot_id, joint_map, clip, cfg.servo_force, cfg.servo_velocity)
+    try:
+        player.play_blocking(gui=gui)
+    except (KeyboardInterrupt, p.error):
+        pass
+    finally:
+        if p.isConnected():
+            p.disconnect()
+
+
 def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
     if gait_name not in GAITS:
         raise ValueError(f"Unknown gait: {gait_name}")

@@ -119,6 +119,8 @@ def cmd_urdf(args):
 
 def cmd_sim(args):
     cli = [sys.executable, SIMULATE]
+    if args.clip:
+        cli += ["--clip", args.clip]
     if args.walk:
         cli.append("--walk")
     if args.trot:
@@ -190,6 +192,7 @@ def main():
     pu.set_defaults(func=cmd_urdf)
 
     ps = sub.add_parser("sim", help="run the PyBullet simulator")
+    ps.add_argument("--clip", metavar="NAME", help="play a named animation clip")
     ps.add_argument("--walk", action="store_true")
     ps.add_argument("--trot", action="store_true")
     ps.add_argument("--headless", action="store_true")
@@ -234,6 +237,7 @@ def main():
     pa.add_argument("--export")
     pa.add_argument("--config")
     pa.add_argument("--out")
+    pa.add_argument("--clip", metavar="NAME", help="play a named animation clip")
     pa.add_argument("--walk", action="store_true")
     pa.add_argument("--trot", action="store_true")
     pa.add_argument("--headless", action="store_true")

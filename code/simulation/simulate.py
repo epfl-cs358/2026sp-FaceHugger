@@ -20,7 +20,7 @@ Geometry sourcing (no duplication of constants in Python):
 
 import argparse
 
-from gaits import run_gait, run_stand
+from gaits import run_clip, run_gait, run_stand
 from kinematics import build_config
 
 
@@ -29,15 +29,26 @@ def main():
     parser.add_argument("--walk", action="store_true")
     parser.add_argument("--trot", action="store_true")
     parser.add_argument("--headless", action="store_true")
-    parser.add_argument("--settle", type=float, default=0.5,
-                        help="Seconds to hold stance before the main loop "
-                             "begins (lets gravity resolve initial overlap). "
-                             "Default 0.5.")
+    parser.add_argument(
+        "--settle",
+        type=float,
+        default=0.5,
+        help="Seconds to hold stance before the main loop "
+        "begins (lets gravity resolve initial overlap). "
+        "Default 0.5.",
+    )
+    parser.add_argument(
+        "--clip",
+        metavar="NAME",
+        help="play a named animation clip from clips_all.h instead of a gait",
+    )
     args = parser.parse_args()
 
     cfg = build_config()
     gui = not args.headless
-    if args.walk:
+    if args.clip:
+        run_clip(cfg, args.clip, gui=gui, settle_s=args.settle)
+    elif args.walk:
         run_gait(cfg, "walk", gui=gui, settle_s=args.settle)
     elif args.trot:
         run_gait(cfg, "trot", gui=gui, settle_s=args.settle)
