@@ -25,50 +25,43 @@ def all_clips():
     return load_clips_all_h(DEFAULT_CLIPS_H)
 
 
+@pytest.fixture(scope="module")
+def manifest():
+    """clips_manifest.json sits next to clips_all.h and is the export's own
+    record of clip id/name/frame_count/duration_ms. Validate the parsed
+    clips against it rather than hardcoding counts — the clip set changes
+    as animations are authored."""
+    import json
+
+    path = DEFAULT_CLIPS_H.parent / "clips_manifest.json"
+    return json.loads(path.read_text())["clips"]
+
+
 def test_clips_all_h_exists():
     assert DEFAULT_CLIPS_H.exists(), f"clips_all.h not found at {DEFAULT_CLIPS_H}"
 
 
-def test_load_returns_five_clips(all_clips):
-    """clips_manifest.json lists exactly 5 clips."""
-    assert len(all_clips) == 5
+def test_load_matches_manifest_count(all_clips, manifest):
+    """Parsed clip count must equal clips_manifest.json."""
+    assert len(all_clips) == len(manifest)
 
 
-def test_clip_names(all_clips):
-    """Clip names must match clips_manifest.json order."""
-    expected = [
-        "lie down and stand up",
-        "one leg lift",
-        "tiny wiggle",
-        "wave",
-        "wiggle",
-    ]
-    assert [c.name for c in all_clips] == expected
+def test_clip_names(all_clips, manifest):
+    """Clip names + order must match clips_manifest.json."""
+    assert [c.name for c in all_clips] == [m["name"] for m in manifest]
 
 
-def test_clip_frame_counts(all_clips):
+def test_clip_frame_counts(all_clips, manifest):
     """Frame counts must match clips_manifest.json."""
-    expected = {
-        "lie down and stand up": 73,
-        "one leg lift": 53,
-        "tiny wiggle": 73,
-        "wave": 92,
-        "wiggle": 93,
-    }
+    expected = {m["name"]: m["frame_count"] for m in manifest}
     for clip in all_clips:
         assert clip.frame_count == expected[clip.name], clip.name
         assert len(clip.frames) == expected[clip.name], clip.name
 
 
-def test_clip_duration_ms(all_clips):
+def test_clip_duration_ms(all_clips, manifest):
     """Duration must match clips_manifest.json."""
-    expected = {
-        "lie down and stand up": 3000,
-        "one leg lift": 2167,
-        "tiny wiggle": 3000,
-        "wave": 3792,
-        "wiggle": 3833,
-    }
+    expected = {m["name"]: m["duration_ms"] for m in manifest}
     for clip in all_clips:
         assert clip.duration_ms == expected[clip.name], clip.name
 
@@ -98,16 +91,13 @@ def test_frames_in_ascending_order(all_clips):
 def test_first_frame_lie_down_fr_shoulder(all_clips):
     """Spot-check FR shoulder first frame of 'lie down and stand up'.
 
-    Value read directly from clips_all.h:
-      { 0, { 44.2948f, ... } }  → a[0] = FR shoulder ≈ 44.29
-
-    ≈ FR neutral (45) minus the small rest-yaw residual, after the link1
-    delta-to-absolute exporter fix. Pre-fix it was ~14.29 (= 45/3), which
-    clamped fl/bl shoulders and collapsed the robot — see
-    docs/CLIP_SHOULDER_CONVENTION.md.
+    a[0] = FR shoulder ≈ 45.71 — FR neutral (45) plus the small rest-yaw
+    residual under the uniform-math-space yaw convention (the exporter cancels
+    the rig bone axis_sign). Earlier values: ~14.29 (delta bug), then ~44.29
+    before the axis-cancel fix. See docs/CLIP_SHOULDER_CONVENTION.md.
     """
     clip = get_clip_by_name(all_clips, "lie down and stand up")
-    assert abs(clip.frames[0].a[0] - 44.2948) < 0.01
+    assert abs(clip.frames[0].a[0] - 45.7052) < 0.01
 
 
 def test_get_clip_by_name_case_insensitive(all_clips):
