@@ -1,15 +1,27 @@
 # Planned changelog — servo & control convention changes (B, C, D)
 
-Plain-language summary of three agreed convention changes, written in the same style as
-`CHANGELOG-2026-05-21-1821.md`. **This is a plan, not landed work** — it describes what each
-change will do, why, and (most importantly) what it will *not* change. Each item is tagged:
+Plain-language summary of the agreed convention changes, written in the same style as
+`CHANGELOG-2026-05-21-1821.md`. It describes what each change does, why, and (most
+importantly) what it does *not* change. Each item is tagged:
 
 - **DOC** — documentation only, zero risk.
 - **ADD** — additive, low risk; existing behaviour unaffected.
 - **MIGRATE** — changes how the robot moves; needs migration steps + (for B) hardware work.
 
-The overriding rule across all three: **the way the robot works today — gaits, clips,
+The overriding rule across all: **the way the robot works today — gaits, clips,
 calibration — must not break.**
+
+> **Landed status (2026-05-25):**
+> - **B** (FL shoulder = 135) — **landed** in firmware/exporter/`convention.json` (FL horn
+>   remount still required on hardware).
+> - **C** (flat/stand reference poses, `T:2 s:4/s:5`) — **landed**.
+> - **D** (unified invert behaviour, `T:9`) — **on `feat/invert-flag`**, not yet on the
+>   integration branch (see MERGE-PLAN.md).
+> - **E** (BR shoulder yaw un-mirror) — **landed**; added after this doc was written, fully
+>   specified in `DRAFT-delta-conventions.md` §6. Shoulder is now `+1` for all four legs.
+>
+> The PyBullet sim mirrors all of the above and is parity-checked against the firmware —
+> see `SIMULATION-PARITY.md`.
 
 ---
 
