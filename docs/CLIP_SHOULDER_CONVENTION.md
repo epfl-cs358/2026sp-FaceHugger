@@ -116,3 +116,34 @@ is no longer clamped, but it still lands ~21° off neutral (servo ≈ 69 instead
 90). That is a separate rig/animation issue — the fl foot's rest yaw, likely tied
 to the not-yet-done "Change B" fl horn remount — and is not addressed by this
 shoulder-convention fix.
+
+## Follow-up: FL shoulder yaw direction was inverted
+
+After the delta-to-absolute fix above, a second, subtler bug surfaced. Rotating
+`body_ctrl` (a pure body yaw) made FL's shoulder servo move the **opposite**
+direction to FR/BR/BL (e.g. FR 90→43, BR 90→42, BL 90→43, but FL 90→138). A
+rigid body rotation turns every foot the same way, so all four shoulder servos
+must move together — and the firmware's `tickYawRotation` guarantees exactly
+that via its `YAW_COEF = {-1,-1,+1,-1}` table (it flips only BR's math-space
+sign to cancel BR's `translateToServo` `90-(sh+45)`).
+
+Root cause is the product `axis_sign × translateToServo_sign` per leg, where
+`axis_sign` is the URDF `*_link1_joint` `<axis z>` (fr −1, fl +1, br +1, bl −1)
+that the rig's yaw driver uses:
+
+| leg | axis_sign | translateToServo sign | product |
+|-----|-----------|-----------------------|---------|
+| fr  | −1        | +1                    | −1      |
+| fl  | +1        | +1                    | **+1**  |
+| br  | +1        | −1                    | −1      |
+| bl  | −1        | +1                    | −1      |
+
+FL is the only leg whose product differs from the other three, so FL alone
+exports inverted. The firmware is unaffected — it never uses the bone axis;
+its `YAW_COEF` already encodes the right per-leg signs.
+
+Fix (exporter, not the rig): `_link1_delta_to_absolute` now applies a per-leg
+`_LINK1_DELTA_SIGN = {fr:+1, fl:-1, br:+1, bl:+1}` to the link1 delta before
+adding NEUTRAL, flipping FL so all four shoulders yaw the same servo direction.
+Regression test: `test_body_rotation_all_shoulders_same_servo_direction`.
+Re-export clips for the fix to reach `clips_all.h`.

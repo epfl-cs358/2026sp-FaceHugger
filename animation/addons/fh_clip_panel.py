@@ -1831,6 +1831,18 @@ class FH_OT_select_controls(bpy.types.Operator):
 # ---------------------------------------------------------------------------
 
 
+# Per-leg sign applied to the link1 (shoulder/yaw) delta on export. A pure
+# body yaw rotates every foot the same way, so all four shoulder SERVOS must
+# move the same direction (firmware tickYawRotation does this via YAW_COEF).
+# The export servo direction is axis_sign * translateToServo_sign:
+#   fr: (-1)(+1) = -1   fl: (+1)(+1) = +1   br: (+1)(-1) = -1   bl: (-1)(+1) = -1
+# (axis_sign = URDF link1 <axis z>; translateToServo_sign = +1 except br's
+# 90-(sh+45)). fl is the only leg whose product differs, so fl alone comes out
+# inverted — flip its delta to align with the other three. See
+# docs/CLIP_SHOULDER_CONVENTION.md.
+_LINK1_DELTA_SIGN = {"fr": +1, "fl": -1, "br": +1, "bl": +1}
+
+
 def _link1_delta_to_absolute(angles, convention):
     """Convert each `*_link1` (shoulder/yaw) angle from delta-to-absolute.
 
@@ -1846,9 +1858,10 @@ def _link1_delta_to_absolute(angles, convention):
     clamped past [38,142] on the +/-135 legs fl/bl) — collapsing the
     robot on playback in BOTH sim and firmware.
 
-    Fix: add the per-leg shoulder NEUTRAL (deg) from convention.json so
-    link1 becomes absolute, matching link2/link3. Shoulders only — adding
-    it to hip/knee would double-count. See docs/CLIP_SHOULDER_CONVENTION.md.
+    Fix: absolute = NEUTRAL + sign*delta, where NEUTRAL anchors the rest pose
+    (servo 90) and the per-leg sign (_LINK1_DELTA_SIGN) flips fl so all four
+    shoulders yaw the same servo direction. Shoulders only — link2/link3 are
+    already absolute. See docs/CLIP_SHOULDER_CONVENTION.md.
 
     Mutates and returns `angles` ({bone_name: deg}). Degrees throughout
     (`_read_bone_angles` and `neutral_joint_deg` are both degrees)."""
@@ -1856,7 +1869,7 @@ def _link1_delta_to_absolute(angles, convention):
     for leg in _LEGS:
         key = f"{leg}_link1"
         if key in angles:
-            angles[key] += neutral[leg][0]
+            angles[key] = neutral[leg][0] + _LINK1_DELTA_SIGN[leg] * angles[key]
     return angles
 
 

@@ -170,3 +170,36 @@ def _frame_to_servo_at_neutral(convention):
         sh, th, kn = neutral[leg]
         row[f"{leg}_link1"], row[f"{leg}_link2"], row[f"{leg}_link3"] = sh, th, kn
     return _frame_to_servo(row, convention)
+
+
+def test_body_rotation_all_shoulders_same_servo_direction():
+    """A pure body yaw rotates every foot the same way, so the rig's link1
+    driver emits a raw delta of axis_sign*c per leg (URDF link1 <axis z>:
+    fr -1, fl +1, br +1, bl -1). After the export pipeline the four shoulder
+    SERVOS must all move the SAME direction — the firmware tickYawRotation
+    YAW_COEF compensates the translateToServo signs so servos align. Regression
+    for the FL-inverted-shoulder bug (FL alone moved opposite the other three).
+    """
+    from check_export_consistency import _mod
+
+    axis_sign = {"fr": -1, "fl": +1, "br": +1, "bl": -1}
+    n = CONVENTION["neutral_joint_deg"]
+
+    def shoulder_servos(rot_deg):
+        row = {}
+        for leg in ("fr", "fl", "br", "bl"):
+            row[f"{leg}_link1"] = axis_sign[leg] * rot_deg  # driver delta-from-rest
+            row[f"{leg}_link2"] = n[leg][1]  # thigh at neutral (absolute, as IK bakes)
+            row[f"{leg}_link3"] = n[leg][2]  # knee at neutral
+        _mod._link1_delta_to_absolute(row, CONVENTION)
+        servo = _mod._frame_to_servo(row, CONVENTION, warn=False)
+        return {leg: servo[leg][0] for leg in ("fr", "fl", "br", "bl")}
+
+    base = shoulder_servos(0.0)
+    rot = shoulder_servos(12.0)
+    deltas = {leg: rot[leg] - base[leg] for leg in base}
+    signs = {leg: (d > 0) - (d < 0) for leg, d in deltas.items()}
+    assert len(set(signs.values())) == 1, (
+        f"all four shoulder servos must move the same direction for a body "
+        f"yaw; got deltas {deltas}"
+    )
