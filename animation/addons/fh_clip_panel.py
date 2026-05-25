@@ -893,22 +893,17 @@ class FH_OT_apply_clip(bpy.types.Operator):
 _FRAME_RANGE_MSGBUS_OWNER = object()
 
 
-def _sync_scene_frame_range(context, clip=None):
-    """Set the scene playback range to the active clip's frame span.
+def _clip_frame_span(clip):
+    """(start, end) frame span of a clip = the UNION of `frame_range` over ALL
+    its actions (body_ctrl + the four foot_targets), not just body_ctrl.
 
-    Uses the UNION of `action.frame_range` over ALL of the clip's actions
-    (body_ctrl + the four foot_targets), not just body_ctrl: a clip's real
-    span is wherever ANY target is keyed, and body_ctrl alone can be sparse
-    or single-keyed (e.g. a freshly-created clip), which previously collapsed
-    the scene range to 0-0. `frame_range` honours `use_frame_range` per action.
-
-    Refuses to set a degenerate range (end <= start) — returns False and
-    leaves the scene untouched rather than zeroing it. Returns True on a
-    successful, non-degenerate sync."""
-    if clip is None:
-        clip = active_clip()
-    if clip is None:
-        return False
+    A clip's real span is wherever ANY target is keyed. body_ctrl alone can be
+    single-keyed — e.g. a clip whose body just holds a pose while the feet
+    carry the motion (fallingRobot) — which would otherwise truncate the export
+    to one frame and collapse the panel/scene range to 0-0. `frame_range`
+    honours each action's `use_frame_range`. Returns None if the clip has no
+    actions. Note the span may be degenerate (start == end) for a genuinely
+    single-frame clip — callers decide what to do with that."""
     starts, ends = [], []
     for target in CLIP_TARGETS:
         action = clip_action(clip, target)
@@ -918,13 +913,23 @@ def _sync_scene_frame_range(context, clip=None):
         starts.append(s)
         ends.append(e)
     if not starts:
+        return None
+    return int(min(starts)), int(max(ends))
+
+
+def _sync_scene_frame_range(context, clip=None):
+    """Set the scene playback range to the active clip's frame span
+    (`_clip_frame_span`). Refuses to set a degenerate range (end <= start) —
+    returns False and leaves the scene untouched rather than zeroing it.
+    Returns True on a successful, non-degenerate sync."""
+    if clip is None:
+        clip = active_clip()
+    if clip is None:
         return False
-    start, end = int(min(starts)), int(max(ends))
-    if end <= start:
-        return False  # degenerate (single/no keyframes) — don't zero the scene
-    scene = context.scene
-    scene.frame_start = start
-    scene.frame_end = end
+    span = _clip_frame_span(clip)
+    if span is None or span[1] <= span[0]:
+        return False
+    context.scene.frame_start, context.scene.frame_end = span
     return True
 
 
@@ -1938,8 +1943,14 @@ def bake_clip(clip_name, context):
         )
     context.view_layer.update()
 
-    frame_start = int(action.frame_range[0])
-    frame_end = int(action.frame_range[1])
+    # Bake the clip's FULL span — the union of all five actions' frame_range,
+    # not just body_ctrl's. A clip can key the body at a single frame while the
+    # feet carry the motion (fallingRobot); using body_ctrl alone would truncate
+    # the export to one frame.
+    span = _clip_frame_span(clip_name)
+    if span is None:
+        raise ValueError(f"Clip '{clip_name}' has no actions to bake")
+    frame_start, frame_end = span
     fps = scene.render.fps / scene.render.fps_base
     if fps > RECOMMENDED_MAX_FPS:
         print(
@@ -2867,8 +2878,11 @@ class FH_PT_clips(_FH_PT_child, bpy.types.Panel):
                 rng.prop(action, "frame_start", text="Start")
                 rng.prop(action, "frame_end", text="End")
             else:
-                lo, hi = action.frame_range
-                box.label(text=f"Keyframes: {int(lo)}–{int(hi)}")
+                # Clip-wide span (union of all actions), not body_ctrl alone —
+                # body_ctrl can be single-keyed while the feet carry the motion.
+                span = _clip_frame_span(active)
+                if span is not None:
+                    box.label(text=f"Keyframes: {span[0]}–{span[1]}")
             box.operator(FH_OT_sync_frame_range.bl_idname, icon="PREVIEW_RANGE")
 
 
