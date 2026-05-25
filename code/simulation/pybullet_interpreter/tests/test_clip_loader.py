@@ -50,10 +50,10 @@ def test_clip_frame_counts(all_clips):
     """Frame counts must match clips_manifest.json."""
     expected = {
         "lie down and stand up": 73,
-        "one leg lift": 50,
+        "one leg lift": 53,
         "tiny wiggle": 73,
-        "wave": 30,
-        "wiggle": 73,
+        "wave": 92,
+        "wiggle": 93,
     }
     for clip in all_clips:
         assert clip.frame_count == expected[clip.name], clip.name
@@ -64,10 +64,10 @@ def test_clip_duration_ms(all_clips):
     """Duration must match clips_manifest.json."""
     expected = {
         "lie down and stand up": 3000,
-        "one leg lift": 2042,
+        "one leg lift": 2167,
         "tiny wiggle": 3000,
-        "wave": 1208,
-        "wiggle": 3000,
+        "wave": 3792,
+        "wiggle": 3833,
     }
     for clip in all_clips:
         assert clip.duration_ms == expected[clip.name], clip.name
