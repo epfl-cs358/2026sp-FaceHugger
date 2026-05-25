@@ -2263,6 +2263,23 @@ def to_clips_header(clips, convention, write=True, out_dir=None):
             fh.write(header)
         with open(os.path.join(base, "clips_manifest.json"), "w") as fh:
             fh.write(manifest_str)
+
+        # Post-export consistency gate — warns loudly but does not block
+        try:
+            import sys as _sys
+
+            _sys.path.insert(
+                0, os.path.join(os.path.dirname(__file__), "..", "scripts")
+            )
+            from check_export_consistency import check_all_clips as _check
+
+            if not _check(Path(base)):
+                print(
+                    "WARNING: export consistency check FAILED — review output above before flashing"
+                )
+        except Exception as _e:
+            print(f"WARNING: consistency check could not run: {_e}")
+
     return header, manifest_str
 
 
