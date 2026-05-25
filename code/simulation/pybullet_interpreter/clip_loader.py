@@ -14,6 +14,7 @@ Do NOT re-apply scale-from-NEUTRAL here; the data is already in the
 correct space for translate_to_servo().
 """
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -66,7 +67,62 @@ def load_clips_all_h(path: Path = DEFAULT_CLIPS_H) -> list[ClipData]:
     Raises FileNotFoundError if path does not exist.
     Raises ValueError if no clips are found (likely a format mismatch).
     """
-    raise NotImplementedError
+    text = path.read_text()
+
+    # Extract per-clip frame arrays. Each block:
+    # static const FhClipFrame fh_clip_<var>[] = { {t_ms, {f0,...,f11}}, ... };
+    frame_block_re = re.compile(
+        r"static const FhClipFrame (\w+)\[\] = \{(.*?)\};",
+        re.DOTALL,
+    )
+    frame_re = re.compile(
+        r"\{\s*(\d+)\s*,\s*\{([^}]+)\}\s*\}",
+    )
+
+    frame_arrays: dict[str, list[ClipFrame]] = {}
+    for m in frame_block_re.finditer(text):
+        var_name = m.group(1)
+        block = m.group(2)
+        frames = []
+        for fm in frame_re.finditer(block):
+            t_ms = int(fm.group(1))
+            floats = [float(v.strip().rstrip("f")) for v in fm.group(2).split(",")]
+            frames.append(ClipFrame(t_ms=t_ms, a=floats))
+        frame_arrays[var_name] = frames
+
+    # Extract FH_CLIPS[] metadata table. Each entry:
+    # { "clip name", fh_clip_<var>, frame_count, duration_ms },
+    clips_table_re = re.compile(
+        r"static const FhClip FH_CLIPS\[[^\]]*\] = \{(.*?)\};",
+        re.DOTALL,
+    )
+    entry_re = re.compile(
+        r'\{\s*"([^"]+)"\s*,\s*(\w+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\}',
+    )
+
+    clips: list[ClipData] = []
+    table_match = clips_table_re.search(text)
+    if table_match:
+        for em in entry_re.finditer(table_match.group(1)):
+            name = em.group(1)
+            var = em.group(2)
+            frame_count = int(em.group(3))
+            duration_ms = int(em.group(4))
+            frames = frame_arrays.get(var, [])
+            clips.append(
+                ClipData(
+                    name=name,
+                    frames=frames,
+                    frame_count=frame_count,
+                    duration_ms=duration_ms,
+                )
+            )
+
+    if not clips:
+        raise ValueError(
+            f"No clips found in {path}. Check that the file is a valid clips_all.h."
+        )
+    return clips
 
 
 def get_clip_by_name(clips: list[ClipData], name: str) -> ClipData:
@@ -76,4 +132,9 @@ def get_clip_by_name(clips: list[ClipData], name: str) -> ClipData:
     Output: matching ClipData.
     Raises: KeyError with available names if no match found.
     """
-    raise NotImplementedError
+    target = name.lower()
+    for clip in clips:
+        if clip.name.lower() == target:
+            return clip
+    available = [c.name for c in clips]
+    raise KeyError(f"Clip {name!r} not found. Available: {available}")
