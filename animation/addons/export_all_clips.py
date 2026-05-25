@@ -19,7 +19,10 @@ import sys
 import bpy
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SCRIPT = os.path.join(REPO_ROOT, "animation/scripts/fh_clip_panel.py")
+# fh_clip_panel.py lives next to this script (animation/addons/), moved there
+# from animation/scripts/ in 2f627a1. Resolve it relative to __file__ so it
+# works regardless of CWD or which tree path the launcher used.
+SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fh_clip_panel.py")
 
 
 def main() -> int:

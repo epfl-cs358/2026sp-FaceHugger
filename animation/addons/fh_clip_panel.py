@@ -51,6 +51,7 @@ import datetime
 import json
 import math
 import os
+from pathlib import Path
 
 import bpy
 
@@ -2365,6 +2366,32 @@ def _bake_and_write(clip, context, convention):
     return written, len(rows), max_seen, warning_count
 
 
+def _regenerate_clips_all(context, convention):
+    """(Re)write the bundled firmware header clips_all.h + clips_manifest.json
+    from EVERY clip — not just the exported subset.
+
+    clips_all.h is the firmware's source of truth and must contain all
+    FH_CLIP_COUNT clips, so "Export Active/Selected" (a subset) would otherwise
+    leave the bundle stale. Bakes each clip and calls to_clips_header — the same
+    path export_all_clips.py uses. A clip that fails to bake is skipped so the
+    bundle still regenerates from the rest. Returns (bundled_names, skipped_msg).
+    """
+    baked = {}
+    skipped = []
+    for clip in list_clips():
+        try:
+            rows = bake_clip(clip, context)
+        except ValueError as e:
+            skipped.append(f"{clip} ({e})")
+            continue
+        if rows:
+            baked[clip] = rows
+    if not baked:
+        raise ValueError("no clips could be baked for clips_all.h")
+    to_clips_header(baked, convention, write=True)
+    return list(baked.keys()), ("; ".join(skipped) if skipped else None)
+
+
 class FH_OT_export_clip(bpy.types.Operator):
     """Bake the active clip once, then write the enabled outputs to
     animation/exported_clips/<clip>/ (.csv / .h / .js)."""
@@ -2410,7 +2437,21 @@ class FH_OT_export_clip(bpy.types.Operator):
             f"→ {rel}/  [max simultaneous servos: {max_seen}, "
             f"warnings: {warning_count}]"
         )
-        self.report({"INFO"}, f"Exported to {rel}/ ({', '.join(written)})")
+
+        # The firmware bundle clips_all.h spans ALL clips — regenerate it so a
+        # single-clip export never leaves it stale (only when .h is enabled).
+        bundle_note = ""
+        if scene.fh_export_header:
+            try:
+                names, skipped = _regenerate_clips_all(context, convention)
+                bundle_note = f" + clips_all.h ({len(names)} clips)"
+                print(f"Regenerated clips_all.h from {len(names)} clip(s)")
+                if skipped:
+                    self.report({"WARNING"}, f"clips_all.h skipped: {skipped}")
+            except ValueError as e:
+                self.report({"WARNING"}, f"clips_all.h NOT regenerated: {e}")
+
+        self.report({"INFO"}, f"Exported to {rel}/ ({', '.join(written)}){bundle_note}")
         return {"FINISHED"}
 
 
@@ -2466,16 +2507,30 @@ class FH_OT_export_selected(bpy.types.Operator):
         if not ok:
             self.report({"ERROR"}, f"Exported nothing — {'; '.join(failed)}")
             return {"CANCELLED"}
+
+        # Regenerate the firmware bundle clips_all.h from ALL clips (not just the
+        # ticked subset) so the firmware output stays complete after any export.
+        bundle_note = ""
+        if scene.fh_export_header:
+            try:
+                names, skipped = _regenerate_clips_all(context, convention)
+                bundle_note = f" + clips_all.h ({len(names)} clips)"
+                print(f"Regenerated clips_all.h from {len(names)} clip(s)")
+                if skipped:
+                    self.report({"WARNING"}, f"clips_all.h skipped: {skipped}")
+            except ValueError as e:
+                self.report({"WARNING"}, f"clips_all.h NOT regenerated: {e}")
+
         if failed:
             self.report(
                 {"WARNING"},
-                f"Exported {len(ok)}/{len(chosen)} ({', '.join(ok)}) → "
+                f"Exported {len(ok)}/{len(chosen)} ({', '.join(ok)}){bundle_note} → "
                 f"animation/exported_clips/ | failed: {'; '.join(failed)}",
             )
         else:
             self.report(
                 {"INFO"},
-                f"Exported {len(ok)} clip(s) ({', '.join(ok)}) → "
+                f"Exported {len(ok)} clip(s) ({', '.join(ok)}){bundle_note} → "
                 "animation/exported_clips/",
             )
         return {"FINISHED"}
