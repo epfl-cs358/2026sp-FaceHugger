@@ -462,13 +462,9 @@ void SpinalCord::setInverted(bool flag) {
 
 void SpinalCord::invertRobot() {
     isInverted = !isInverted;
-    // Re-assume the neutral pose in the new orientation. The pitch mirror is now
-    // applied centrally in applyServos, so the previously-hardcoded inverted pose
-    // table (which also still held FL's pre-Change-B value) is no longer needed:
-    // applyServos(NEUTRAL) with isInverted set produces the same mirrored stand.
-    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
-    for (uint8_t i = 0; i < LEG_COUNT; ++i)
-        applyServos(legs[i], translateToServo(i, NEUTRAL[i].sh, NEUTRAL[i].th, NEUTRAL[i].kn));
+    // No re-pose: the next motion tick (gait, clip, stand) applies the mirror
+    // via applyServos automatically. Re-posing here was fighting animation playback
+    // when called mid-clip. Resetting the gait phase keeps gait timing coherent.
     gaitPhaseStartMs_ = millis();
 }
 
