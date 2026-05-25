@@ -2,33 +2,39 @@
   "clips": [
     {
       "id": 0,
+      "name": "fallingRobot",
+      "frame_count": 97,
+      "duration_ms": 4000
+    },
+    {
+      "id": 1,
       "name": "lie down and stand up",
       "frame_count": 73,
       "duration_ms": 3000
     },
     {
-      "id": 1,
+      "id": 2,
       "name": "one leg lift",
-      "frame_count": 50,
-      "duration_ms": 2042
+      "frame_count": 53,
+      "duration_ms": 2167
     },
     {
-      "id": 2,
+      "id": 3,
       "name": "tiny wiggle",
       "frame_count": 73,
       "duration_ms": 3000
     },
     {
-      "id": 3,
+      "id": 4,
       "name": "wave",
-      "frame_count": 30,
-      "duration_ms": 1208
+      "frame_count": 92,
+      "duration_ms": 3792
     },
     {
-      "id": 4,
+      "id": 5,
       "name": "wiggle",
-      "frame_count": 73,
-      "duration_ms": 3000
+      "frame_count": 93,
+      "duration_ms": 3833
     }
   ]
 }
