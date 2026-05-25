@@ -16,13 +16,16 @@ NOT applied here. The simulator is used to validate clip geometry,
 not to reproduce smoothing artifacts.
 """
 
-
 from .clip_loader import ClipData, ClipFrame
 from .servo_convention import (
     LEG_FL,
     LEG_FR,
+    LEG_ID_TO_SIM_NAME,
     LEG_RL,
     LEG_RR,
+    clamp_clip_servos,
+    servo_to_radians,
+    translate_to_servo,
 )
 
 # Firmware LegId iteration order (matches a[12] layout in ClipFrame).
@@ -42,7 +45,17 @@ def frame_to_joint_targets(a: list[float]) -> dict[str, float]:
 
     Mirrors the inner loop of tickClip() in spinal_cord.cpp:427-437.
     """
-    raise NotImplementedError
+    targets: dict[str, float] = {}
+    for leg_id in _LEG_IDS:
+        sh = a[leg_id * 3]
+        th = a[leg_id * 3 + 1]
+        kn = a[leg_id * 3 + 2]
+        servo = clamp_clip_servos(translate_to_servo(leg_id, sh, th, kn))
+        urdf_name = LEG_ID_TO_SIM_NAME[leg_id]
+        targets[f"{urdf_name}_link1_joint"] = servo_to_radians(servo.hip)
+        targets[f"{urdf_name}_link2_joint"] = servo_to_radians(servo.thigh)
+        targets[f"{urdf_name}_link3_joint"] = servo_to_radians(servo.knee)
+    return targets
 
 
 def _interpolate_frame(frames: list[ClipFrame], elapsed_ms: float) -> list[float]:
@@ -57,7 +70,23 @@ def _interpolate_frame(frames: list[ClipFrame], elapsed_ms: float) -> list[float
     Input:  sorted ClipFrame list, elapsed time in ms.
     Output: a[12] interpolated math-space angles.
     """
-    raise NotImplementedError
+    if not frames:
+        return [90.0] * 12
+    if elapsed_ms <= frames[0].t_ms or len(frames) == 1:
+        return list(frames[0].a)
+    if elapsed_ms >= frames[-1].t_ms:
+        return list(frames[-1].a)
+    lo_idx = 0
+    for i in range(len(frames) - 1):
+        if frames[i + 1].t_ms <= elapsed_ms:
+            lo_idx = i + 1
+        else:
+            break
+    lo = frames[lo_idx]
+    hi = frames[lo_idx + 1]
+    span = hi.t_ms - lo.t_ms
+    f = 0.0 if span == 0 else (elapsed_ms - lo.t_ms) / span
+    return [lo.a[j] + (hi.a[j] - lo.a[j]) * f for j in range(12)]
 
 
 class ClipPlayer:
@@ -88,7 +117,11 @@ class ClipPlayer:
         force:     max joint force (N·m), passed to setJointMotorControl2.
         velocity:  max joint velocity (rad/s), passed to setJointMotorControl2.
         """
-        raise NotImplementedError
+        self._robot_id = robot_id
+        self._joint_map = joint_map
+        self._clip = clip
+        self._force = force
+        self._velocity = velocity
 
     def step(self, elapsed_ms: float) -> None:
         """Apply clip pose at elapsed_ms to the PyBullet robot.
@@ -98,7 +131,22 @@ class ClipPlayer:
 
         Input: elapsed_ms — time since clip start (float, milliseconds).
         """
-        raise NotImplementedError
+        import pybullet as p
+
+        a = _interpolate_frame(self._clip.frames, elapsed_ms)
+        targets = frame_to_joint_targets(a)
+        for joint_name, rad in targets.items():
+            joint_idx = self._joint_map.get(joint_name)
+            if joint_idx is None:
+                continue
+            p.setJointMotorControl2(
+                self._robot_id,
+                joint_idx,
+                p.POSITION_CONTROL,
+                targetPosition=rad,
+                force=self._force,
+                maxVelocity=self._velocity,
+            )
 
     def play_blocking(self, gui: bool = True) -> None:
         """Play the clip in real time, blocking until done, then hold final pose.
@@ -110,4 +158,28 @@ class ClipPlayer:
         Headless mode (gui=False): plays the clip in wall-clock time
         then returns immediately (for CI / automated testing).
         """
-        raise NotImplementedError
+        import time
+
+        import pybullet as p
+
+        step_s = 1.0 / 240.0
+        start = time.monotonic()
+
+        while True:
+            elapsed_ms = (time.monotonic() - start) * 1000.0
+            clamped_ms = min(elapsed_ms, float(self._clip.duration_ms))
+            self.step(clamped_ms)
+            p.stepSimulation()
+
+            if elapsed_ms >= self._clip.duration_ms:
+                if not gui:
+                    return
+                if not p.isConnected():
+                    return
+                time.sleep(step_s)
+                continue
+
+            deadline = start + elapsed_ms / 1000.0 + step_s
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(remaining)
