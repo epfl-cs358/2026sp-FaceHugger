@@ -42,12 +42,18 @@ def main():
         metavar="NAME",
         help="play a named animation clip from clips_all.h instead of a gait",
     )
+    parser.add_argument(
+        "--loop",
+        action="store_true",
+        help="replay the clip continuously (GUI only) to watch cumulative "
+        "behaviour over time; physics state carries across loops",
+    )
     args = parser.parse_args()
 
     cfg = build_config()
     gui = not args.headless
     if args.clip:
-        run_clip(cfg, args.clip, gui=gui, settle_s=args.settle)
+        run_clip(cfg, args.clip, gui=gui, settle_s=args.settle, loop=args.loop)
     elif args.walk:
         run_gait(cfg, "walk", gui=gui, settle_s=args.settle)
     elif args.trot:

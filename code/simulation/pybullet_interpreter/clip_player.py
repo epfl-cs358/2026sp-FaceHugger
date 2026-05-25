@@ -155,14 +155,20 @@ class ClipPlayer:
                 maxVelocity=self._velocity,
             )
 
-    def play_blocking(self, gui: bool = True) -> None:
-        """Play the clip in real time, blocking until done, then hold final pose.
+    def play_blocking(self, gui: bool = True, loop: bool = False) -> None:
+        """Play the clip in real time, blocking until done.
 
-        Mirrors firmware hold-at-end behaviour: after the last frame,
-        the final pose is re-sent every frame until the user closes the
-        window (GUI mode) or function returns (headless mode).
+        Default: after the last frame, hold the final pose every frame until
+        the user closes the window (GUI) or return immediately (headless) —
+        mirrors firmware hold-at-end.
 
-        Headless mode (gui=False): plays the clip in wall-clock time
+        loop=True (GUI only): instead of holding, restart from frame 0 and
+        replay continuously until the window is closed. Physics state is NOT
+        reset between loops, so you can watch cumulative effects (drift,
+        foot slip, tipping) build up over time. Ignored when gui=False so
+        headless/CI runs still terminate.
+
+        Headless mode (gui=False): plays the clip once in wall-clock time
         then returns immediately (for CI / automated testing).
         """
         import time
@@ -183,6 +189,11 @@ class ClipPlayer:
                     return
                 if not p.isConnected():
                     return
+                if loop:
+                    start = (
+                        time.monotonic()
+                    )  # replay from frame 0 (physics carries over)
+                    continue
                 time.sleep(step_s)
                 continue
 

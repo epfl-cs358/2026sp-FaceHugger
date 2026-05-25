@@ -304,11 +304,13 @@ def run_stand(cfg, gui=True, settle_s=0.5):
             p.disconnect()
 
 
-def run_clip(cfg, clip_name, gui=True, settle_s=0.5):
+def run_clip(cfg, clip_name, gui=True, settle_s=0.5, loop=False):
     """Load and play an animation clip by name in PyBullet.
 
     Looks up clip_name in animation/exported_clips/clips_all.h,
     settles the robot to stance, then plays the clip via ClipPlayer.
+    loop=True (GUI only) replays the clip continuously so you can watch
+    cumulative behaviour over time; physics state carries across loops.
     """
     from pybullet_interpreter.clip_loader import (
         DEFAULT_CLIPS_H,
@@ -326,10 +328,11 @@ def run_clip(cfg, clip_name, gui=True, settle_s=0.5):
         print(f"\n[settle] holding stance for {settle_s:.2f}s before clip")
         _settle(robot_id, joint_map, cfg, settle_s)
 
-    print(f"\n[clip] playing '{clip.name}' ({clip.duration_ms} ms)")
+    loop_note = " (looping)" if loop and gui else ""
+    print(f"\n[clip] playing '{clip.name}' ({clip.duration_ms} ms){loop_note}")
     player = ClipPlayer(robot_id, joint_map, clip, cfg.servo_force, cfg.servo_velocity)
     try:
-        player.play_blocking(gui=gui)
+        player.play_blocking(gui=gui, loop=loop)
     except (KeyboardInterrupt, p.error):
         pass
     finally:

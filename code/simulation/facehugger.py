@@ -121,6 +121,8 @@ def cmd_sim(args):
     cli = [sys.executable, SIMULATE]
     if args.clip:
         cli += ["--clip", args.clip]
+    if args.loop:
+        cli.append("--loop")
     if args.walk:
         cli.append("--walk")
     if args.trot:
@@ -193,6 +195,11 @@ def main():
 
     ps = sub.add_parser("sim", help="run the PyBullet simulator")
     ps.add_argument("--clip", metavar="NAME", help="play a named animation clip")
+    ps.add_argument(
+        "--loop",
+        action="store_true",
+        help="replay the clip continuously (GUI only) to observe over time",
+    )
     ps.add_argument("--walk", action="store_true")
     ps.add_argument("--trot", action="store_true")
     ps.add_argument("--headless", action="store_true")
@@ -238,6 +245,11 @@ def main():
     pa.add_argument("--config")
     pa.add_argument("--out")
     pa.add_argument("--clip", metavar="NAME", help="play a named animation clip")
+    pa.add_argument(
+        "--loop",
+        action="store_true",
+        help="replay the clip continuously (GUI only) to observe over time",
+    )
     pa.add_argument("--walk", action="store_true")
     pa.add_argument("--trot", action="store_true")
     pa.add_argument("--headless", action="store_true")
