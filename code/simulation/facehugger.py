@@ -123,6 +123,8 @@ def cmd_sim(args):
         cli += ["--clip", args.clip]
     if args.loop:
         cli.append("--loop")
+    if args.float_mode:
+        cli.append("--float")
     if args.walk:
         cli.append("--walk")
     if args.trot:
@@ -200,6 +202,12 @@ def main():
         action="store_true",
         help="replay the clip continuously (GUI only) to observe over time",
     )
+    ps.add_argument(
+        "--float",
+        dest="float_mode",
+        action="store_true",
+        help="no gravity/floor, body pinned — watch joint geometry only",
+    )
     ps.add_argument("--walk", action="store_true")
     ps.add_argument("--trot", action="store_true")
     ps.add_argument("--headless", action="store_true")
@@ -249,6 +257,12 @@ def main():
         "--loop",
         action="store_true",
         help="replay the clip continuously (GUI only) to observe over time",
+    )
+    pa.add_argument(
+        "--float",
+        dest="float_mode",
+        action="store_true",
+        help="no gravity/floor, body pinned — watch joint geometry only",
     )
     pa.add_argument("--walk", action="store_true")
     pa.add_argument("--trot", action="store_true")

@@ -48,18 +48,32 @@ def main():
         help="replay the clip continuously (GUI only) to watch cumulative "
         "behaviour over time; physics state carries across loops",
     )
+    parser.add_argument(
+        "--float",
+        dest="float_mode",
+        action="store_true",
+        help="no gravity, no floor, body pinned — watch the clip's pure joint "
+        "geometry without the robot falling/slipping/collapsing",
+    )
     args = parser.parse_args()
 
     cfg = build_config()
     gui = not args.headless
     if args.clip:
-        run_clip(cfg, args.clip, gui=gui, settle_s=args.settle, loop=args.loop)
+        run_clip(
+            cfg,
+            args.clip,
+            gui=gui,
+            settle_s=args.settle,
+            loop=args.loop,
+            float_mode=args.float_mode,
+        )
     elif args.walk:
-        run_gait(cfg, "walk", gui=gui, settle_s=args.settle)
+        run_gait(cfg, "walk", gui=gui, settle_s=args.settle, float_mode=args.float_mode)
     elif args.trot:
-        run_gait(cfg, "trot", gui=gui, settle_s=args.settle)
+        run_gait(cfg, "trot", gui=gui, settle_s=args.settle, float_mode=args.float_mode)
     else:
-        run_stand(cfg, gui=gui, settle_s=args.settle)
+        run_stand(cfg, gui=gui, settle_s=args.settle, float_mode=args.float_mode)
 
 
 if __name__ == "__main__":

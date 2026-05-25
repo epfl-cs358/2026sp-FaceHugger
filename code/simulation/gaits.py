@@ -206,7 +206,15 @@ def _settle(robot_id, joint_map, cfg, duration_s):
         p.stepSimulation()
 
 
-def _connect_and_setup(cfg, gui):
+def _connect_and_setup(cfg, gui, float_mode=False):
+    """Connect PyBullet and load the plane + robot.
+
+    float_mode=True: no gravity, no floor, and the body is pinned in the air
+    (useFixedBase). Use it to watch a clip's pure joint geometry — each leg
+    articulates exactly as authored, with no falling/slipping/collapse from
+    physics. (Normal mode loads the ground plane, real gravity, and a free
+    floating base so you see dynamic balance.)
+    """
     p.connect(p.GUI if gui else p.DIRECT)
     if gui:
         p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
@@ -215,15 +223,16 @@ def _connect_and_setup(cfg, gui):
         p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 0)
         p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
-    p.setGravity(0, 0, -9.81)
+    p.setGravity(0, 0, 0 if float_mode else -9.81)
     p.setTimeStep(TIMESTEP)
-    p.loadURDF("plane.urdf")
+    if not float_mode:
+        p.loadURDF("plane.urdf")
 
     robot_id = p.loadURDF(
         cfg.urdf_path,
         basePosition=[0, 0, cfg.body_height + 0.02],
         baseOrientation=p.getQuaternionFromEuler([0, 0, 0]),
-        useFixedBase=False,
+        useFixedBase=float_mode,
     )
     joint_map = build_joint_map(robot_id)
     # stance_rad is already per-leg; reset + motor-command from the same dict.
@@ -285,10 +294,12 @@ def _print_banner(cfg):
         )
 
 
-def run_stand(cfg, gui=True, settle_s=0.5):
-    robot_id, joint_map = _connect_and_setup(cfg, gui)
+def run_stand(cfg, gui=True, settle_s=0.5, float_mode=False):
+    robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
     _print_banner(cfg)
-    if settle_s > 0:
+    if float_mode:
+        print("[float] no gravity/floor, body pinned — showing the stance pose")
+    elif settle_s > 0:
         print(f"\n[settle] holding stance for {settle_s:.2f}s before idle loop")
         _settle(robot_id, joint_map, cfg, settle_s)
     print("\nStanding - Ctrl+C to exit.")
@@ -304,13 +315,15 @@ def run_stand(cfg, gui=True, settle_s=0.5):
             p.disconnect()
 
 
-def run_clip(cfg, clip_name, gui=True, settle_s=0.5, loop=False):
+def run_clip(cfg, clip_name, gui=True, settle_s=0.5, loop=False, float_mode=False):
     """Load and play an animation clip by name in PyBullet.
 
     Looks up clip_name in animation/exported_clips/clips_all.h,
     settles the robot to stance, then plays the clip via ClipPlayer.
     loop=True (GUI only) replays the clip continuously so you can watch
     cumulative behaviour over time; physics state carries across loops.
+    float_mode=True: no gravity/floor, body pinned — watch the clip's pure
+    joint geometry without the robot falling (skips the settle step).
     """
     from pybullet_interpreter.clip_loader import (
         DEFAULT_CLIPS_H,
@@ -322,9 +335,11 @@ def run_clip(cfg, clip_name, gui=True, settle_s=0.5, loop=False):
     clips = load_clips_all_h(DEFAULT_CLIPS_H)
     clip = get_clip_by_name(clips, clip_name)
 
-    robot_id, joint_map = _connect_and_setup(cfg, gui)
+    robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
     _print_banner(cfg)
-    if settle_s > 0:
+    if float_mode:
+        print("[float] no gravity/floor, body pinned — showing joint geometry")
+    elif settle_s > 0:
         print(f"\n[settle] holding stance for {settle_s:.2f}s before clip")
         _settle(robot_id, joint_map, cfg, settle_s)
 
@@ -340,7 +355,7 @@ def run_clip(cfg, clip_name, gui=True, settle_s=0.5, loop=False):
             p.disconnect()
 
 
-def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
+def run_gait(cfg, gait_name, gui=True, settle_s=0.5, float_mode=False):
     if gait_name not in GAITS:
         raise ValueError(f"Unknown gait: {gait_name}")
     gait = GAITS[gait_name]
@@ -356,9 +371,11 @@ def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
         )
         cfg.body_height = gait_depth_m
 
-    robot_id, joint_map = _connect_and_setup(cfg, gui)
+    robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
     _print_banner(cfg)
-    if settle_s > 0:
+    if float_mode:
+        print("[float] no gravity/floor, body pinned")
+    elif settle_s > 0:
         print(f"\n[settle] holding stance for {settle_s:.2f}s before gait")
         _settle(robot_id, joint_map, cfg, settle_s)
     print(
