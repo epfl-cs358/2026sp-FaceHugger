@@ -104,6 +104,24 @@ and enters IDLE. Clip ids/names come from `clips_manifest.json` (generated with
 
 ---
 
+### 8. List Clips (`T: 8`)
+Query firmware for all compiled-in clips. The robot replies immediately over the
+same WebSocket connection with the clip registry built from `FH_CLIPS[]` at runtime.
+No parameters required.
+
+**Example request:** `{"T": 8}`
+
+**Example response:**
+```json
+{"clips":[{"id":0,"name":"lie down and stand up","ms":3000},
+           {"id":1,"name":"one leg lift","ms":2042},
+           {"id":2,"name":"tiny wiggle","ms":3000},
+           {"id":3,"name":"wave","ms":1208},
+           {"id":4,"name":"wiggle","ms":3000}]}
+```
+
+---
+
 ## 📤 Robot -> Dashboard (Telemetry)
 
 ### 10. System Status (`T: 10`)

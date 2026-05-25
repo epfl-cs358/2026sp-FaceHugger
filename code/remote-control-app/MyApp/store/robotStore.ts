@@ -1,5 +1,5 @@
 import {create} from 'zustand'
-import { FSMStatus, GaitMode } from '../api/api-types';
+import { ClipInfo, FSMStatus, GaitMode } from '../api/api-types';
 
 type RobotStore = {
     fsmState: FSMStatus,
@@ -19,6 +19,10 @@ type RobotStore = {
     setMovementProgress: (pc: number) => void,
     errorMessage: string | null,
     setErrorMessage: (error: string | null) => void,
+    clips: ClipInfo[],
+    setClips: (clips: ClipInfo[]) => void,
+    clipPlaying: boolean,
+    setClipPlaying: (playing: boolean) => void,
 };
 
 export const useRobotStore = create<RobotStore>((set) => ({
@@ -39,4 +43,8 @@ export const useRobotStore = create<RobotStore>((set) => ({
     setMovementProgress: (movementProgress) => set({movementProgress}),
     errorMessage: null,
     setErrorMessage: (errorMessage) => set({errorMessage}),
+    clips: [],
+    setClips: (clips) => set({ clips }),
+    clipPlaying: false,
+    setClipPlaying: (clipPlaying) => set({ clipPlaying }),
 }));
