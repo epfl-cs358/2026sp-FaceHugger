@@ -183,6 +183,86 @@ def check_clip(clip_dir: Path, convention: dict) -> bool:
     return all_pass
 
 
+def check_standing_neutral(convention: dict) -> list:
+    """Assert translateToServo at the STANDING / NEUTRAL pose (firmware
+    NEUTRAL[], T:2 s:5 = crouched standing):
+      * every SHOULDER -> servo 90 (the "servo 90 = outward" guarantee;
+        shoulders are servo 90 in BOTH flat and standing). Fail loudly if
+        not — it means exporter/firmware drifted on "neutral shoulder",
+        the bug that clamped fl/bl and collapsed the robot.
+      * every hip/knee -> its NEUTRAL[] standing value, explicitly NOT 90
+        (a 90 here would mean the crouch was lost; e.g. FR thigh=150,
+        knee=53). Exact values are locked vs firmware by test_servo_parity.
+
+    Feeds raw == NEUTRAL through _frame_to_servo; scale-from-NEUTRAL is then
+    identity, so this is exactly translateToServo(NEUTRAL). NEUTRAL comes
+    from convention.json (single source of truth). Returns error strings.
+    """
+    neutral = convention["neutral_joint_deg"]
+    row = {}
+    for leg in ("fr", "fl", "br", "bl"):
+        sh, th, kn = neutral[leg]
+        row[f"{leg}_link1"], row[f"{leg}_link2"], row[f"{leg}_link3"] = sh, th, kn
+    servo = _frame_to_servo(row, convention)
+
+    errors = []
+    for leg in ("fr", "fl", "br", "bl"):
+        sh_s, hip_s, kn_s = servo[leg]
+        if sh_s != 90:
+            errors.append(
+                f"standing: {leg} shoulder at NEUTRAL = {sh_s}, expected 90 "
+                f"(servo 90 must = outward; exporter/firmware convention drift)"
+            )
+        if hip_s == 90 or kn_s == 90:
+            errors.append(
+                f"standing: {leg} hip/knee at NEUTRAL = {hip_s}/{kn_s}; a 90 "
+                f"means the standing crouch was lost (should be NEUTRAL[] values)"
+            )
+    return errors
+
+
+def check_flat_pose(convention: dict) -> list:
+    """Assert translateToServo at the FLAT / calibration pose (T:2 s:4 =
+    legs spread horizontally): ALL 12 servos -> 90. Flat math-space is
+    shoulder = NEUTRAL splay (outward -> servo 90), hip = 0, knee = 0
+    (straight/horizontal -> servo 90 mechanical mid-point).
+
+    Flat is NOT a scaled clip frame, so scale-from-NEUTRAL must be bypassed
+    (passing the real 2/3 scale would pull hip/knee off 90). We bypass it by
+    evaluating _frame_to_servo with scale = 1.0, which makes scale-from-NEUTRAL
+    identity and leaves pure translateToServo — the same locked firmware math.
+
+    Do NOT conflate with standing: flat and standing share shoulder = 90 but
+    differ on hip/knee (flat = 90, standing = NEUTRAL[] values). Returns
+    error strings.
+    """
+    neutral = convention["neutral_joint_deg"]
+    flat_conv = {"neutral_joint_deg": neutral, "scale": 1.0}
+    row = {}
+    for leg in ("fr", "fl", "br", "bl"):
+        row[f"{leg}_link1"] = neutral[leg][0]  # shoulder outward (neutral splay)
+        row[f"{leg}_link2"] = 0.0  # hip straight
+        row[f"{leg}_link3"] = 0.0  # knee straight
+    servo = _frame_to_servo(row, flat_conv)
+
+    errors = []
+    for leg in ("fr", "fl", "br", "bl"):
+        for j, joint in enumerate(JOINT_NAMES):
+            if servo[leg][j] != 90:
+                errors.append(
+                    f"flat: {leg} {joint} = {servo[leg][j]}, expected 90 "
+                    f"(all 12 servos must be 90 at the flat/calibration pose)"
+                )
+    return errors
+
+
+def check_convention(convention: dict) -> list:
+    """Run both pose convention checks — standing NEUTRAL and flat — and
+    return the combined error list (empty = PASS). The machine-checkable
+    form of the CONVENTIONS.md guarantees."""
+    return check_standing_neutral(convention) + check_flat_pose(convention)
+
+
 def check_all_clips(export_dir: Path, convention: dict = None) -> bool:
     """Check all clip subdirs in export_dir. Returns True if all pass."""
     if convention is None:
@@ -190,19 +270,32 @@ def check_all_clips(export_dir: Path, convention: dict = None) -> bool:
         with open(convention_path) as f:
             convention = json.load(f)
 
+    conv_errors = check_convention(convention)
+    if conv_errors:
+        for err in conv_errors:
+            print(f"  FAIL {err}")
+    else:
+        print(
+            "  PASS convention (standing: shoulders 90, hip/knee = NEUTRAL[]; "
+            "flat: all 12 servos 90)"
+        )
+
     clip_dirs = [d for d in export_dir.iterdir() if d.is_dir()]
     if not clip_dirs:
         print("No clip directories found.")
-        return True
+        return not conv_errors
 
     results = [check_clip(d, convention) for d in sorted(clip_dirs)]
     passed = sum(results)
     total = len(results)
+    clips_ok = passed == total
+    all_ok = clips_ok and not conv_errors
     print(
-        f"\n{'All clips OK' if passed == total else 'FAILURES found'}: "
-        f"{passed}/{total} passed"
+        f"\n{'All clips OK' if all_ok else 'FAILURES found'}: "
+        f"{passed}/{total} clips passed"
+        f"{'' if not conv_errors else f'; {len(conv_errors)} convention error(s)'}"
     )
-    return passed == total
+    return all_ok
 
 
 def main() -> int:

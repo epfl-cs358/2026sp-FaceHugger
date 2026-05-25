@@ -1742,6 +1742,35 @@ class FH_OT_select_controls(bpy.types.Operator):
 # ---------------------------------------------------------------------------
 
 
+def _link1_delta_to_absolute(angles, convention):
+    """Convert each `*_link1` (shoulder/yaw) angle from delta-to-absolute.
+
+    The rig drives link1 with an analytic yaw driver that outputs a DELTA
+    from the flat/rest pose — 0 deg at rest, deviating only as the foot
+    yaws — NOT an absolute joint angle. (The IK-driven link2/link3 are
+    already absolute: `_read_bone_angles` recovers the constraint-solved
+    angle for those.) But the export pipeline downstream
+    (`_scale_from_neutral`, `_frame_to_servo`) and the firmware
+    `translateToServo` both assume raw == NEUTRAL at the standing pose,
+    so that servo 90 = shoulder outward for every leg. Reading link1 as
+    delta therefore mis-anchored every shoulder (servo ~60 on fr/br,
+    clamped past [38,142] on the +/-135 legs fl/bl) — collapsing the
+    robot on playback in BOTH sim and firmware.
+
+    Fix: add the per-leg shoulder NEUTRAL (deg) from convention.json so
+    link1 becomes absolute, matching link2/link3. Shoulders only — adding
+    it to hip/knee would double-count. See docs/CLIP_SHOULDER_CONVENTION.md.
+
+    Mutates and returns `angles` ({bone_name: deg}). Degrees throughout
+    (`_read_bone_angles` and `neutral_joint_deg` are both degrees)."""
+    neutral = convention["neutral_joint_deg"]
+    for leg in _LEGS:
+        key = f"{leg}_link1"
+        if key in angles:
+            angles[key] += neutral[leg][0]
+    return angles
+
+
 def bake_clip(clip_name, context):
     """Step through every frame of `clip_name`, evaluate the depsgraph and
     read the IK-solved joint angles. Returns a list of row dicts:
@@ -1787,12 +1816,13 @@ def bake_clip(clip_name, context):
         )
 
     original_frame = scene.frame_current
+    convention = _load_convention()
     rows = []
     for frame in range(frame_start, frame_end + 1):
         scene.frame_set(frame)
         depsgraph = bpy.context.evaluated_depsgraph_get()
         arm_eval = arm_obj.evaluated_get(depsgraph)
-        angles = _read_bone_angles(arm_eval)
+        angles = _link1_delta_to_absolute(_read_bone_angles(arm_eval), convention)
         time_ms = round((frame - frame_start) / fps * 1000)
         rows.append({"frame": frame, "time_ms": time_ms, **angles})
     scene.frame_set(original_frame)

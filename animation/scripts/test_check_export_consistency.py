@@ -25,7 +25,13 @@ ADDONS_DIR = SCRIPTS_DIR.parent / "addons"
 sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(ADDONS_DIR))
 
-from check_export_consistency import h_row_to_dict, check_frame
+from check_export_consistency import (
+    check_convention,
+    check_flat_pose,
+    check_frame,
+    check_standing_neutral,
+    h_row_to_dict,
+)
 
 CONVENTION = {
     "neutral_joint_deg": {
@@ -106,3 +112,61 @@ def test_parse_js_frame_with_negative_servo():
         )
     finally:
         os.unlink(path)
+
+
+def test_check_convention_passes_with_current_neutral():
+    """convention.json's NEUTRAL must put every shoulder at servo 90 and
+    every hip/knee off 90 (the 'servo 90 = outward' guarantee)."""
+    errors = check_convention(CONVENTION)
+    assert errors == [], f"convention check should pass, got: {errors}"
+
+
+def test_check_convention_detects_shoulder_drift():
+    """If a shoulder neutral drifts so translateToServo != 90, fail loudly.
+    fl shoulder neutral 135 -> 75 reintroduces the pre-Change-B clamp bug."""
+    drifted = {
+        "neutral_joint_deg": {**CONVENTION["neutral_joint_deg"], "fl": [75, -60, -40]},
+        "scale": CONVENTION["scale"],
+    }
+    errors = check_convention(drifted)
+    assert any("fl shoulder" in e for e in errors), (
+        f"expected an fl shoulder drift error, got: {errors}"
+    )
+
+
+def test_standing_neutral_shoulders_90_hipknee_not_90():
+    """Standing pose: shoulders servo 90, hip/knee at NEUTRAL[] values (NOT 90)."""
+    servo = _frame_to_servo_at_neutral(CONVENTION)
+    for leg in ("fr", "fl", "br", "bl"):
+        sh, hip, kn = servo[leg]
+        assert sh == 90, f"{leg} shoulder should be 90 at standing, got {sh}"
+        assert hip != 90 and kn != 90, (
+            f"{leg} hip/knee should NOT be 90 at standing, got {hip}/{kn}"
+        )
+    assert check_standing_neutral(CONVENTION) == []
+
+
+def test_flat_pose_all_12_servos_90():
+    """Flat / calibration pose: every one of the 12 servos is 90."""
+    assert check_flat_pose(CONVENTION) == []
+
+
+def test_flat_and_standing_differ_on_hipknee():
+    """Guard against conflating the two poses: they share shoulder=90 but
+    flat hip/knee = 90 while standing hip/knee != 90 (e.g. FR thigh 90 vs 150)."""
+    standing = _frame_to_servo_at_neutral(CONVENTION)
+    # FR is representative: standing thigh=150, knee=53; flat thigh/knee=90.
+    assert standing["fr"][1] != 90 and standing["fr"][2] != 90
+    assert check_flat_pose(CONVENTION) == []  # flat hip/knee ARE 90
+
+
+def _frame_to_servo_at_neutral(convention):
+    """Helper: servo values when raw == NEUTRAL (the standing pose)."""
+    from check_export_consistency import _frame_to_servo
+
+    neutral = convention["neutral_joint_deg"]
+    row = {}
+    for leg in ("fr", "fl", "br", "bl"):
+        sh, th, kn = neutral[leg]
+        row[f"{leg}_link1"], row[f"{leg}_link2"], row[f"{leg}_link3"] = sh, th, kn
+    return _frame_to_servo(row, convention)
