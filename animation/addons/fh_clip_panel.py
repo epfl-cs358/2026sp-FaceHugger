@@ -1831,16 +1831,20 @@ class FH_OT_select_controls(bpy.types.Operator):
 # ---------------------------------------------------------------------------
 
 
-# Per-leg sign applied to the link1 (shoulder/yaw) delta on export. A pure
-# body yaw rotates every foot the same way, so all four shoulder SERVOS must
-# move the same direction (firmware tickYawRotation does this via YAW_COEF).
-# The export servo direction is axis_sign * translateToServo_sign:
-#   fr: (-1)(+1) = -1   fl: (+1)(+1) = +1   br: (+1)(-1) = -1   bl: (-1)(+1) = -1
-# (axis_sign = URDF link1 <axis z>; translateToServo_sign = +1 except br's
-# 90-(sh+45)). fl is the only leg whose product differs, so fl alone comes out
-# inverted — flip its delta to align with the other three. See
+# Per-leg sign applied to the link1 (shoulder/yaw) delta on export.
+#
+# Canon (convention PNG, DRAFT-delta-conventions.md §2): math-space +sh = CCW
+# yaw, UNIFORM across all four legs ("absolute rotation values like a unit
+# circle, same rotation"). The rig's link1 yaw driver writes the bone-local Z
+# rotation, i.e. it multiplies the true CCW foot-yaw delta by the bone axis
+# sign (URDF link1 <axis z>: fr -1, fl +1, br +1, bl -1). To recover the
+# uniform CCW math-space the export must CANCEL that bone-axis sign — so this
+# table IS the axis sign. translateToServo then maps uniform math-space to
+# servos, where BR's documented hardware mirror (slope -1) makes BR's servo
+# move opposite the other three for a body yaw. That is correct, not a bug;
+# whether BR should be un-mirrored is a separate hardware question. See
 # docs/CLIP_SHOULDER_CONVENTION.md.
-_LINK1_DELTA_SIGN = {"fr": +1, "fl": -1, "br": +1, "bl": +1}
+_LINK1_DELTA_SIGN = {"fr": -1, "fl": +1, "br": +1, "bl": -1}
 
 
 def _link1_delta_to_absolute(angles, convention):

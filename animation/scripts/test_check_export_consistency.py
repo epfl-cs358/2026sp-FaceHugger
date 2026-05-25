@@ -172,34 +172,56 @@ def _frame_to_servo_at_neutral(convention):
     return _frame_to_servo(row, convention)
 
 
-def test_body_rotation_all_shoulders_same_servo_direction():
-    """A pure body yaw rotates every foot the same way, so the rig's link1
-    driver emits a raw delta of axis_sign*c per leg (URDF link1 <axis z>:
-    fr -1, fl +1, br +1, bl -1). After the export pipeline the four shoulder
-    SERVOS must all move the SAME direction — the firmware tickYawRotation
-    YAW_COEF compensates the translateToServo signs so servos align. Regression
-    for the FL-inverted-shoulder bug (FL alone moved opposite the other three).
+def test_body_rotation_uniform_mathspace_yaw():
+    """Canon (convention PNG / DRAFT-delta-conventions.md §2): math-space +sh =
+    CCW yaw, the SAME direction for all four legs ("unit circle, same rotation";
+    the exact angles are illustrative, the direction is the convention).
+
+    A pure body yaw rotates every foot the same way, so the exported math-space
+    shoulder delta-from-neutral must be IDENTICAL for all four legs. The rig's
+    link1 driver writes the bone-local Z rotation = the true CCW delta times the
+    bone axis_sign (URDF link1 <axis z>: fr -1, fl +1, br +1, bl -1); the export
+    must cancel that sign so math-space comes out uniform.
+
+    Documented consequence (NOT asserted as "all same"): through the slope table
+    BR's hardware-mirrored servo (-1) moves opposite the other three. Whether BR
+    should be un-mirrored is a separate hardware question. Regression for both
+    the FL inversion and the (wrong) "all servos same" target.
     """
     from check_export_consistency import _mod
 
     axis_sign = {"fr": -1, "fl": +1, "br": +1, "bl": -1}
     n = CONVENTION["neutral_joint_deg"]
+    ccw = -12.0  # feet counter-rotate for a body CCW yaw
 
-    def shoulder_servos(rot_deg):
-        row = {}
-        for leg in ("fr", "fl", "br", "bl"):
-            row[f"{leg}_link1"] = axis_sign[leg] * rot_deg  # driver delta-from-rest
-            row[f"{leg}_link2"] = n[leg][1]  # thigh at neutral (absolute, as IK bakes)
-            row[f"{leg}_link3"] = n[leg][2]  # knee at neutral
-        _mod._link1_delta_to_absolute(row, CONVENTION)
-        servo = _mod._frame_to_servo(row, CONVENTION, warn=False)
-        return {leg: servo[leg][0] for leg in ("fr", "fl", "br", "bl")}
+    row = {}
+    for leg in ("fr", "fl", "br", "bl"):
+        row[f"{leg}_link1"] = axis_sign[leg] * ccw  # raw bone-local reading
+        row[f"{leg}_link2"] = n[leg][1]
+        row[f"{leg}_link3"] = n[leg][2]
+    _mod._link1_delta_to_absolute(row, CONVENTION)
+    scaled = _mod._scale_from_neutral(row, CONVENTION)
 
-    base = shoulder_servos(0.0)
-    rot = shoulder_servos(12.0)
-    deltas = {leg: rot[leg] - base[leg] for leg in base}
-    signs = {leg: (d > 0) - (d < 0) for leg, d in deltas.items()}
-    assert len(set(signs.values())) == 1, (
-        f"all four shoulder servos must move the same direction for a body "
-        f"yaw; got deltas {deltas}"
+    sh_delta = {leg: scaled[leg][0] - n[leg][0] for leg in ("fr", "fl", "br", "bl")}
+    spread = max(sh_delta.values()) - min(sh_delta.values())
+    assert spread < 1e-6, (
+        f"math-space shoulder yaw must be uniform across all legs (convention "
+        f"direction); got deltas {sh_delta}"
     )
+
+    # Documented servo consequence: FR/FL/BL move together, BR opposite.
+    servo = _mod._frame_to_servo(row, CONVENTION, warn=False)
+    base = _mod._frame_to_servo(
+        {**{f"{leg}_link1": n[leg][0] for leg in n}, **_neutral_pitch(n)}, CONVENTION
+    )
+    sdelta = {leg: servo[leg][0] - base[leg][0] for leg in ("fr", "fl", "br", "bl")}
+    assert (sdelta["fr"] > 0) == (sdelta["fl"] > 0) == (sdelta["bl"] > 0), (
+        f"FR/FL/BL shoulders must move together; got {sdelta}"
+    )
+    assert (sdelta["br"] > 0) != (sdelta["fr"] > 0), (
+        f"BR shoulder servo must move opposite (hardware mirror); got {sdelta}"
+    )
+
+
+def _neutral_pitch(n):
+    return {f"{leg}_link{j}": n[leg][j - 1] for leg in n for j in (2, 3)}

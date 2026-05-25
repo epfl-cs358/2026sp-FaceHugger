@@ -119,33 +119,46 @@ rest), and fl frame-0 shoulder lands at servo ≈ 89 — clean, no residual. The
 real fl-specific defect was the yaw *direction* inversion documented below, not
 a baseline offset.
 
-## Follow-up: FL shoulder yaw direction was inverted
+## Follow-up: link1 yaw exported a non-uniform math-space (axis_sign)
 
-After the delta-to-absolute fix above, a second, subtler bug surfaced. Rotating
-`body_ctrl` (a pure body yaw) made FL's shoulder servo move the **opposite**
-direction to FR/BR/BL (e.g. FR 90→43, BR 90→42, BL 90→43, but FL 90→138). A
-rigid body rotation turns every foot the same way, so all four shoulder servos
-must move together — and the firmware's `tickYawRotation` guarantees exactly
-that via its `YAW_COEF = {-1,-1,+1,-1}` table (it flips only BR's math-space
-sign to cancel BR's `translateToServo` `90-(sh+45)`).
+After the delta-to-absolute fix above, a body yaw (`body_ctrl` rotation) made the
+shoulder servos disagree across legs. The canon (`DRAFT-delta-conventions.md` §2
+and the yaw convention PNG) is: **math-space `+sh` = CCW yaw, the same direction
+for all four legs** ("unit circle, same rotation" — the exact ±45/±135 angles
+are illustrative; the *direction* is the convention, with flat = servo 90).
 
-Root cause is the product `axis_sign × translateToServo_sign` per leg, where
-`axis_sign` is the URDF `*_link1_joint` `<axis z>` (fr −1, fl +1, br +1, bl −1)
-that the rig's yaw driver uses:
+The rig's link1 yaw driver writes the **bone-local Z** rotation, i.e. the true
+CCW foot-yaw delta multiplied by the bone axis sign (URDF `*_link1_joint`
+`<axis z>`: fr −1, fl +1, br +1, bl −1). Reading that straight into math-space
+makes the exported `sh` **non-uniform** across legs — the bug.
 
-| leg | axis_sign | translateToServo sign | product |
-|-----|-----------|-----------------------|---------|
-| fr  | −1        | +1                    | −1      |
-| fl  | +1        | +1                    | **+1**  |
-| br  | +1        | −1                    | −1      |
-| bl  | −1        | +1                    | −1      |
+Fix (exporter, not the rig): `_link1_delta_to_absolute` multiplies each link1
+delta by `_LINK1_DELTA_SIGN = {fr:−1, fl:+1, br:+1, bl:−1}` — **the axis sign
+itself** — cancelling the bone-local sign so the exported math-space `sh` is
+uniform CCW for all legs, matching the canon. Regression test:
+`test_body_rotation_uniform_mathspace_yaw`.
 
-FL is the only leg whose product differs from the other three, so FL alone
-exports inverted. The firmware is unaffected — it never uses the bone axis;
-its `YAW_COEF` already encodes the right per-leg signs.
+### Why BR's *servo* still moves opposite (and that's correct)
 
-Fix (exporter, not the rig): `_link1_delta_to_absolute` now applies a per-leg
-`_LINK1_DELTA_SIGN = {fr:+1, fl:-1, br:+1, bl:+1}` to the link1 delta before
-adding NEUTRAL, flipping FL so all four shoulders yaw the same servo direction.
-Regression test: `test_body_rotation_all_shoulders_same_servo_direction`.
-Re-export clips for the fix to reach `clips_all.h`.
+With uniform math-space, `translateToServo` maps it to servos using the §3 slope
+table — where **BR's shoulder is hardware-mirrored (slope −1)**. So for a body
+yaw, FR/FL/BL servos move together and **BR's servo moves opposite**. That is the
+documented convention, not a bug.
+
+A natural expectation is "all four servos move the same physical direction." That
+holds only if BR's shoulder is *un-mirrored* (slope +1) — a hardware question
+(is BR's shoulder servo physically mirrored, or just rotated 180° about its yaw
+axis?). Resolving it "all same" would mean changing BR's `translateToServo` slope
+in **both** firmware (`motion_math.cpp`) and exporter (`_frame_to_servo`),
+re-verifying `test_servo_parity.py`, **and** a physical BR remount — analogous to
+Change B for FL. Until tested on hardware, BR's mirror stays as documented.
+
+### Consistency
+
+This fix is **export-only** — it corrects the rig→math-space layer the firmware
+doesn't have. It does **not** touch `translateToServo`, which is byte-identical
+between firmware and exporter and locked by `test_servo_parity.py`. So clip
+playback stays consistent across exporter → `clips_all.h` → firmware/sim. The
+firmware turn *gait* (`tickYawRotation`, with its own `YAW_COEF`) is a separate,
+stepping motion — untouched here; verify its on-hardware turn direction
+separately. Re-export clips for the fix to reach `clips_all.h`.
