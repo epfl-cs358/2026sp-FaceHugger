@@ -85,6 +85,34 @@ def test_frame_to_joint_targets_clamping_applied():
     assert abs(targets["fr_link1_joint"] - expected) < 1e-9
 
 
+def test_neutral_all_hips_negative():
+    """At NEUTRAL, every link2 (hip/thigh) must be negative — LEG_ID_TO_URDF_AXIS_SIGN applied."""
+    a = []
+    for leg_id in range(4):
+        n = NEUTRAL[leg_id]
+        a += [n.sh, n.th, n.kn]
+    targets = frame_to_joint_targets(a)
+    for leg in ("fr", "fl", "br", "bl"):
+        joint = f"{leg}_link2_joint"
+        assert targets[joint] < 0, (
+            f"{joint}={targets[joint]:.4f} should be negative at NEUTRAL"
+        )
+
+
+def test_neutral_all_knees_negative():
+    """At NEUTRAL, every link3 (knee) must be negative — LEG_ID_TO_URDF_AXIS_SIGN applied."""
+    a = []
+    for leg_id in range(4):
+        n = NEUTRAL[leg_id]
+        a += [n.sh, n.th, n.kn]
+    targets = frame_to_joint_targets(a)
+    for leg in ("fr", "fl", "br", "bl"):
+        joint = f"{leg}_link3_joint"
+        assert targets[joint] < 0, (
+            f"{joint}={targets[joint]:.4f} should be negative at NEUTRAL"
+        )
+
+
 # ─── _interpolate_frame ──────────────────────────────────────────────────────
 
 

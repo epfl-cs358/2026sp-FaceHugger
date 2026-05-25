@@ -21,6 +21,7 @@ from .servo_convention import (
     LEG_FL,
     LEG_FR,
     LEG_ID_TO_SIM_NAME,
+    LEG_ID_TO_URDF_AXIS_SIGN,
     LEG_RL,
     LEG_RR,
     clamp_clip_servos,
@@ -38,10 +39,15 @@ def frame_to_joint_targets(a: list[float]) -> dict[str, float]:
     Input:  a[12] — pre-scaled math-space degrees in firmware LegId order:
             a[0..2]=FR(sh,th,kn), a[3..5]=FL, a[6..8]=RR, a[9..11]=RL.
     Output: dict mapping URDF joint names to radians, e.g.
-            {"fr_link1_joint": 0.0, "fr_link2_joint": 1.047, ...}
+            {"fr_link1_joint": 0.0, "fr_link2_joint": -1.047, ...}
 
     Does NOT apply EMA smoothing (firmware CLIP_EMA_ALPHA). Pure geometry.
     Does apply clamp_clip_servos to match firmware clip-path clamping.
+
+    Hip (link2) and knee (link3) angles are multiplied by the per-leg URDF
+    axis sign (±1 depending on the joint's <axis> direction in facehugger.urdf).
+    Shoulder (link1) uses servo_to_radians directly — its axis is +Z, which
+    is consistent across all legs and needs no sign correction.
 
     Mirrors the inner loop of tickClip() in spinal_cord.cpp:427-437.
     """
@@ -52,9 +58,10 @@ def frame_to_joint_targets(a: list[float]) -> dict[str, float]:
         kn = a[leg_id * 3 + 2]
         servo = clamp_clip_servos(translate_to_servo(leg_id, sh, th, kn))
         urdf_name = LEG_ID_TO_SIM_NAME[leg_id]
+        axis = LEG_ID_TO_URDF_AXIS_SIGN[leg_id]
         targets[f"{urdf_name}_link1_joint"] = servo_to_radians(servo.hip)
-        targets[f"{urdf_name}_link2_joint"] = servo_to_radians(servo.thigh)
-        targets[f"{urdf_name}_link3_joint"] = servo_to_radians(servo.knee)
+        targets[f"{urdf_name}_link2_joint"] = axis * servo_to_radians(servo.thigh)
+        targets[f"{urdf_name}_link3_joint"] = -axis * servo_to_radians(servo.knee)
     return targets
 
 

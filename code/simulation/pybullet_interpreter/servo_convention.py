@@ -29,6 +29,19 @@ LEG_ID_TO_SIM_NAME: dict[int, str] = {
     LEG_RL: "bl",
 }
 
+# URDF axis direction sign for link2 (hip/thigh) and link3 (knee) joints.
+# Derived from generated/facehugger.urdf <axis xyz="0 ±1 0">.
+# Both link2 and link3 share the same sign per leg.
+# Diagonal pair (FL, BR) = +Y (+1); diagonal pair (FR, BL) = -Y (-1).
+# Used in clip_player.frame_to_joint_targets only — the firmware drives
+# physical servo motors and is unaffected by URDF axis orientation.
+LEG_ID_TO_URDF_AXIS_SIGN: dict[int, int] = {
+    LEG_FR: -1,  # fr link2/3: axis "0 -1 0"
+    LEG_FL: +1,  # fl link2/3: axis "0  1 0"
+    LEG_RR: +1,  # br link2/3: axis "0  1 0"
+    LEG_RL: -1,  # bl link2/3: axis "0 -1 0"
+}
+
 
 @dataclass
 class NeutralPose:
