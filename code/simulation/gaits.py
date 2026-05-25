@@ -232,10 +232,14 @@ def _connect_and_setup(cfg, gui):
         robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity
     )
 
-    # Friction on the distal link (knee joint's child = lower leg).
+    # Friction on the foot (link3 = the knee joint's child = lower leg/foot).
+    # NB: joint_map keys are URDF joint names (`*_link3_joint`), which contain
+    # "link3", not "knee" — the old "knee" match never fired, so the feet sat at
+    # PyBullet's default lateralFriction 0.5 and slipped during planted-feet
+    # moves (e.g. the body wiggle). Match "link3" so the intended grip applies.
     for name, idx in joint_map.items():
-        if "knee" in name:
-            p.changeDynamics(robot_id, idx, lateralFriction=1.0, restitution=0.1)
+        if "link3" in name:
+            p.changeDynamics(robot_id, idx, lateralFriction=1.5, restitution=0.0)
 
     if gui:
         p.resetDebugVisualizerCamera(
