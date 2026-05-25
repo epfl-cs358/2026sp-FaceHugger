@@ -864,7 +864,95 @@ class FH_OT_apply_clip(bpy.types.Operator):
             )
         else:
             self.report({"INFO"}, f"Applied clip '{self.clip_name}'")
+        # Sync the scene's playback range to this clip's authored range so
+        # the timeline + playback match the clip you just switched to.
+        _sync_scene_frame_range(context, self.clip_name)
         _redraw_view3d(context)
+        return {"FINISHED"}
+
+
+# ---------------------------------------------------------------------------
+# Per-clip frame range <-> scene sync
+# ---------------------------------------------------------------------------
+
+# msgbus owner token — lets us react to edits of the built-in Action range
+# props (which cannot carry an `update=` callback) and re-sync the scene live.
+_FRAME_RANGE_MSGBUS_OWNER = object()
+
+
+def _sync_scene_frame_range(context, clip=None):
+    """Set the scene playback range to the active clip's body_ctrl range.
+
+    Uses `action.frame_range` (not frame_start/end directly): it returns the
+    manual range when `use_frame_range` is set, else the actual keyframe span
+    — the correct "intended playback range of this action". No-op (returns
+    False) if there's no active clip / body_ctrl action."""
+    if clip is None:
+        clip = active_clip()
+    if clip is None:
+        return False
+    action = clip_action(clip, "body_ctrl")
+    if action is None:
+        return False
+    start, end = action.frame_range
+    scene = context.scene
+    scene.frame_start = int(start)
+    scene.frame_end = int(end)
+    return True
+
+
+def _on_action_range_changed(*_args):
+    """msgbus notify: an Action's frame_start/frame_end/use_frame_range was
+    edited — re-sync the scene to the active clip. Guarded so a stray edit on
+    some unrelated Action while no clip is active is a harmless no-op."""
+    try:
+        _sync_scene_frame_range(bpy.context)
+    except Exception as e:  # never let a UI-thread notify raise
+        print(f"[fh_clip_panel] frame-range sync skipped: {e}")
+
+
+def _subscribe_frame_range_msgbus():
+    """Subscribe to the built-in Action range props so panel edits sync the
+    scene live (built-in props can't take an `update=` callback). Best-effort:
+    if msgbus is unavailable the Apply-to-Scene button + apply-clip sync still
+    cover it."""
+    try:
+        for prop in ("frame_start", "frame_end", "use_frame_range"):
+            bpy.msgbus.subscribe_rna(
+                key=(bpy.types.Action, prop),
+                owner=_FRAME_RANGE_MSGBUS_OWNER,
+                args=(),
+                notify=_on_action_range_changed,
+            )
+    except Exception as e:
+        print(f"[fh_clip_panel] frame-range msgbus not subscribed: {e}")
+
+
+def _unsubscribe_frame_range_msgbus():
+    try:
+        bpy.msgbus.clear_by_owner(_FRAME_RANGE_MSGBUS_OWNER)
+    except Exception:
+        pass
+
+
+class FH_OT_sync_frame_range(bpy.types.Operator):
+    """Set the scene's playback range to the active clip's authored range.
+    Useful after editing the clip's Custom range fields by hand."""
+
+    bl_idname = "fh.sync_frame_range"
+    bl_label = "Apply to Scene"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        if not _sync_scene_frame_range(context):
+            self.report({"WARNING"}, "No active clip to sync from")
+            return {"CANCELLED"}
+        clip = active_clip()
+        self.report(
+            {"INFO"},
+            f"Scene range → {context.scene.frame_start}-{context.scene.frame_end} "
+            f"(clip '{clip}')",
+        )
         return {"FINISHED"}
 
 
@@ -2697,6 +2785,24 @@ class FH_PT_clips(_FH_PT_child, bpy.types.Panel):
             FH_OT_toggle_preview.bl_idname, text=label, icon=icon, depress=is_linear
         )
 
+        # Frame range of the active clip. Drives the scene timeline: switching
+        # clips and edits here sync scene.frame_start/end (via apply-clip,
+        # the msgbus live-sync, and the Apply to Scene button).
+        action = clip_action(active, "body_ctrl") if active else None
+        if action is not None:
+            layout.separator()
+            box = layout.column(align=True)
+            box.label(text="Frame Range", icon="TIME")
+            box.prop(action, "use_frame_range", text="Custom range")
+            if action.use_frame_range:
+                rng = box.row(align=True)
+                rng.prop(action, "frame_start", text="Start")
+                rng.prop(action, "frame_end", text="End")
+            else:
+                lo, hi = action.frame_range
+                box.label(text=f"Keyframes: {int(lo)}–{int(hi)}")
+            box.operator(FH_OT_sync_frame_range.bl_idname, icon="PREVIEW_RANGE")
+
 
 class FH_PT_selection(_FH_PT_child, bpy.types.Panel):
     bl_idname = "VIEW3D_PT_fh_selection"
@@ -2814,6 +2920,7 @@ CLASSES = (
     FH_OT_export_clip,
     FH_OT_export_selected,
     FH_OT_toggle_preview,
+    FH_OT_sync_frame_range,
     # Panels: parent MUST be registered before its children so the
     # bl_parent_id link resolves.
     FH_PT_root,
@@ -2943,8 +3050,13 @@ def register():
     if _on_load_post not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(_on_load_post)
 
+    # Live-sync the scene range when the active clip's Action range props are
+    # edited in the panel (built-in props can't carry an update= callback).
+    _subscribe_frame_range_msgbus()
+
 
 def unregister():
+    _unsubscribe_frame_range_msgbus()
     # Clean up heatmap state before class removal.
     handlers = bpy.app.handlers.frame_change_post
     if _heatmap_handler in handlers:
