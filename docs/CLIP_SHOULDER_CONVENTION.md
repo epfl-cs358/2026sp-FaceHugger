@@ -108,14 +108,16 @@ range` lines for shoulders. Then:
 3. `cd code/simulation && python facehugger.py sim --clip "tiny wiggle"` — the
    robot stands and wiggles instead of collapsing.
 
-## Known residual (out of scope here)
+## Note: the "fl ~31° residual" was stale data, not a rig fault
 
-In `tiny wiggle`/`lie down and stand up`, frame 0's fl shoulder back-solves to a
-raw of ~−31° while the other three legs read ~−1°. After this fix the fl shoulder
-is no longer clamped, but it still lands ~21° off neutral (servo ≈ 69 instead of
-90). That is a separate rig/animation issue — the fl foot's rest yaw, likely tied
-to the not-yet-done "Change B" fl horn remount — and is not addressed by this
-shoulder-convention fix.
+An earlier draft of this doc flagged a suspected fl-specific ~31° baseline
+residual (servo ≈ 69 at frame 0). That was an artifact of reading the
+*pre-re-export* `clips_all.h` (baked under the old pre-Change-B fl convention).
+After re-exporting with the delta-to-absolute fix, fl frame 0 reads raw ≈ −1.06
+like the other three legs (the rig log confirms all `link1 yaw-only = 0.000°` at
+rest), and fl frame-0 shoulder lands at servo ≈ 89 — clean, no residual. The
+real fl-specific defect was the yaw *direction* inversion documented below, not
+a baseline offset.
 
 ## Follow-up: FL shoulder yaw direction was inverted
 
