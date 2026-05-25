@@ -125,6 +125,8 @@ def cmd_sim(args):
         cli.append("--loop")
     if args.float_mode:
         cli.append("--float")
+    if args.monitor:
+        cli.append("--monitor")
     if args.walk:
         cli.append("--walk")
     if args.trot:
@@ -208,6 +210,11 @@ def main():
         action="store_true",
         help="no gravity/floor, body pinned — watch joint geometry only",
     )
+    ps.add_argument(
+        "--monitor",
+        action="store_true",
+        help="print torque + estimated-current status (peak τ, total A, stalls)",
+    )
     ps.add_argument("--walk", action="store_true")
     ps.add_argument("--trot", action="store_true")
     ps.add_argument("--headless", action="store_true")
@@ -263,6 +270,11 @@ def main():
         dest="float_mode",
         action="store_true",
         help="no gravity/floor, body pinned — watch joint geometry only",
+    )
+    pa.add_argument(
+        "--monitor",
+        action="store_true",
+        help="print torque + estimated-current status (peak τ, total A, stalls)",
     )
     pa.add_argument("--walk", action="store_true")
     pa.add_argument("--trot", action="store_true")

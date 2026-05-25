@@ -159,7 +159,7 @@ class ClipPlayer:
                 maxVelocity=self._velocity,
             )
 
-    def play_blocking(self, gui: bool = True, loop: bool = False) -> None:
+    def play_blocking(self, gui: bool = True, loop: bool = False, on_step=None) -> None:
         """Play the clip in real time, blocking until done.
 
         Default: after the last frame, hold the final pose every frame until
@@ -172,6 +172,10 @@ class ClipPlayer:
         foot slip, tipping) build up over time. Ignored when gui=False so
         headless/CI runs still terminate.
 
+        on_step: optional callable(step_index) invoked after every
+        stepSimulation — used for torque/current monitoring (run_clip wires it
+        up). Kept generic so this module stays decoupled from the sim tooling.
+
         Headless mode (gui=False): plays the clip once in wall-clock time
         then returns immediately (for CI / automated testing).
         """
@@ -181,12 +185,16 @@ class ClipPlayer:
 
         step_s = 1.0 / 240.0
         start = time.monotonic()
+        step_index = 0
 
         while True:
             elapsed_ms = (time.monotonic() - start) * 1000.0
             clamped_ms = min(elapsed_ms, float(self._clip.duration_ms))
             self.step(clamped_ms)
             p.stepSimulation()
+            if on_step is not None:
+                on_step(step_index)
+            step_index += 1
 
             if elapsed_ms >= self._clip.duration_ms:
                 if not gui:

@@ -55,6 +55,12 @@ def main():
         help="no gravity, no floor, body pinned — watch the clip's pure joint "
         "geometry without the robot falling/slipping/collapsing",
     )
+    parser.add_argument(
+        "--monitor",
+        action="store_true",
+        help="print a torque + estimated-current status line periodically "
+        "(per-leg angles, peak torque, total current [WARN >10A], [STALL] joints)",
+    )
     args = parser.parse_args()
 
     cfg = build_config()
@@ -67,13 +73,34 @@ def main():
             settle_s=args.settle,
             loop=args.loop,
             float_mode=args.float_mode,
+            monitor=args.monitor,
         )
     elif args.walk:
-        run_gait(cfg, "walk", gui=gui, settle_s=args.settle, float_mode=args.float_mode)
+        run_gait(
+            cfg,
+            "walk",
+            gui=gui,
+            settle_s=args.settle,
+            float_mode=args.float_mode,
+            monitor=args.monitor,
+        )
     elif args.trot:
-        run_gait(cfg, "trot", gui=gui, settle_s=args.settle, float_mode=args.float_mode)
+        run_gait(
+            cfg,
+            "trot",
+            gui=gui,
+            settle_s=args.settle,
+            float_mode=args.float_mode,
+            monitor=args.monitor,
+        )
     else:
-        run_stand(cfg, gui=gui, settle_s=args.settle, float_mode=args.float_mode)
+        run_stand(
+            cfg,
+            gui=gui,
+            settle_s=args.settle,
+            float_mode=args.float_mode,
+            monitor=args.monitor,
+        )
 
 
 if __name__ == "__main__":
