@@ -917,16 +917,33 @@ def _clip_frame_span(clip):
     return int(min(starts)), int(max(ends))
 
 
+def _clip_export_range(clip):
+    """The frame range to EXPORT (and mirror to the scene) for a clip.
+
+    This is the per-clip "which section of the animation to export" selector:
+      * "Custom range" ON  (body_ctrl `use_frame_range`) -> the body_ctrl
+        action's manual `frame_start..frame_end` — the user's explicit section.
+      * "Custom range" OFF -> the full clip span (`_clip_frame_span`, the union
+        of all actions), so a clip whose body is single-keyed (fallingRobot)
+        still exports its whole motion.
+    Returns (start, end) or None if the clip has no actions. The "Custom range"
+    toggle/fields live on body_ctrl, so the choice persists per clip."""
+    action = clip_action(clip, "body_ctrl")
+    if action is not None and action.use_frame_range:
+        return int(action.frame_start), int(action.frame_end)
+    return _clip_frame_span(clip)
+
+
 def _sync_scene_frame_range(context, clip=None):
-    """Set the scene playback range to the active clip's frame span
-    (`_clip_frame_span`). Refuses to set a degenerate range (end <= start) —
+    """Set the scene playback range to the active clip's export range
+    (`_clip_export_range`). Refuses to set a degenerate range (end <= start) —
     returns False and leaves the scene untouched rather than zeroing it.
     Returns True on a successful, non-degenerate sync."""
     if clip is None:
         clip = active_clip()
     if clip is None:
         return False
-    span = _clip_frame_span(clip)
+    span = _clip_export_range(clip)
     if span is None or span[1] <= span[0]:
         return False
     context.scene.frame_start, context.scene.frame_end = span
@@ -1943,11 +1960,12 @@ def bake_clip(clip_name, context):
         )
     context.view_layer.update()
 
-    # Bake the clip's FULL span — the union of all five actions' frame_range,
-    # not just body_ctrl's. A clip can key the body at a single frame while the
-    # feet carry the motion (fallingRobot); using body_ctrl alone would truncate
-    # the export to one frame.
-    span = _clip_frame_span(clip_name)
+    # Bake the clip's export range: the body_ctrl custom range if "Custom range"
+    # is enabled (the per-clip section selector), else the full clip span (union
+    # of all five actions — a clip can key the body at a single frame while the
+    # feet carry the motion, e.g. fallingRobot, so body_ctrl alone would truncate
+    # the export to one frame).
+    span = _clip_export_range(clip_name)
     if span is None:
         raise ValueError(f"Clip '{clip_name}' has no actions to bake")
     frame_start, frame_end = span
