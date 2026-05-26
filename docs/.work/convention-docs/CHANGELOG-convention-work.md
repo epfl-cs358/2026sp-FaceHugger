@@ -5,6 +5,27 @@ Plain-language, in the style of `CHANGELOG-2026-05-21-1821.md`. Each entry maps 
 commit. Flash status reflects Marcus's policy: C / 3a / 3b are safe to flash now; B is
 held until the FL horn is remounted; D comes after B.
 
+## Change E — BR shoulder yaw un-mirrored (commit `1645cb6`) — VERIFY-ON-HARDWARE ⚠️
+
+- The shoulder/yaw convention is now uniform: `+sh` (CCW, right-hand about +Z) → `+servo`
+  for **all four** legs. BR's shoulder was the lone mirrored servo (`translateToServo`
+  slope −1, `90 − (sh+45)`); it's now `+1` (`90 + (sh+45)`), matching FR/FL/BL.
+- **Rationale:** the four shoulder servos are identical motors with output shafts all on
+  the same vertical axis — mounting orientation only offsets the zero, it doesn't reverse
+  rotation. So yaw must not flip per leg. (Pitch still flips on the {FL,BR}↔{FR,BL}
+  diagonal because those servos face opposite ways.)
+- **Robot motion is unchanged.** The flip is applied in the three parity-locked
+  `translateToServo` twins (firmware / exporter / sim), and BR's compensating math-space
+  sign is flipped in tandem in both gaits — `tickYawRotation` `YAW_COEF` `{-1,-1,+1,-1}` →
+  uniform `{-1,-1,-1,-1}`, `tickGait` `fwdDir` adds BR to the `+1` group. Proof: BR servo
+  `= 90 − dev·scale` before and after. Standing/REST poses unchanged (BR sh −45 → 90).
+- **No client change:** webapp/JS send high-level commands or raw `T:4` servo (below the
+  convention); the browser `.js` clip player is corrected by re-export.
+- **Spec:** DRAFT-delta-conventions.md §6 + the §3 slope table (BR shoulder now +1).
+- **Pending:** `pio test -e native` (test_motion_math, test_clip_parity, gait spot-check),
+  re-export clips, and a hardware check that turn direction is unchanged and BR shoulder
+  jogs the same way as FR via `T:4`.
+
 ## Change C — reachable flat & stand reference poses (commit `4c3741a`) — FLASH-NOW ✅
 
 - Made the robot's two reference poses commandable over WebSocket, on the existing

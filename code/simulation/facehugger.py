@@ -4,7 +4,6 @@ facehugger — single-entry CLI wrapping the simulation pipeline.
 Subcommands:
   urdf      regenerate generated/facehugger.urdf from generated/fusion_export.json
   sim       run simulate.py (default: stand; --walk / --trot for gaits)
-  view      open generated/facehugger.urdf in PyBullet's viewer (no physics)
   blender   import the URDF into Blender (placement-only, no rig by default;
             --rigged builds an armature with IK + foot-target Empties for
             animation work)
@@ -13,7 +12,6 @@ Subcommands:
 Examples:
   python facehugger.py urdf
   python facehugger.py sim --walk
-  python facehugger.py view
   python facehugger.py blender                                # default 5.1, placement-only
   python facehugger.py blender --rigged                       # armature + IK rig
   python facehugger.py blender --blender-version 5.2          # specific version
@@ -35,9 +33,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent.parent
 
-GENERATE_URDF = HERE / "generate_urdf.py"
-SIMULATE = HERE / "simulate.py"
-VIEW_URDF = HERE / "view_urdf.py"
+# Runtime + build steps are packages now; invoked as `python -m <pkg>.<mod>`
+# with cwd=HERE (see _run) so pybullet_sim / urdf_gen are importable.
+GENERATE_URDF = ["-m", "urdf_gen.generate_urdf"]
+SIMULATE = ["-m", "pybullet_sim.simulate"]
 VISUALIZE = REPO_ROOT / "animation" / "scripts" / "visualize_urdf.py"
 VISUALIZE_RIGGED = REPO_ROOT / "animation" / "scripts" / "urdf_to_blender_rigged.py"
 
@@ -101,13 +100,27 @@ def _resolve_blender_bin(version):
 
 
 def _run(cmd, cwd=HERE):
-    """Forward stdout/stderr; return the child's exit code."""
+    """Forward stdout/stderr; return the child's exit code.
+
+    cwd=None runs in the caller's working directory (with HERE added to
+    PYTHONPATH so the `-m pybullet_sim...` / `-m urdf_gen...` packages still
+    import). Used by `sim` so its --log output (sim_log.csv/png) lands where
+    the user invoked the command, not in code/simulation/.
+    """
     print(f"$ {' '.join(str(c) for c in cmd)}")
-    return subprocess.run([str(c) for c in cmd], cwd=str(cwd)).returncode
+    env = None
+    if cwd is None:
+        env = {**os.environ}
+        env["PYTHONPATH"] = os.pathsep.join(
+            [str(HERE), env.get("PYTHONPATH", "")]
+        ).rstrip(os.pathsep)
+    return subprocess.run(
+        [str(c) for c in cmd], cwd=(str(cwd) if cwd else None), env=env
+    ).returncode
 
 
 def cmd_urdf(args):
-    cli = [sys.executable, GENERATE_URDF]
+    cli = [sys.executable, *GENERATE_URDF]
     if args.export:
         cli += ["--export", args.export]
     if args.config:
@@ -118,7 +131,19 @@ def cmd_urdf(args):
 
 
 def cmd_sim(args):
-    cli = [sys.executable, SIMULATE]
+    cli = [sys.executable, *SIMULATE]
+    if args.clip:
+        cli += ["--clip", args.clip]
+    if args.loop:
+        cli.append("--loop")
+    if args.float_mode:
+        cli.append("--float")
+    if args.monitor:
+        cli.append("--monitor")
+    if args.log:
+        cli.append("--log")
+    if args.python_port:
+        cli.append("--python")
     if args.walk:
         cli.append("--walk")
     if args.trot:
@@ -127,11 +152,8 @@ def cmd_sim(args):
         cli.append("--headless")
     if args.settle is not None:
         cli += ["--settle", str(args.settle)]
-    return _run(cli)
-
-
-def cmd_view(_args):
-    return _run([sys.executable, VIEW_URDF])
+    # cwd=None: run in the user's directory so --log artifacts land there.
+    return _run(cli, cwd=None)
 
 
 def cmd_blender(args):
@@ -175,6 +197,22 @@ def cmd_all(args):
     return cmd_sim(args)
 
 
+def cmd_serve(args):
+    cli = [
+        sys.executable,
+        "-m",
+        "firmware_sil.ws_sim",
+        "--host",
+        args.host,
+        "--port",
+        str(args.port),
+    ]
+    if args.gui:
+        cli.append("--gui")
+    # cwd=None: run in the user's dir (HERE on PYTHONPATH) so firmware_sil imports.
+    return _run(cli, cwd=None)
+
+
 def main():
     p = argparse.ArgumentParser(
         prog="facehugger",
@@ -190,14 +228,40 @@ def main():
     pu.set_defaults(func=cmd_urdf)
 
     ps = sub.add_parser("sim", help="run the PyBullet simulator")
+    ps.add_argument("--clip", metavar="NAME", help="play a named animation clip")
+    ps.add_argument(
+        "--loop",
+        action="store_true",
+        help="replay the clip continuously (GUI only) to observe over time",
+    )
+    ps.add_argument(
+        "--float",
+        dest="float_mode",
+        action="store_true",
+        help="no gravity/floor, body pinned — watch joint geometry only",
+    )
+    ps.add_argument(
+        "--monitor",
+        action="store_true",
+        help="print torque + estimated-current status (peak τ, total A, stalls)",
+    )
+    ps.add_argument(
+        "--log",
+        action="store_true",
+        help="record per-step torque/current → summary + sim_log.csv + sim_log.png",
+    )
+    ps.add_argument(
+        "--python",
+        dest="python_port",
+        action="store_true",
+        help="drive clips with the Python re-port instead of the default exact "
+        "compiled firmware (firmware_sil); use when you have no C++ toolchain",
+    )
     ps.add_argument("--walk", action="store_true")
     ps.add_argument("--trot", action="store_true")
     ps.add_argument("--headless", action="store_true")
     ps.add_argument("--settle", type=float, default=None)
     ps.set_defaults(func=cmd_sim)
-
-    pv = sub.add_parser("view", help="open URDF in PyBullet viewer")
-    pv.set_defaults(func=cmd_view)
 
     pb = sub.add_parser("blender", help="open the URDF in Blender")
     pb.add_argument(
@@ -234,11 +298,40 @@ def main():
     pa.add_argument("--export")
     pa.add_argument("--config")
     pa.add_argument("--out")
+    pa.add_argument("--clip", metavar="NAME", help="play a named animation clip")
+    pa.add_argument(
+        "--loop",
+        action="store_true",
+        help="replay the clip continuously (GUI only) to observe over time",
+    )
+    pa.add_argument(
+        "--float",
+        dest="float_mode",
+        action="store_true",
+        help="no gravity/floor, body pinned — watch joint geometry only",
+    )
+    pa.add_argument(
+        "--monitor",
+        action="store_true",
+        help="print torque + estimated-current status (peak τ, total A, stalls)",
+    )
     pa.add_argument("--walk", action="store_true")
     pa.add_argument("--trot", action="store_true")
     pa.add_argument("--headless", action="store_true")
     pa.add_argument("--settle", type=float, default=None)
     pa.set_defaults(func=cmd_all)
+
+    pserve = sub.add_parser(
+        "serve",
+        help="run the firmware-backed WebSocket robot API (drive from the app / "
+        "tools/robot_control_panel.html)",
+    )
+    pserve.add_argument("--host", default="localhost")
+    pserve.add_argument(
+        "--port", type=int, default=8081, help="default 8081 (81 is privileged)"
+    )
+    pserve.add_argument("--gui", action="store_true", help="show the PyBullet window")
+    pserve.set_defaults(func=cmd_serve)
 
     args = p.parse_args()
     sys.exit(args.func(args))

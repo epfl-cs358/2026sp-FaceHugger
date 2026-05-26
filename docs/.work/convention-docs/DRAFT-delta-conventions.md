@@ -92,7 +92,7 @@ After B:
 ```
 FL:  hip = 90 + (sh - 135); thigh = 90 + th;   knee = 90 - kn   ← CHANGED (was hip = sh)
 FR:  hip = 90 + (sh - 45);  thigh = 90 - th;   knee = 90 + kn   ← unchanged
-BR:  hip = 90 - (sh + 45);  thigh = 90 + th;   knee = 90 - kn   ← unchanged
+BR:  hip = 90 + (sh + 45);  thigh = 90 + th;   knee = 90 - kn   ← shoulder un-mirrored (§6)
 BL:  hip = 90 + (sh + 135); thigh = 90 - th;   knee = 90 + kn   ← unchanged
 ```
 
@@ -109,12 +109,11 @@ flip:
 | FL  | **+1** | **+1** | **−1** |
 | FR  | **+1** | **−1** | **+1** |
 | BL  | **+1** | **−1** | **+1** |
-| BR  | **−1** | **+1** | **−1** |
+| BR  | **+1** | **+1** | **−1** |  ← shoulder was −1; un-mirrored 2026-05-25 (§6)
 
-**Unaffected by B (must stay byte-identical):** the BR shoulder sign-flip
-(`tickYawRotation`'s `YAW_COEF[BR] = +1` vs the others' `−1`, `spinal_cord.cpp:336`) still
-works — B does not touch BR or the slope table. The lift convention (`th += lift; kn -= lift`)
-is unchanged.
+**Shoulder is now uniformly `+1` for all four legs** (see §6). Pitch (thigh/knee)
+still flips on the {FL,BR} vs {FR,BL} diagonal, matching the URDF link2/link3
+`<axis>` signs. The lift convention (`th += lift; kn -= lift`) is unchanged.
 
 The same physical L/R mirror is also carried in the URDF/rig; that representation is
 unaffected by B (B is a firmware/exporter offset, not a kinematic axis change).
@@ -334,7 +333,54 @@ sign); the per-leg *hardware mirror* and (after D) the *flip mirror* are handled
 
 ## Explicitly DO NOT change (carried from the ledger)
 
-- The other per-leg `translateToServo` signs (BR shoulder flip; FR/BL vs FL/BR thigh/knee
-  mirror) — correct and load-bearing.
+- The per-leg pitch `translateToServo` signs (FR/BL vs FL/BR thigh/knee mirror) — correct
+  and load-bearing. *(The BR **shoulder** flip was REMOVED in §6 — no longer applies.)*
 - The 2/3 amplitude scale, the absolute-angle model, the standing NEUTRAL for FR/BR/BL.
 - Gait math, clip interp, the deadman switch.
+
+---
+
+## 6. BR shoulder yaw un-mirror (E) — IMPLEMENTED 2026-05-25
+
+**What:** BR's shoulder servo slope changes **−1 → +1**, making the shoulder/yaw
+convention uniform: `+sh` (CCW, right-hand about +Z) → `+servo` for **all four**
+legs. Pitch (thigh/knee) is unchanged — it still flips on the {FL,BR}↔{FR,BL}
+diagonal.
+
+**Why:** The four shoulder servos are identical motors whose output shafts all
+point along the same vertical (yaw) axis — only their *mounting orientation*
+differs, which offsets the zero but does **not** reverse the rotation direction.
+So yaw must not flip per leg. (Pitch servos, by contrast, face opposite ways on
+the {FL,BR} vs {FR,BL} diagonal, which is why pitch *does* flip — matching the
+URDF link2/link3 `<axis>` signs.) The old BR shoulder `−1` was an error.
+
+**Exact edits (servo output preserved — robot motion unchanged):**
+
+| file | from | to |
+|------|------|----|
+| `motion_math.cpp` (BR `case 2`) | `out.hip = 90.0 - (sh + 45.0)` | `out.hip = 90.0 + (sh + 45.0)` |
+| `fh_clip_panel.py` `_frame_to_servo` (`br`) | `90 - (sh + 45)` | `90 + (sh + 45)` |
+| `servo_convention.py` `translate_to_servo` (`LEG_RR`) | `90.0 - (sh + 45.0)` | `90.0 + (sh + 45.0)` |
+| `spinal_cord.cpp` `tickYawRotation` `YAW_COEF` | `{-1,-1,+1,-1}` | `{-1,-1,-1,-1}` |
+| `spinal_cord.cpp` `tickGait` `fwdDir` | `(FR\|\|FL)?1:-1` | `(FR\|\|FL\|\|RR)?1:-1` |
+
+**Tandem-flip guarantee:** flipping `translateToServo[BR]` slope *and* negating
+BR's math-space deviation in each gait (`YAW_COEF[BR]`, `fwdDir[BR]`) leaves every
+servo command byte-identical. Proof at BR (NEUTRAL sh = −45, deviation `d` after
+scale): old `servo = 90 − (−45 + d + 45) = 90 − d`; new `servo = 90 + (−45 − d +
+45) = 90 − d`. So existing gaits (`tickGait`, `tickYawRotation`) move the robot
+identically; only the math-space representation and the re-exported clip data
+change. Standing/REST poses unchanged (BR at sh = −45 → servo 90 either way).
+
+**Parity & sim:** all three `translateToServo` twins stay byte-identical
+(`test_servo_parity.py`, `test_motion_math`, `test_clip_parity`). The sim also
+applies the URDF link1 `<axis>` sign to the commanded shoulder joint (link1
+shares link2's diagonal axis) so it renders yaw correctly.
+
+**Clients unaffected:** the webapp/JS send high-level commands (`T:1/5/6/7`,
+firmware-computed) or raw servo (`T:4`, below `translateToServo`); the browser
+`.js` clip player is corrected by re-export. No client code changes.
+
+**Follow-up:** re-export all clips so `clips_all.h`/`.js` carry the new BR
+shoulder; verify on hardware that turn direction is unchanged (`pio test -e
+native`) and that BR shoulder now jogs the same way as FR via `T:4`.

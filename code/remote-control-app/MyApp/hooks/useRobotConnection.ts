@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { connect, sendCommand, onMessage } from '../services/socket';
 import { useRobotStore } from '../store/robotStore';
-import { FSMStateModification, FSMStatus, GaitIntegration, GaitMode, SystemStatus } from '../api/api-types';
+import { ClipListResponse, FSMStateModification, FSMStatus, GaitIntegration, GaitMode, SystemStatus } from '../api/api-types';
+import { requestClipList } from '../api/api-messages';
 import { useSocketStatus } from './useSocketStatus';
 
 
@@ -12,6 +13,8 @@ export const useRobotConnection = (ip: string) => {
   const setGaitMode = useRobotStore((s) => s.setGaitMode);
   const setMovementProgress = useRobotStore((s) => s.setMovementProgress);
   const setErrorMessage = useRobotStore((s) => s.setErrorMessage);
+  const setClips = useRobotStore((s) => s.setClips);
+  const setClipPlaying = useRobotStore((s) => s.setClipPlaying);
 
   const fsmState = useRobotStore((s) => s.fsmState);
   const chosenFsmState = useRobotStore((s) => s.chosenFsmState);
@@ -32,6 +35,13 @@ export const useRobotConnection = (ip: string) => {
     onMessage((data) => {
       if (data.T) {
         switch (data.T) {
+          case 8: {
+            const resp = data as ClipListResponse;
+            if (Array.isArray(resp.clips)) {
+              setClips(resp.clips);
+            }
+            break;
+          }
           case 10: {
             const { T, ...rest } = data;
             const status = rest as SystemStatus;
@@ -55,6 +65,7 @@ export const useRobotConnection = (ip: string) => {
     if (isConnected && !prevIsConnectedRef.current) {
       sendCommand(JSON.stringify({ T: 2, s: chosenFsmStateRef.current } as FSMStateModification));
       sendCommand(JSON.stringify({ T: 5, g: chosenGaitModeRef.current } as GaitIntegration));
+      requestClipList();
     }
     prevIsConnectedRef.current = isConnected;
   }, [isConnected]);

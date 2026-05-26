@@ -25,7 +25,8 @@ void test_translate_to_servo_per_leg(void) {
     TEST_ASSERT_DOUBLE_WITHIN(TOL, 90.0 - kn,           fl.knee);
 
     ServoTriple rr = translateToServo(2, sh, th, kn);
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 90.0 - (sh + 45.0), rr.hip);
+    // BR shoulder un-mirrored (2026-05-25): +sh = +servo like the other legs.
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 90.0 + (sh + 45.0), rr.hip);
     TEST_ASSERT_DOUBLE_WITHIN(TOL, 90.0 + th,          rr.thigh);
     TEST_ASSERT_DOUBLE_WITHIN(TOL, 90.0 - kn,          rr.knee);
 

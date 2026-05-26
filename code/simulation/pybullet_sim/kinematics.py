@@ -34,8 +34,8 @@ from typing import Callable, Dict, Tuple
 
 import yaml
 
-from constants import CONFIG_YAML, FUSION_JSON, MESH_DIR, STANCE_DEG, URDF_PATH
-from helpers import (
+from .constants import CONFIG_YAML, FUSION_JSON, MESH_DIR, STANCE_DEG, URDF_PATH
+from .helpers import (
     _clamp,
     _wrap_pi,
     _foot_tip_from_fusion,
@@ -236,7 +236,7 @@ def _stance_for(leg_id, legs_cfg):
     """Resolve the per-leg standing stance {shoulder/hip/knee} dict.
     Shoulder comes from the yaml's `shoulder_neutral_deg`; hip/knee are
     shared across all legs via STANCE_DEG."""
-    entry = next(l for l in legs_cfg if l["id"] == leg_id)
+    entry = next(lg for lg in legs_cfg if lg["id"] == leg_id)
     shoulder_deg = entry.get("shoulder_neutral_deg", 0.0)
     return {
         "shoulder": shoulder_deg,

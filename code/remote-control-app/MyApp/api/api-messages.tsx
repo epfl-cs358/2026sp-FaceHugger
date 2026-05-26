@@ -19,3 +19,9 @@ export const CrabGaitPacket = {T: 5, g: GaitMode.CRAB} as GaitIntegration;
 
 //Action packets
 export const InvertRobotPacket = {T: 6, a: ActionTypes.INVERT_ROBOT} as ActionPacket;
+
+export const requestClipList = () =>
+    sendCommand(JSON.stringify({ T: 8 }));
+
+export const playClip = (id: number) =>
+    sendCommand(JSON.stringify({ T: 7, c: id }));

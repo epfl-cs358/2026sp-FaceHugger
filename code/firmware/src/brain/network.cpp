@@ -6,6 +6,8 @@
 #include "shared/config.h"
 #include "../nervous_system/spinal_cord.h"
 #include "../nervous_system/movements.h"
+#include "clip_list_serializer.h"
+#include "../nervous_system/clips_all.h"
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 extern SpinalCord spinalCord;
@@ -49,7 +51,7 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t leng
 
         case WStype_TEXT:
             Serial.printf("[%u] 📩 Received Text: %s\n", num, payload);
-            handleParsedMessage(payload);
+            handleParsedMessage(num, payload);
             break;
 
         case WStype_ERROR:
@@ -62,7 +64,7 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t leng
     }
 }
 
-void handleParsedMessage(uint8_t * payload) {
+void handleParsedMessage(uint8_t num, uint8_t * payload) {
     JsonDocument doc; // ArduinoJson 7 syntax
     DeserializationError error = deserializeJson(doc, payload);
 
@@ -144,6 +146,14 @@ void handleParsedMessage(uint8_t * payload) {
             }
             break;
         }
+        case CMD_SET_INVERT: {
+            if (!doc["inverted"].is<bool>()) {
+                Serial.println("[WARN] T:9 ignored: 'inverted' key missing or not bool");
+                break;
+            }
+            spinalCord.setInverted(doc["inverted"].as<bool>());
+            break;
+        }
         case CMD_PLAY_CLIP: {
             if (doc["c"].is<int>()) {
                 int c = doc["c"];
@@ -151,6 +161,12 @@ void handleParsedMessage(uint8_t * payload) {
                     spinalCord.playClip((uint8_t)c);
                 }
             }
+            break;
+        }
+        case CMD_LIST_CLIPS: {
+            char buf[512];
+            buildClipListJson(FH_CLIPS, FH_CLIP_COUNT, buf, sizeof(buf));
+            webSocket.sendTXT(num, buf);
             break;
         }
         case CMD_TELEMETRY: { //this is the robot that sends it

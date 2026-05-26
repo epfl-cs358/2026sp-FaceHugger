@@ -44,7 +44,12 @@ ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn) {
             out.knee  = 90.0 - kn;
             break;
         case 2:  // LEG_RR / BR
-            out.hip   = 90.0 - (sh + 45.0);
+            // BR shoulder un-mirrored (2026-05-25): identical motor, yaw shaft
+            // on the same vertical axis as the others, so +sh = CCW = +servo for
+            // every leg. tickYawRotation YAW_COEF[BR] and tickGait fwdDir[BR] are
+            // flipped in tandem so gait servo output is unchanged. See
+            // docs/.work/convention-docs/DRAFT-delta-conventions.md §3.
+            out.hip   = 90.0 + (sh + 45.0);  // was 90.0 - (sh + 45.0)
             out.thigh = 90.0 + th;
             out.knee  = 90.0 - kn;
             break;

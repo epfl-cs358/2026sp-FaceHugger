@@ -1777,14 +1777,23 @@ def main():
     if text_name in bpy.data.texts:
         bpy.data.texts.remove(bpy.data.texts[text_name])
     startup_text = bpy.data.texts.new(text_name)
+    # Resilient loader: the .blend may be opened from anywhere, fh_clip_panel.py
+    # has lived in both animation/addons/ and animation/scripts/, and
+    # bpy.data.filepath can be empty mid-load. Try every candidate dir and never
+    # raise — a failure must not spew a traceback or abort a --python run that
+    # follows (e.g. a rig rebuild). It just means the panel isn't auto-registered.
     startup_text.write(
         "import os, sys, bpy\n"
-        "blend_dir = os.path.dirname(bpy.data.filepath)\n"
-        'addon_path = os.path.join(blend_dir, "addons")\n'
-        "if addon_path not in sys.path:\n"
-        "    sys.path.insert(0, addon_path)\n"
-        "import fh_clip_panel\n"
-        "fh_clip_panel.register()\n"
+        "try:\n"
+        "    blend_dir = os.path.dirname(bpy.data.filepath)\n"
+        '    for _sub in ("addons", "scripts"):\n'
+        "        _p = os.path.join(blend_dir, _sub)\n"
+        "        if blend_dir and _p not in sys.path:\n"
+        "            sys.path.insert(0, _p)\n"
+        "    import fh_clip_panel\n"
+        "    fh_clip_panel.register()\n"
+        "except Exception as _e:\n"
+        '    print(f"[fh_startup] FH Clips panel not auto-registered: {_e}")\n'
     )
     startup_text.use_module = True  # "Register" checkbox → runs on file load
     print(

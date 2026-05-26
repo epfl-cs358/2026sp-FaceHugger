@@ -1,0 +1,5 @@
+# Compiled SIL module + CMake build tree — rebuilt locally / in CI, never committed.
+build/
+*.so
+*.dylib
+__pycache__/

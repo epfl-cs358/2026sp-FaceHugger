@@ -18,7 +18,10 @@ void Servo::setServoAngle(double angle){
     // the servo past MIN/MAX_PULSE. constrain here protects them all at one chokepoint.
     double clamped = constrain(angle, 0.0, 180.0);
     if (clamped != angle) {
-        Serial.printf("[WARN] servo %d clamped: %.1f -> %.1f\n", this->pcaChannel, angle, clamped);
+        // Out-of-range request (e.g. a direct calibrate). Same [OOR] line as the
+        // gait/clip guard in Leg::setJointAngles so one report format covers all
+        // paths (serial monitor on hardware; captured by the sim).
+        Serial.printf("[OOR] servo %d requested %.2f\n", this->pcaChannel, angle);
     }
     uint16_t pulse = map(clamped, 0, 180, MIN_PULSE, MAX_PULSE);
     pwm.setPWM(this->pcaChannel, 0, pulse);

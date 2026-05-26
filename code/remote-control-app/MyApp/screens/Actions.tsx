@@ -2,6 +2,7 @@ import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { IndividualSelectionButton } from "../components/IndividualSelectionButton/IndividualSelectionButton";
 import { AppText } from "../components/text/AppText";
+import { ClipList } from "../components/ClipList";
 import { sendCommand } from "../services/socket";
 import { InvertRobotPacket } from "../api/api-messages";
 
@@ -32,6 +33,7 @@ export function Actions() {
                     </View>
                 )}
             </View>
+            <ClipList />
         </View>
     );
 }

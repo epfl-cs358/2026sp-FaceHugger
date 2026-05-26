@@ -72,4 +72,18 @@ export type SystemStatus = PacketType & { //T10
     g: number, //current gait mode of the robot
     pc: number, //current percentage of the movement gait accomplished
     e: string //error message
-} 
+}
+
+export type ClipInfo = {
+    id: number;
+    name: string;
+    ms: number;
+};
+
+export type ClipListResponse = {
+    clips: ClipInfo[];
+};
+
+export type PlayClipPacket = PacketType & {
+    c: number;
+};

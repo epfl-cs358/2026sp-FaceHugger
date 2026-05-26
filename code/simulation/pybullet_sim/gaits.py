@@ -7,14 +7,22 @@ import time
 import pybullet as p
 import pybullet_data
 
-from constants import TIMESTEP
-from helpers import (
+from .constants import TIMESTEP
+from .helpers import (
     _wrap_pi,
     apply_joint_targets,
     apply_leg_pose,
     build_joint_map,
     reset_to_stance,
 )
+
+# --------------------------------------------------------------------------- #
+# Physics realism (applied in _connect_and_setup)
+# --------------------------------------------------------------------------- #
+BODY_MASS_KG = 0.8  # body link total incl. electronics (ESP32, PCA9685, battery)
+FOOT_LATERAL_FRICTION = 1.2  # feet grip the floor during planted-feet moves
+FOOT_SPINNING_FRICTION = 0.05  # resist the foot pivoting in place
+SOLVER_ITERATIONS = 150  # stiffer, less-jittery contact resolution
 
 
 # --------------------------------------------------------------------------- #
@@ -206,7 +214,71 @@ def _settle(robot_id, joint_map, cfg, duration_s):
         p.stepSimulation()
 
 
-def _connect_and_setup(cfg, gui):
+def _make_step_monitor(robot_id, joint_map, every=30, logger=None):
+    """Return an on_step(i) callback for the sim loops.
+
+    --monitor: prints a torque + estimated-current status line every `every`
+    sim steps (~8 Hz at 240 Hz) — per-leg angles, peak joint torque, total
+    estimated current ([WARN >10A]) and any stalling joint ([STALL]).
+
+    --log: if `logger` (a sim_monitor.SimLogger) is given, records every step
+    (not just every `every`) for the end-of-run summary/CSV/plot. Reads torques
+    once per step and shares them with the periodic print. See sim_monitor.py.
+    """
+    from . import sim_monitor
+
+    def on_step(i):
+        do_print = i % every == 0
+        if logger is None and not do_print:
+            return
+        torques = sim_monitor.read_joint_torques(robot_id, joint_map)
+        if logger is not None:
+            logger.record(i * TIMESTEP, torques)
+        if do_print:
+            pos = sim_monitor.read_joint_pos_deg(robot_id, joint_map)
+            print(sim_monitor.format_status(i * TIMESTEP, torques, pos))
+
+    return on_step
+
+
+def setup_step_hook(robot_id, joint_map, monitor, log):
+    """Build the (on_step, logger) pair shared by the run_* loops.
+
+    Returns (None, None) when neither --monitor nor --log is set. When --log,
+    the SimLogger is returned too so the caller can _finalize_log() it after
+    the loop. See _make_step_monitor / sim_monitor.SimLogger.
+    """
+    if not (monitor or log):
+        return None, None
+    from . import sim_monitor
+
+    logger = sim_monitor.SimLogger(list(joint_map.keys())) if log else None
+    on_step = _make_step_monitor(robot_id, joint_map, logger=logger)
+    return on_step, logger
+
+
+def _finalize_log(logger):
+    """End-of-run output for --log: summary table, CSV, and 3-panel plot.
+
+    Called from each run_* finally block so it runs even on Ctrl+C / p.error.
+    No-op when logging is disabled.
+    """
+    if logger is None:
+        return
+    logger.summary()
+    logger.save_csv("sim_log.csv")
+    logger.plot("sim_log.png")
+
+
+def _connect_and_setup(cfg, gui, float_mode=False):
+    """Connect PyBullet and load the plane + robot.
+
+    float_mode=True: no gravity, no floor, and the body is pinned in the air
+    (useFixedBase). Use it to watch a clip's pure joint geometry — each leg
+    articulates exactly as authored, with no falling/slipping/collapse from
+    physics. (Normal mode loads the ground plane, real gravity, and a free
+    floating base so you see dynamic balance.)
+    """
     p.connect(p.GUI if gui else p.DIRECT)
     if gui:
         p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
@@ -215,15 +287,19 @@ def _connect_and_setup(cfg, gui):
         p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 0)
         p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
-    p.setGravity(0, 0, -9.81)
+    p.setGravity(0, 0, 0 if float_mode else -9.81)
     p.setTimeStep(TIMESTEP)
-    p.loadURDF("plane.urdf")
+    # More solver iterations -> stiffer, less-jittery contacts (helps planted-feet
+    # moves resolve cleanly). Harmless in float mode (no contacts).
+    p.setPhysicsEngineParameter(numSolverIterations=SOLVER_ITERATIONS)
+    if not float_mode:
+        p.loadURDF("plane.urdf")
 
     robot_id = p.loadURDF(
         cfg.urdf_path,
         basePosition=[0, 0, cfg.body_height + 0.02],
         baseOrientation=p.getQuaternionFromEuler([0, 0, 0]),
-        useFixedBase=False,
+        useFixedBase=float_mode,
     )
     joint_map = build_joint_map(robot_id)
     # stance_rad is already per-leg; reset + motor-command from the same dict.
@@ -232,10 +308,25 @@ def _connect_and_setup(cfg, gui):
         robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity
     )
 
-    # Friction on the distal link (knee joint's child = lower leg).
+    # Body mass: the URDF base is the bare frame; add the electronics (ESP32,
+    # PCA9685, battery) so the body weighs a realistic ~BODY_MASS_KG total, which
+    # changes how the legs must support/balance it. (-1 = base link.)
+    p.changeDynamics(robot_id, -1, mass=BODY_MASS_KG)
+
+    # Foot contact (link3 = the knee joint's child = lower leg/foot). NB: joint_map
+    # keys are URDF joint names (`*_link3_joint`) — they contain "link3", not
+    # "knee"; the old "knee" match never fired, so feet sat at PyBullet's default
+    # 0.5 friction and slipped during planted-feet moves. Grip + a little spin
+    # resistance so the feet hold; no bounce.
     for name, idx in joint_map.items():
-        if "knee" in name:
-            p.changeDynamics(robot_id, idx, lateralFriction=1.0, restitution=0.1)
+        if "link3" in name:
+            p.changeDynamics(
+                robot_id,
+                idx,
+                lateralFriction=FOOT_LATERAL_FRICTION,
+                spinningFriction=FOOT_SPINNING_FRICTION,
+                restitution=0.0,
+            )
 
     if gui:
         p.resetDebugVisualizerCamera(
@@ -281,26 +372,154 @@ def _print_banner(cfg):
         )
 
 
-def run_stand(cfg, gui=True, settle_s=0.5):
-    robot_id, joint_map = _connect_and_setup(cfg, gui)
+def run_stand(cfg, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False):
+    robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
     _print_banner(cfg)
-    if settle_s > 0:
+    if float_mode:
+        print("[float] no gravity/floor, body pinned — showing the stance pose")
+    elif settle_s > 0:
         print(f"\n[settle] holding stance for {settle_s:.2f}s before idle loop")
         _settle(robot_id, joint_map, cfg, settle_s)
     print("\nStanding - Ctrl+C to exit.")
+    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
+    step = 0
     try:
         while p.isConnected():
             p.stepSimulation()
+            if on_step is not None:
+                on_step(step)
             if gui:
                 time.sleep(TIMESTEP)
+            step += 1
     except (KeyboardInterrupt, p.error):
         pass
     finally:
         if p.isConnected():
             p.disconnect()
+        _finalize_log(logger)
 
 
-def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
+def run_clip(
+    cfg,
+    clip_name,
+    gui=True,
+    settle_s=0.5,
+    loop=False,
+    float_mode=False,
+    monitor=False,
+    log=False,
+    python_port=False,
+):
+    """Load and play an animation clip by name in PyBullet.
+
+    By DEFAULT the joints are driven by the EXACT firmware code compiled to the
+    host (firmware_sil) — i.e. what the robot would actually command — and the
+    fh_sim module is auto-rebuilt if firmware sources changed. This requires a
+    C++ toolchain; if it is unavailable the run errors (use --python instead).
+
+    python_port=True instead uses the Python re-port (firmware_port.ClipPlayer),
+    which needs no toolchain. The re-port reads animation/exported_clips/
+    clips_all.h; the firmware (default) reads the firmware's own clips_all.h.
+    loop=True (GUI, re-port only) replays continuously; float_mode pins the body;
+    monitor/log add the torque/current readout + capture.
+    """
+    if not python_port:
+        return _run_clip_sil(
+            cfg,
+            clip_name,
+            gui=gui,
+            settle_s=settle_s,
+            float_mode=float_mode,
+            monitor=monitor,
+            log=log,
+        )
+
+    from firmware_port.clip_loader import (
+        DEFAULT_CLIPS_H,
+        get_clip_by_name,
+        load_clips_all_h,
+    )
+    from firmware_port.clip_player import ClipPlayer
+
+    clips = load_clips_all_h(DEFAULT_CLIPS_H)
+    clip = get_clip_by_name(clips, clip_name)
+
+    robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
+    _print_banner(cfg)
+    if float_mode:
+        print("[float] no gravity/floor, body pinned — showing joint geometry")
+    elif settle_s > 0:
+        print(f"\n[settle] holding stance for {settle_s:.2f}s before clip")
+        _settle(robot_id, joint_map, cfg, settle_s)
+
+    loop_note = " (looping)" if loop and gui else ""
+    mon_note = "  [monitor: torque/current]" if monitor else ""
+    print(
+        f"\n[clip] playing '{clip.name}' ({clip.duration_ms} ms){loop_note}{mon_note}"
+    )
+    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
+    player = ClipPlayer(robot_id, joint_map, clip, cfg.servo_force, cfg.servo_velocity)
+    try:
+        player.play_blocking(gui=gui, loop=loop, on_step=on_step)
+    except (KeyboardInterrupt, p.error):
+        pass
+    finally:
+        if p.isConnected():
+            p.disconnect()
+        _finalize_log(logger)
+
+
+def _run_clip_sil(
+    cfg, clip_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
+):
+    """Play a clip through the compiled firmware (software-in-the-loop)."""
+    from firmware_sil.sil_bridge import FirmwareSILDriver
+
+    try:
+        driver = FirmwareSILDriver()  # auto-builds fh_sim if stale/missing
+    except ImportError as e:
+        raise SystemExit(
+            f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
+            "play clips with the Python re-port instead:\n"
+            f"  python facehugger.py sim --clip {clip_name!r} --python"
+        ) from e
+    if clip_name not in driver.clip_names():
+        raise KeyError(
+            f"clip {clip_name!r} not in firmware clips {driver.clip_names()}"
+        )
+
+    robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
+    _print_banner(cfg)
+    if float_mode:
+        print("[float] no gravity/floor, body pinned — showing joint geometry")
+    elif settle_s > 0:
+        print(f"\n[settle] holding stance for {settle_s:.2f}s before clip")
+        _settle(robot_id, joint_map, cfg, settle_s)
+
+    mon_note = "  [monitor: torque/current]" if monitor else ""
+    print(f"\n[clip][SIL] playing '{clip_name}' via exact firmware code{mon_note}")
+    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
+    try:
+        driver.play_clip_blocking(
+            robot_id,
+            joint_map,
+            clip_name,
+            cfg.servo_force,
+            cfg.servo_velocity,
+            gui=gui,
+            on_step=on_step,
+        )
+    except (KeyboardInterrupt, p.error):
+        pass
+    finally:
+        if p.isConnected():
+            p.disconnect()
+        _finalize_log(logger)
+
+
+def run_gait(
+    cfg, gait_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
+):
     if gait_name not in GAITS:
         raise ValueError(f"Unknown gait: {gait_name}")
     gait = GAITS[gait_name]
@@ -316,9 +535,11 @@ def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
         )
         cfg.body_height = gait_depth_m
 
-    robot_id, joint_map = _connect_and_setup(cfg, gui)
+    robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
     _print_banner(cfg)
-    if settle_s > 0:
+    if float_mode:
+        print("[float] no gravity/floor, body pinned")
+    elif settle_s > 0:
         print(f"\n[settle] holding stance for {settle_s:.2f}s before gait")
         _settle(robot_id, joint_map, cfg, settle_s)
     print(
@@ -331,6 +552,7 @@ def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
     cycles = _precompute_cycle(cfg, gait) if draw_overlay else None
     draw_every = 4
 
+    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
     t = 0.0
     step = 0
     try:
@@ -356,6 +578,8 @@ def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
                 _draw_overlay(robot_id, cycles, cur_targets)
 
             p.stepSimulation()
+            if on_step is not None:
+                on_step(step)
             if gui:
                 time.sleep(TIMESTEP)
             t += TIMESTEP
@@ -365,3 +589,4 @@ def run_gait(cfg, gait_name, gui=True, settle_s=0.5):
     finally:
         if p.isConnected():
             p.disconnect()
+        _finalize_log(logger)
