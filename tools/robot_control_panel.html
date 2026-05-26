@@ -35,7 +35,11 @@
   button:disabled{opacity:.4;cursor:not-allowed}
   .dot{width:10px;height:10px;border-radius:50%;background:var(--red);display:inline-block}
   .dot.on{background:var(--green)}
-  .wrap{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:22px 24px;max-width:1200px}
+  .page{display:flex;gap:18px;padding:22px 24px;max-width:1500px;align-items:flex-start}
+  .wrap{flex:1;min-width:0;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .rail{width:470px;flex-shrink:0;position:sticky;top:18px}
+  .rail .card{margin:0;max-height:calc(100vh - 36px);overflow:auto}
+  @media(max-width:1100px){.page{flex-direction:column}.rail{position:static;width:auto}}
   @media(max-width:860px){.wrap{grid-template-columns:1fr}}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
   .card h2{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);margin:0 0 12px}
@@ -46,7 +50,6 @@
   #log{background:#0b0d12;border:1px solid var(--line);border-radius:10px;padding:12px;height:300px;overflow:auto;font-family:var(--mono);font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
   .log-tx{color:var(--amber)} .log-rx{color:var(--green)} .log-sys{color:var(--faint)} .log-err{color:var(--red)}
   .hint{font-size:11px;color:var(--faint);margin-top:6px}
-  .telemwide{grid-column:1/-1}
   table.telem{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
   table.telem th,table.telem td{padding:4px 7px;text-align:right;border-bottom:1px solid var(--line)}
   table.telem th{color:var(--faint);font-weight:600}
@@ -69,6 +72,7 @@
   </div>
 </header>
 
+<div class="page">
 <div class="wrap">
   <!-- Clips -->
   <div class="card">
@@ -151,14 +155,22 @@
     <div id="telem" class="hint">no telemetry yet — connect to a target that broadcasts it</div>
   </div>
 
-  <!-- Sim telemetry (SSE, local only) -->
-  <div class="card telemwide">
-    <h2>Sim telemetry (local only) — SSE :8082</h2>
+  <!-- Log -->
+  <div class="card log">
+    <h2>Wire log <button id="clearBtn" style="float:right;padding:3px 8px">clear</button></h2>
+    <div id="log"></div>
+  </div>
+</div><!-- /wrap -->
+
+<!-- All-leg state: sticky right rail -->
+<aside class="rail">
+  <div class="card">
+    <h2>All-leg state — sim telemetry (SSE :8082)</h2>
     <div class="row">
-      <input id="sseUrl" class="url" style="width:300px" value="http://localhost:8082/telemetry" spellcheck="false">
+      <input id="sseUrl" class="url" style="width:230px" value="http://localhost:8082/telemetry" spellcheck="false">
       <button id="sseBtn">Start stream</button>
-      <span id="sseBanner" class="banner stale">not started</span>
     </div>
+    <div class="row"><span id="sseBanner" class="banner stale">not started</span></div>
     <table class="telem">
       <thead><tr>
         <th class="name">Joint</th><th>Cmd servo°</th><th>Cmd joint°</th>
@@ -166,18 +178,13 @@
       </tr></thead>
       <tbody id="telemBody"></tbody>
     </table>
-    <div class="hint">Cmd servo° = what the real servos receive (0–180, 90 = neutral). Cmd joint° = the
-      same command in URDF-joint space (0 = neutral), directly comparable to Actual; Δ is the tracking error
-      (red if |Δ|&gt;5°). τ colours green/amber/red at 30%/70% of stall (2.94 N·m). Clamp shows the firmware's
-      pre-clamp request when a servo was driven out of [0,180]. Served only by the sim (<code>facehugger.py serve</code>), not the robot.</div>
+    <div class="hint">All 12 joints (4 legs × sh/hip/knee). Cmd servo° = what the real servos
+      receive (0–180, 90 = neutral); Cmd joint° = same in URDF space (0 = neutral), comparable to Actual; Δ is
+      tracking error (red if |Δ|&gt;5°). τ green/amber/red at 30/70% of stall (2.94 N·m). Clamp = firmware
+      pre-clamp request when driven out of [0,180]. Sim-only (<code>facehugger.py serve</code>).</div>
   </div>
-
-  <!-- Log -->
-  <div class="card log">
-    <h2>Wire log <button id="clearBtn" style="float:right;padding:3px 8px">clear</button></h2>
-    <div id="log"></div>
-  </div>
-</div>
+</aside>
+</div><!-- /page -->
 
 <script>
   let ws = null;
