@@ -7,8 +7,8 @@ import time
 import pybullet as p
 import pybullet_data
 
-from constants import TIMESTEP
-from helpers import (
+from .constants import TIMESTEP
+from .helpers import (
     _wrap_pi,
     apply_joint_targets,
     apply_leg_pose,
@@ -225,7 +225,7 @@ def _make_step_monitor(robot_id, joint_map, every=30, logger=None):
     (not just every `every`) for the end-of-run summary/CSV/plot. Reads torques
     once per step and shares them with the periodic print. See sim_monitor.py.
     """
-    import sim_monitor
+    from . import sim_monitor
 
     def on_step(i):
         do_print = i % every == 0
@@ -250,7 +250,7 @@ def setup_step_hook(robot_id, joint_map, monitor, log):
     """
     if not (monitor or log):
         return None, None
-    import sim_monitor
+    from . import sim_monitor
 
     logger = sim_monitor.SimLogger(list(joint_map.keys())) if log else None
     on_step = _make_step_monitor(robot_id, joint_map, logger=logger)
@@ -419,12 +419,12 @@ def run_clip(
     joint geometry without the robot falling (skips the settle step).
     monitor=True: print a torque + estimated-current status line periodically.
     """
-    from pybullet_interpreter.clip_loader import (
+    from .interpreter.clip_loader import (
         DEFAULT_CLIPS_H,
         get_clip_by_name,
         load_clips_all_h,
     )
-    from pybullet_interpreter.clip_player import ClipPlayer
+    from .interpreter.clip_player import ClipPlayer
 
     clips = load_clips_all_h(DEFAULT_CLIPS_H)
     clip = get_clip_by_name(clips, clip_name)

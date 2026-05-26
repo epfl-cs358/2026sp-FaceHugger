@@ -33,8 +33,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent.parent
 
-GENERATE_URDF = HERE / "generate_urdf.py"
-SIMULATE = HERE / "simulate.py"
+# Runtime + build steps are packages now; invoked as `python -m <pkg>.<mod>`
+# with cwd=HERE (see _run) so pybullet_sim / urdf_gen are importable.
+GENERATE_URDF = ["-m", "urdf_gen.generate_urdf"]
+SIMULATE = ["-m", "pybullet_sim.simulate"]
 VISUALIZE = REPO_ROOT / "animation" / "scripts" / "visualize_urdf.py"
 VISUALIZE_RIGGED = REPO_ROOT / "animation" / "scripts" / "urdf_to_blender_rigged.py"
 
@@ -104,7 +106,7 @@ def _run(cmd, cwd=HERE):
 
 
 def cmd_urdf(args):
-    cli = [sys.executable, GENERATE_URDF]
+    cli = [sys.executable, *GENERATE_URDF]
     if args.export:
         cli += ["--export", args.export]
     if args.config:
@@ -115,7 +117,7 @@ def cmd_urdf(args):
 
 
 def cmd_sim(args):
-    cli = [sys.executable, SIMULATE]
+    cli = [sys.executable, *SIMULATE]
     if args.clip:
         cli += ["--clip", args.clip]
     if args.loop:

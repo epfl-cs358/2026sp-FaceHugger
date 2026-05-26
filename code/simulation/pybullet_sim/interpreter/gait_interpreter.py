@@ -1,4 +1,4 @@
-# code/simulation/pybullet_interpreter/gait_interpreter.py
+# code/simulation/pybullet_sim/interpreter/gait_interpreter.py
 """Mirrors firmware SpinalCord::tickGait in Python.
 
 Not yet implemented — stub only. See doc/animation-pipeline/ for the

@@ -1,4 +1,4 @@
-# code/simulation/pybullet_interpreter/servo_convention.py
+# code/simulation/pybullet_sim/interpreter/servo_convention.py
 """Firmware servo convention ported to Python.
 
 All functions mirror the firmware exactly. Use these as the single

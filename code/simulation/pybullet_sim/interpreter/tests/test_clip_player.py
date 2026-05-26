@@ -1,4 +1,4 @@
-# code/simulation/pybullet_interpreter/tests/test_clip_player.py
+# code/simulation/pybullet_sim/interpreter/tests/test_clip_player.py
 """Tests for clip_player.py — pure-math tests only (no PyBullet needed).
 
 Tests verify:
@@ -12,15 +12,18 @@ import sys
 from pathlib import Path
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from pybullet_interpreter.clip_loader import (
+from pybullet_sim.interpreter.clip_loader import (
     DEFAULT_CLIPS_H,
     get_clip_by_name,
     load_clips_all_h,
 )
-from pybullet_interpreter.clip_player import _interpolate_frame, frame_to_joint_targets
-from pybullet_interpreter.servo_convention import (
+from pybullet_sim.interpreter.clip_player import (
+    _interpolate_frame,
+    frame_to_joint_targets,
+)
+from pybullet_sim.interpreter.servo_convention import (
     LEG_FR,
     NEUTRAL,
     servo_to_radians,
@@ -118,7 +121,7 @@ def test_neutral_all_knees_negative():
 
 
 def _make_frames(timestamps_and_angles):
-    from pybullet_interpreter.clip_loader import ClipFrame
+    from pybullet_sim.interpreter.clip_loader import ClipFrame
 
     return [ClipFrame(t_ms=t, a=a) for t, a in timestamps_and_angles]
 

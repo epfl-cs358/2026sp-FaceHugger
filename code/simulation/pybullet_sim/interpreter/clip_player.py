@@ -1,4 +1,4 @@
-# code/simulation/pybullet_interpreter/clip_player.py
+# code/simulation/pybullet_sim/interpreter/clip_player.py
 """Drives PyBullet joints from animation clip data.
 
 The pipeline for each frame:

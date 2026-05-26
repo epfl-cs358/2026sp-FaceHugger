@@ -1,4 +1,4 @@
-# code/simulation/pybullet_interpreter/tests/test_servo_convention.py
+# code/simulation/pybullet_sim/interpreter/tests/test_servo_convention.py
 """Parity tests: assert servo_convention matches firmware translateToServo.
 
 Structure mirrors animation/scripts/test_servo_parity.py.
@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from pybullet_interpreter.servo_convention import (
+from pybullet_sim.interpreter.servo_convention import (
     LEG_FL,
     LEG_FR,
     LEG_RL,

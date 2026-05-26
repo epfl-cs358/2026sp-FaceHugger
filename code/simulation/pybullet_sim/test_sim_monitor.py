@@ -1,11 +1,6 @@
 """Unit tests for sim_monitor pure helpers (no PyBullet)."""
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-import sim_monitor as m
+from pybullet_sim import sim_monitor as m
 
 
 def test_estimate_current_at_stall_is_stall_current():

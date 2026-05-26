@@ -1,4 +1,4 @@
-# code/simulation/pybullet_interpreter/tests/test_clip_loader.py
+# code/simulation/pybullet_sim/interpreter/tests/test_clip_loader.py
 """Tests for clip_loader.py.
 
 Uses the real animation/exported_clips/clips_all.h as test fixture —
@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from pybullet_interpreter.clip_loader import (
+from pybullet_sim.interpreter.clip_loader import (
     DEFAULT_CLIPS_H,
     get_clip_by_name,
     load_clips_all_h,

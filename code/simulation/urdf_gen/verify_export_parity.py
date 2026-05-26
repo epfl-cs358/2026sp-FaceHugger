@@ -35,13 +35,14 @@ import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# urdf_gen/ → code/simulation/ (so pybullet_sim is importable when run by path)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pybullet_interpreter.clip_loader import (  # noqa: E402
+from pybullet_sim.interpreter.clip_loader import (  # noqa: E402
     DEFAULT_CLIPS_H,
     load_clips_all_h,
 )
-from pybullet_interpreter.servo_convention import (  # noqa: E402
+from pybullet_sim.interpreter.servo_convention import (  # noqa: E402
     LEG_FL,
     LEG_FR,
     LEG_RL,

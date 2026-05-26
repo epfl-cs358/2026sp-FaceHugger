@@ -34,8 +34,8 @@ from typing import Callable, Dict, Tuple
 
 import yaml
 
-from constants import CONFIG_YAML, FUSION_JSON, MESH_DIR, STANCE_DEG, URDF_PATH
-from helpers import (
+from .constants import CONFIG_YAML, FUSION_JSON, MESH_DIR, STANCE_DEG, URDF_PATH
+from .helpers import (
     _clamp,
     _wrap_pi,
     _foot_tip_from_fusion,
