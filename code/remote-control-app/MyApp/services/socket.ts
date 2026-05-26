@@ -5,6 +5,16 @@ export let ws: WebSocket | null = null;
 // Packets queued while the socket is still CONNECTING. Flushed on open.
 const pendingQueue: string[] = [];
 
+// Only these command types are held while offline and replayed on connect:
+// 2 = FSM state, 5 = gait mode (latching settings). Real-time movement (T:1) and
+// one-shot actions like invert (T:6) are dropped while disconnected — replaying a
+// burst of stale moves/inverts the moment the robot connects would make it lurch.
+const QUEUEABLE_TYPES = new Set<number>([2, 5]);
+
+const cmdType = (cmd: string): number | undefined => {
+  try { return JSON.parse(cmd)?.T; } catch { return undefined; }
+};
+
 const flushPending = () => {
   if (ws?.readyState !== WebSocket.OPEN) return;
   while (pendingQueue.length > 0) {
@@ -39,9 +49,19 @@ export const sendCommand = (cmd: string) => {
     ws.send(cmd);
     return;
   }
-  // Queue if not open yet — covers both "ws not created yet" (child useEffect
-  // fired before connect()) and "still CONNECTING". Flushed on onopen.
+  // Not open yet (ws not created, or still CONNECTING). Only hold latching
+  // settings (state/gait); drop real-time moves/actions so they can't flood the
+  // robot on connect.
   if (!ws || ws.readyState === WebSocket.CONNECTING) {
+    const type = cmdType(cmd);
+    if (type === undefined || !QUEUEABLE_TYPES.has(type)) {
+      if (DEBUGGING) console.log('[TX-dropped-offline]', cmd);
+      return;
+    }
+    // Keep only the latest packet of each queued type (no duplicate state/gait).
+    for (let i = pendingQueue.length - 1; i >= 0; i--) {
+      if (cmdType(pendingQueue[i]) === type) pendingQueue.splice(i, 1);
+    }
     if (DEBUGGING) console.log('[TX-queued]', cmd);
     pendingQueue.push(cmd);
     return;
