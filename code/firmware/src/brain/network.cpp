@@ -146,6 +146,14 @@ void handleParsedMessage(uint8_t num, uint8_t * payload) {
             }
             break;
         }
+        case CMD_SET_INVERT: {
+            if (!doc["inverted"].is<bool>()) {
+                Serial.println("[WARN] T:9 ignored: 'inverted' key missing or not bool");
+                break;
+            }
+            spinalCord.setInverted(doc["inverted"].as<bool>());
+            break;
+        }
         case CMD_PLAY_CLIP: {
             if (doc["c"].is<int>()) {
                 int c = doc["c"];

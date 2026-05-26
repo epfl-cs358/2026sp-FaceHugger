@@ -25,6 +25,7 @@ class SpinalCord{
         GaitType currentGait() const;
         void processCommand(String dir);
         void playClip(uint8_t id);
+        void setInverted(bool flag);
 
         // POD bundle of read-only state for the diagnostics CSV logger.
         // Field names match CSV column names (snake_case is intentional).
