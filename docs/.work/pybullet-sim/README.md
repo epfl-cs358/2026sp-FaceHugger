@@ -66,6 +66,20 @@ see `REPORT.md §7`.
   lists these; treat them as deleted.
 - **`clip_player.py` docstring fixed** — it now correctly states link1 gets the
   per-leg axis sign too (REPORT.md §7 item 4 is resolved).
+- **Firmware `[OOR]` pre-clamp detection + SSE sim telemetry added** (on top of
+  Step 3): `Leg::setJointAngles` / `Servo::setServoAngle` now print
+  `[OOR] servo <ch> requested <deg>` *before* clamping to [0,180] — a real bench
+  feature (visible on the serial monitor), captured by the SIL's Serial mock and
+  exposed via `FirmwareControl.drain_serial()` + `servo_channels()`. `serve` also
+  streams a per-joint telemetry frame over **SSE on :8082** (~20 Hz) carrying both
+  the servo-space command (what the robot's servos get) and the same command in
+  URDF-joint degrees, the measured joint angle, a true tracking delta, torque/current,
+  and `pre_clamp_deg`. The control panel renders it (Δ/τ colours, Clamp column, stale
+  banner); `--gui` torque-tints the PyBullet links. SSE is best-effort (WS API runs
+  without `sse-starlette`/`uvicorn`). `sse-starlette`/`uvicorn` added to requirements.
+  Goldens byte-identical (the printf doesn't change servo output). New tests:
+  `test_sil_telemetry.py` (frame schema, drop-stale queue, end-to-end SSE) +
+  clip-suite OOR soft-warn and calibrate-overrange feature lock. 95 tests pass.
 - **SIL Step 3 executed — firmware-backed WebSocket API + control panel:**
   `facehugger.py serve` (`firmware_sil/ws_sim.py`, default :8081) serves the
   API_SPEC `T:` protocol and drives PyBullet via the firmware. The **command

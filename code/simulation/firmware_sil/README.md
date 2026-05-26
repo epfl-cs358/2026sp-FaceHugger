@@ -121,8 +121,37 @@ robot** — point it at `ws://<robot-ip>:81`. The unmodified app can connect too
 Port note: the real robot uses **81** (privileged on macOS/Linux), so the sim
 defaults to **8081**. `--port 81` works with sudo for true parity.
 
+## Sim telemetry (SSE, local debug only)
+
+Alongside the WS API, `serve` streams a per-joint telemetry frame over
+**Server-Sent Events on :8082** (`http://localhost:8082/telemetry`) at ~20 Hz. This
+is sim-only — the real robot doesn't serve it — and it's best-effort: if
+`sse-starlette`/`uvicorn` aren't installed the WS API still runs, telemetry just
+disabled. Each frame is `{t, joints:[12 × {…}]}` in order FL, FR, BL, BR ×
+shoulder/hip/knee, where every joint carries **both** spaces:
+
+- `commanded_servo_deg` — the firmware's 0–180 output (what the real servos receive, 90 = neutral),
+- `commanded_joint_deg` — that same command in URDF-joint degrees (0 = neutral), comparable to actual,
+- `actual_joint_deg` — the measured PyBullet joint angle,
+- `delta_deg` — `commanded_joint − actual` (a true tracking error),
+- `torque_nm` / `current_a` — from PyBullet + `sim_monitor`,
+- `pre_clamp_deg` — the firmware's pre-clamp `[OOR]` request for that servo this tick, else null.
+
+`tools/robot_control_panel.html` renders this in its "Sim telemetry" table (Δ red
+when |Δ|>5°, τ green/amber/red at 30/70 % of stall, a Clamp column from `pre_clamp_deg`,
+and a stale banner when frames stop). With `--gui`, the PyBullet links are also
+torque-tinted every 12th step. The `pre_clamp_deg` value comes from a real firmware
+feature: `Leg::setJointAngles` / `Servo::setServoAngle` print `[OOR] servo <ch>
+requested <deg>` before clamping to [0,180] (visible on the bench serial monitor),
+which the SIL's Serial mock captures.
+
+```bash
+python facehugger.py serve --gui            # ws://localhost:8081 + SSE http://localhost:8082/telemetry
+```
+
 ## Status
 
 Steps 1–3 of `docs/.work/pybullet-sim/EXACT-FIRMWARE-SIL-PLAN.md` done: SIL clip
 playback, the golden-trace suite, the `--python` fallback, and the firmware-backed
-WebSocket API + control panel.
+WebSocket API + control panel. Plus: firmware `[OOR]` pre-clamp warnings (captured by
+the SIL) and the SSE sim-telemetry stream (:8082) + panel table.

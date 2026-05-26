@@ -15,6 +15,7 @@ Build the module first:
 """
 
 import os
+import re
 import subprocess
 import sys
 import time
@@ -165,6 +166,117 @@ def servo_angles_to_joint_targets(angles12):
     return targets
 
 
+# ── out-of-range ([OOR]) capture ──────────────────────────────────────────────
+# The firmware itself prints "[OOR] servo <channel> requested <deg>" from its
+# setJointAngles / setServoAngle guards (visible on hardware too). We parse the
+# lines the firmware emitted; we don't synthesize them.
+_OOR_RE = re.compile(r"\[OOR\] servo (\d+) requested ([-\d.]+)")
+
+
+def parse_oor(lines):
+    """Serial lines -> {pca_channel: requested_deg} (last request per channel)."""
+    out = {}
+    for ln in lines:
+        m = _OOR_RE.search(ln)
+        if m:
+            out[int(m.group(1))] = float(m.group(2))
+    return out
+
+
+def channel_to_joint(fc):
+    """{pca_channel: urdf_joint_name} from the firmware's own channel map."""
+    chans = list(fc.servo_channels())  # firmware order: leg*3 + (0 hip,1 thigh,2 knee)
+    out = {}
+    for leg_id in _LEG_IDS:
+        leg = LEG_ID_TO_SIM_NAME[leg_id]
+        for j, link in enumerate((1, 2, 3)):
+            out[chans[leg_id * 3 + j]] = f"{leg}_link{link}_joint"
+    return out
+
+
+# ── torque-based link coloring (PyBullet visual feedback) ─────────────────────
+def torque_color(torque_nm):
+    """rgba by |torque| vs the servo stall torque: green<30%, yellow 30-70%, red>70%."""
+    from pybullet_sim import sim_monitor
+
+    frac = abs(torque_nm) / sim_monitor.STALL_TORQUE_NM
+    if frac < 0.30:
+        return (0.2, 0.8, 0.2, 1.0)
+    if frac <= 0.70:
+        return (0.9, 0.7, 0.1, 1.0)
+    return (0.9, 0.2, 0.1, 1.0)
+
+
+def apply_torque_colors(p, robot_id, joint_map):
+    """Tint each leg link by its current applied torque (call every ~12 steps)."""
+    for name, idx in joint_map.items():
+        if idx < 0:
+            continue
+        torque = p.getJointState(robot_id, idx)[3]
+        p.changeVisualShape(robot_id, idx, rgbaColor=torque_color(torque))
+
+
+# ── per-step telemetry frame (the control panel's "Sim telemetry" table) ──────
+# Joint order the panel renders: FL, FR, BL, BR x shoulder, hip, knee. Each joint
+# carries BOTH the firmware servo-space command (0-180, what the real servos get)
+# and that same command in URDF-joint degrees, so the delta vs the measured joint
+# angle is a true tracking error rather than a constant ~90 offset between spaces.
+_TELEM_LEGS = ("fl", "fr", "bl", "br")
+_TELEM_JOINTS = (("sh", 1), ("hip", 2), ("knee", 3))  # label -> URDF link number
+_SIM_NAME_TO_LEG_ID = {v: k for k, v in LEG_ID_TO_SIM_NAME.items()}
+
+
+def build_telemetry_frame(fc, p, robot_id, joint_map, t_s, oor=None):
+    """One telemetry frame: {t, joints:[12 x {servo/joint cmd, actual, delta, ...}]}.
+
+    `oor` is the {pca_channel: requested_deg} from parse_oor(fc.drain_serial()) for
+    this tick (the firmware's pre-clamp report); pre_clamp_deg is null where a servo
+    had no [OOR] line. Reads firmware servo angles + channels from `fc`, measured
+    joint state from `p` (any object exposing getJointState).
+    """
+    from math import degrees
+
+    from pybullet_sim import sim_monitor
+
+    oor = oor or {}
+    angles = fc.servo_angles()
+    targets = servo_angles_to_joint_targets(angles)  # urdf joint name -> radians
+    channels = list(fc.servo_channels())
+
+    joints = []
+    for leg in _TELEM_LEGS:
+        leg_id = _SIM_NAME_TO_LEG_ID[leg]
+        for label, link in _TELEM_JOINTS:
+            servo_idx = leg_id * 3 + (link - 1)
+            urdf = f"{leg}_link{link}_joint"
+            commanded_servo = float(angles[servo_idx])
+            commanded_joint = degrees(targets[urdf])
+            idx = joint_map.get(urdf)
+            if idx is not None and idx >= 0:
+                state = p.getJointState(robot_id, idx)
+                actual_joint = degrees(state[0])
+                torque = state[3]
+                delta = commanded_joint - actual_joint
+            else:
+                actual_joint = delta = None
+                torque = 0.0
+            joints.append(
+                {
+                    "name": f"{leg}_{label}",
+                    "commanded_servo_deg": round(commanded_servo, 2),
+                    "commanded_joint_deg": round(commanded_joint, 2),
+                    "actual_joint_deg": None
+                    if actual_joint is None
+                    else round(actual_joint, 2),
+                    "delta_deg": None if delta is None else round(delta, 2),
+                    "torque_nm": round(torque, 4),
+                    "current_a": round(sim_monitor.estimate_current_a(torque), 3),
+                    "pre_clamp_deg": oor.get(channels[servo_idx]),
+                }
+            )
+    return {"t": round(t_s, 4), "joints": joints}
+
+
 def trace_clip(fc, clip_name, record_every=24, step_hz=240):
     """Deterministic servo-angle trace of a clip through the firmware.
 
@@ -253,6 +365,8 @@ class FirmwareSILDriver:
                         maxVelocity=velocity,
                     )
             p.stepSimulation()
+            if step % 12 == 0:  # 240 Hz / 12 = 20 Hz visual update
+                apply_torque_colors(p, robot_id, joint_map)
             if on_step is not None:
                 on_step(step)
             if gui:

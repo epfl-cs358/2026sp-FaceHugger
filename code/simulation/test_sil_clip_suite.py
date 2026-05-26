@@ -68,6 +68,80 @@ def test_clip_angles_in_range(golden_path):
             )
 
 
+def _play_clip_collecting_oor(fc, clip_name, step_hz=240):
+    """Tick a clip end-to-end, draining the firmware's [OOR] serial each tick.
+
+    Returns [(t_ms, {channel: requested_deg}), ...] for every tick that produced an
+    out-of-range request (empty list = the clip stayed in range, the healthy case).
+    """
+    from firmware_sil.sil_bridge import parse_oor
+
+    cid = fc.clip_id_by_name(clip_name)
+    duration_ms = fc.clip_duration_ms(cid)
+    fc.set_clock_ms(0)
+    fc.play_clip(cid)
+    fc.drain_serial()  # clear any boot/begin() lines before we start watching
+    events = []
+    step = 0
+    while True:
+        t_ms = int(step * 1000.0 / step_hz)
+        fc.tick(t_ms)
+        oor = parse_oor(fc.drain_serial())
+        if oor:
+            events.append((t_ms, oor))
+        if t_ms >= duration_ms:
+            break
+        step += 1
+    return events
+
+
+def test_clip_playback_stays_in_servo_range_soft():
+    """Soft guard: warn (don't fail) if any clip drives a servo out of [0,180].
+
+    Driven by the firmware's OWN [OOR] warnings (the same lines printed on the
+    bench serial monitor), captured per tick — finer than the sampled golden
+    check. Healthy clips emit nothing; a regression that pushes a servo past the
+    electrical limit surfaces here as a warning naming the clip/time/joint.
+    """
+    import warnings
+
+    fh = _fh_or_skip()
+    from firmware_sil.sil_bridge import channel_to_joint
+
+    fc = fh.FirmwareControl()
+    ch_to_joint = channel_to_joint(fc)
+    saw_any = False
+    for name in fc.clip_names():
+        for t_ms, oor in _play_clip_collecting_oor(fc, name):
+            saw_any = True
+            for ch, deg in oor.items():
+                joint = ch_to_joint.get(ch, f"servo {ch}")
+                warnings.warn(
+                    f"[OOR] clip {name!r} @ t={t_ms}ms: {joint} requested {deg:.1f}"
+                    " (firmware will clamp to [0,180])",
+                    stacklevel=2,
+                )
+    # The mechanism ran; the invariant we expect today is that nothing was warned.
+    assert saw_any is False, "see warnings above — a clip left the [0,180] range"
+
+
+def test_oor_feature_reports_calibrate_overrange():
+    """Locks the firmware [OOR] feature end-to-end: an over-range calibrate is
+    emitted by the firmware, captured by the HAL serial mock, parsed, and mapped
+    back to the right joint. Guards the warning that powers telemetry pre_clamp."""
+    fh = _fh_or_skip()
+    from firmware_sil.sil_bridge import channel_to_joint, parse_oor
+
+    fc = fh.FirmwareControl()
+    fc.drain_serial()  # clear boot lines
+    # BR (firmware RR=2) knee (servo 2) calibrated past the electrical limit.
+    assert fc.calibrate(2, 2, 200) is True
+    oor = parse_oor(fc.drain_serial())
+    channel = fc.servo_channels()[2 * 3 + 2]
+    assert oor.get(channel) == pytest.approx(200.0)
+    assert channel_to_joint(fc)[channel] == "br_link3_joint"
+
+
 def test_every_firmware_clip_has_a_golden():
     """A newly added firmware clip must ship a golden (no silent gaps in coverage)."""
     fh = _fh_or_skip()

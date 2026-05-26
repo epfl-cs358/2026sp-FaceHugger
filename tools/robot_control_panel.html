@@ -46,6 +46,17 @@
   #log{background:#0b0d12;border:1px solid var(--line);border-radius:10px;padding:12px;height:300px;overflow:auto;font-family:var(--mono);font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
   .log-tx{color:var(--amber)} .log-rx{color:var(--green)} .log-sys{color:var(--faint)} .log-err{color:var(--red)}
   .hint{font-size:11px;color:var(--faint);margin-top:6px}
+  .telemwide{grid-column:1/-1}
+  table.telem{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+  table.telem th,table.telem td{padding:4px 7px;text-align:right;border-bottom:1px solid var(--line)}
+  table.telem th{color:var(--faint);font-weight:600}
+  table.telem td.name{text-align:left;color:var(--dim)}
+  .tg{color:var(--green)} .ty{color:var(--amber)} .tr{color:var(--red)}
+  td.dwarn{background:rgba(239,111,111,.22);color:var(--red)}
+  .clamp{color:var(--amber);font-weight:700}
+  .banner{padding:5px 10px;border-radius:7px;font-size:12px;font-family:var(--mono)}
+  .banner.stale{background:rgba(239,111,111,.16);color:var(--red)}
+  .banner.live{background:rgba(123,216,143,.14);color:var(--green)}
 </style>
 </head>
 <body>
@@ -137,6 +148,27 @@
     <div id="telem" class="hint">no telemetry yet — connect to a target that broadcasts it</div>
   </div>
 
+  <!-- Sim telemetry (SSE, local only) -->
+  <div class="card telemwide">
+    <h2>Sim telemetry (local only) — SSE :8082</h2>
+    <div class="row">
+      <input id="sseUrl" class="url" style="width:300px" value="http://localhost:8082/telemetry" spellcheck="false">
+      <button id="sseBtn">Start stream</button>
+      <span id="sseBanner" class="banner stale">not started</span>
+    </div>
+    <table class="telem">
+      <thead><tr>
+        <th class="name">Joint</th><th>Cmd servo°</th><th>Cmd joint°</th>
+        <th>Actual°</th><th>Δ°</th><th>τ Nm</th><th>I A</th><th>Clamp</th>
+      </tr></thead>
+      <tbody id="telemBody"></tbody>
+    </table>
+    <div class="hint">Cmd servo° = what the real servos receive (0–180, 90 = neutral). Cmd joint° = the
+      same command in URDF-joint space (0 = neutral), directly comparable to Actual; Δ is the tracking error
+      (red if |Δ|&gt;5°). τ colours green/amber/red at 30%/70% of stall (2.94 N·m). Clamp shows the firmware's
+      pre-clamp request when a servo was driven out of [0,180]. Served only by the sim (<code>facehugger.py serve</code>), not the robot.</div>
+  </div>
+
   <!-- Log -->
   <div class="card log">
     <h2>Wire log <button id="clearBtn" style="float:right;padding:3px 8px">clear</button></h2>
@@ -226,6 +258,50 @@
     b.onclick = () => send({T:2, s: parseInt(b.dataset.state,10)}));
   document.querySelectorAll('button[data-dir]').forEach(b =>
     b.onclick = () => send({T:1, dir: b.dataset.dir}));
+
+  // --- Sim telemetry (SSE) — separate from the WS robot API; local debug only ---
+  const STALL_NM = 2.94;  // QYRC DSS-230MG stall; matches sim_monitor.STALL_TORQUE_NM
+  let es = null, staleTimer = null;
+
+  function setBanner(live, msg){
+    const b = $('sseBanner');
+    b.className = 'banner ' + (live ? 'live' : 'stale');
+    b.textContent = msg;
+  }
+  function armStale(){
+    clearTimeout(staleTimer);
+    staleTimer = setTimeout(() => setBanner(false, 'stale — no frames for 1.5 s'), 1500);
+  }
+  function tauClass(t){ const f = Math.abs(t) / STALL_NM; return f < 0.30 ? 'tg' : (f <= 0.70 ? 'ty' : 'tr'); }
+  const fmt = (v, d=1) => (v === null || v === undefined) ? '—' : v.toFixed(d);
+
+  function renderTelem(f){
+    $('telemBody').innerHTML = f.joints.map(j => {
+      const dwarn = (j.delta_deg != null && Math.abs(j.delta_deg) > 5) ? ' class="dwarn"' : '';
+      const clamp = (j.pre_clamp_deg != null) ? `<span class="clamp">${j.pre_clamp_deg.toFixed(0)}°</span>` : '';
+      return `<tr><td class="name">${j.name}</td>`
+        + `<td>${fmt(j.commanded_servo_deg)}</td>`
+        + `<td>${fmt(j.commanded_joint_deg)}</td>`
+        + `<td>${fmt(j.actual_joint_deg)}</td>`
+        + `<td${dwarn}>${fmt(j.delta_deg)}</td>`
+        + `<td class="${tauClass(j.torque_nm)}">${fmt(j.torque_nm, 3)}</td>`
+        + `<td>${fmt(j.current_a, 2)}</td>`
+        + `<td>${clamp}</td></tr>`;
+    }).join('');
+  }
+
+  function sseStart(){
+    if (es){ es.close(); es = null; clearTimeout(staleTimer); $('sseBtn').textContent = 'Start stream'; setBanner(false, 'stopped'); return; }
+    const url = $('sseUrl').value.trim();
+    es = new EventSource(url);
+    $('sseBtn').textContent = 'Stop stream';
+    setBanner(false, 'connecting…');
+    es.onopen = () => setBanner(true, 'live');
+    es.onmessage = ev => { let f; try { f = JSON.parse(ev.data); } catch { return; }
+      setBanner(true, `live · t=${fmt(f.t, 2)} s`); renderTelem(f); armStale(); };
+    es.onerror = () => setBanner(false, 'stale — sim not running? (auto-retrying)');
+  }
+  $('sseBtn').onclick = sseStart;
 
   log('sys','ready — set the target URL and Connect. Sim: ws://localhost:8081 · Robot: ws://<ip>:81');
 </script>

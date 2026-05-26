@@ -22,3 +22,5 @@ matplotlib>=3.5    # optional: only for `simulate.py --log` plots (sim_log.png);
 # SIL tests skip. See code/simulation/firmware_sil/README.md.
 pybind11>=2.10    # build-time only (CMake find_package); imported by the build, not the sim
 websockets>=12    # only for `facehugger.py serve` (the firmware-backed robot WebSocket API)
+sse-starlette>=2   # only for `serve` sim telemetry (SSE on :8082); serve runs without it (telemetry just disabled)
+uvicorn>=0.27      # ASGI server hosting the telemetry SSE app (paired with sse-starlette)

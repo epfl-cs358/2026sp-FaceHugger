@@ -61,6 +61,13 @@ void Leg::setPose(float x, float y, float z) {
 }
 
 void Leg::setJointAngles(double hip, double thigh, double knee) {
+    // Out-of-range guard. A clip or gait that asks for a servo angle outside the
+    // [0,180] electrical range is a bug worth seeing — on the bench it shows up in
+    // the serial monitor, and the sim captures the same line. We still clamp (the
+    // robot stays safe), but we report the raw request + channel first.
+    if (hip   < 0.0 || hip   > 180.0) Serial.printf("[OOR] servo %d requested %.2f\n", hipServo.getChannel(),   hip);
+    if (thigh < 0.0 || thigh > 180.0) Serial.printf("[OOR] servo %d requested %.2f\n", thighServo.getChannel(), thigh);
+    if (knee  < 0.0 || knee  > 180.0) Serial.printf("[OOR] servo %d requested %.2f\n", kneeServo.getChannel(),  knee);
     hip   = constrain(hip,   0.0, 180.0);
     thigh = constrain(thigh, 0.0, 180.0);
     knee  = constrain(knee,  0.0, 180.0);

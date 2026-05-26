@@ -101,6 +101,24 @@ class FirmwareControl {
     }
 
     uint8_t robot_state() const { return spinalCord.snapshot().robot_state; }
+
+    // Drain the firmware's captured Serial output (complete lines since the last
+    // call) and clear it. The firmware's own out-of-range guard prints
+    // "[OOR] servo <ch> requested <deg>"; the SIL surfaces those by reading here.
+    std::vector<std::string> drain_serial() {
+        std::vector<std::string> out;
+        out.swap(fh_sim::serial_lines);
+        return out;
+    }
+
+    // PCA channel per servo, firmware order (FR,FL,RR,RL x hip,thigh,knee) — lets
+    // the Python side map an [OOR] channel back to a joint.
+    std::array<int, 12> servo_channels() const {
+        std::array<int, 12> ch{};
+        for (int leg = 0; leg < 4; ++leg)
+            for (int j = 0; j < 3; ++j) ch[leg * 3 + j] = LEG_SERVO_CHANNEL[leg][j];
+        return ch;
+    }
 };
 
 PYBIND11_MODULE(fh_sim, m) {
@@ -126,5 +144,7 @@ PYBIND11_MODULE(fh_sim, m) {
         .def("clip_names", &FirmwareControl::clip_names)
         .def("clip_duration_ms", &FirmwareControl::clip_duration_ms, py::arg("id"))
         .def("servo_angles", &FirmwareControl::servo_angles)
-        .def("robot_state", &FirmwareControl::robot_state);
+        .def("robot_state", &FirmwareControl::robot_state)
+        .def("drain_serial", &FirmwareControl::drain_serial)
+        .def("servo_channels", &FirmwareControl::servo_channels);
 }

@@ -28,10 +28,18 @@ import time
 
 import websockets
 
-from firmware_sil.sil_bridge import load_fh_sim, servo_angles_to_joint_targets
+from firmware_sil.sil_bridge import (
+    apply_torque_colors,
+    build_telemetry_frame,
+    load_fh_sim,
+    parse_oor,
+    servo_angles_to_joint_targets,
+)
 
 CMD_TELEMETRY = 10
 _STEP_HZ = 240
+_TELEM_EVERY = 12  # build a telemetry frame every 12th step → 240/12 = 20 Hz
+_SSE_PORT = 8082
 
 
 class RobotSim:
@@ -44,6 +52,7 @@ class RobotSim:
         from pybullet_sim.kinematics import build_config
 
         self.p = p
+        self.gui = gui
         self.cfg = build_config()
         self.robot_id, self.joint_map = _connect_and_setup(self.cfg, gui)
         self.fc = load_fh_sim().FirmwareControl()
@@ -83,12 +92,41 @@ class RobotSim:
             "servo_deg": [round(x) for x in self.fc.servo_angles()],
         }
 
+    def telemetry_frame(self, t_s):
+        """Rich per-joint frame for the SSE telemetry panel (see sil_bridge).
 
-async def _sim_loop(sim):
+        Drains the firmware's [OOR] serial lines accumulated since the last call so
+        any pre-clamp request lands in pre_clamp_deg.
+        """
+        oor = parse_oor(self.fc.drain_serial())
+        return build_telemetry_frame(
+            self.fc, self.p, self.robot_id, self.joint_map, t_s, oor
+        )
+
+
+def _put_drop_stale(queue, item):
+    """Push `item`, discarding any unconsumed frame so consumers see the latest."""
+    if queue.full():
+        try:
+            queue.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+    queue.put_nowait(item)
+
+
+async def _sim_loop(sim, telem_queue=None):
     dt = 1.0 / _STEP_HZ
     t0 = time.monotonic()
+    step = 0
     while True:
-        sim.step(int((time.monotonic() - t0) * 1000.0))
+        now = time.monotonic() - t0
+        sim.step(int(now * 1000.0))
+        if step % _TELEM_EVERY == 0:
+            if sim.gui:  # torque-tint the links in the PyBullet window
+                apply_torque_colors(sim.p, sim.robot_id, sim.joint_map)
+            if telem_queue is not None:
+                _put_drop_stale(telem_queue, sim.telemetry_frame(now))
+        step += 1
         await asyncio.sleep(dt)
 
 
@@ -102,9 +140,38 @@ async def _telemetry_loop(sim, clients, period=0.5):
             )
 
 
-async def serve(host="localhost", port=8081, gui=False):
+def build_telemetry_app(telem_queue):
+    """Starlette app serving the per-joint frames as Server-Sent Events.
+
+    GET /telemetry streams `data: <frame-json>` at the rate the sim loop pushes
+    (~20 Hz). CORS is wide open because a `file://` control panel is a cross-origin
+    EventSource client. The queue is single-consumer (the local debug panel); a
+    second client would split frames rather than each getting every frame.
+    """
+    from sse_starlette.sse import EventSourceResponse
+    from starlette.applications import Starlette
+    from starlette.middleware import Middleware
+    from starlette.middleware.cors import CORSMiddleware
+    from starlette.routing import Route
+
+    async def telemetry(request):
+        async def gen():
+            while not await request.is_disconnected():
+                frame = await telem_queue.get()
+                yield {"data": json.dumps(frame)}
+
+        return EventSourceResponse(gen())
+
+    return Starlette(
+        routes=[Route("/telemetry", telemetry)],
+        middleware=[Middleware(CORSMiddleware, allow_origins=["*"])],
+    )
+
+
+async def serve(host="localhost", port=8081, gui=False, sse_port=_SSE_PORT):
     sim = RobotSim(gui=gui)
     clients = set()
+    telem_queue = asyncio.Queue(maxsize=1)
 
     async def handler(ws):
         clients.add(ws)
@@ -118,12 +185,34 @@ async def serve(host="localhost", port=8081, gui=False):
         finally:
             clients.discard(ws)
 
+    # SSE telemetry is best-effort: if sse-starlette/uvicorn aren't installed the
+    # robot API still runs (telemetry is a debug aid, not part of the T: protocol).
+    sse_task = None
+    try:
+        import uvicorn
+
+        app = build_telemetry_app(telem_queue)
+        sse_server = uvicorn.Server(
+            uvicorn.Config(app, host=host, port=sse_port, log_level="warning")
+        )
+        sse_task = sse_server.serve()
+    except ImportError:
+        print(
+            "[ws-sim] sse-starlette/uvicorn not installed — sim telemetry SSE "
+            "disabled (pip/conda install them to enable the panel's telemetry table)"
+        )
+
     async with websockets.serve(handler, host, port):
         print(
             f"[ws-sim] firmware-backed robot API on ws://{host}:{port}  "
             f"(real robot uses :81; point the panel/app here)"
         )
-        await asyncio.gather(_sim_loop(sim), _telemetry_loop(sim, clients))
+        if sse_task is not None:
+            print(f"[ws-sim] sim telemetry (SSE) on http://{host}:{sse_port}/telemetry")
+        coros = [_sim_loop(sim, telem_queue), _telemetry_loop(sim, clients)]
+        if sse_task is not None:
+            coros.append(sse_task)
+        await asyncio.gather(*coros)
 
 
 def main():
@@ -133,9 +222,15 @@ def main():
         "--port", type=int, default=8081, help="default 8081 (81 is privileged)"
     )
     ap.add_argument("--gui", action="store_true", help="show the PyBullet window")
+    ap.add_argument(
+        "--sse-port",
+        type=int,
+        default=_SSE_PORT,
+        help=f"telemetry SSE port (default {_SSE_PORT})",
+    )
     args = ap.parse_args()
     try:
-        asyncio.run(serve(args.host, args.port, args.gui))
+        asyncio.run(serve(args.host, args.port, args.gui, args.sse_port))
     except KeyboardInterrupt:
         pass
 

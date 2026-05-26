@@ -15,13 +15,35 @@
 #pragma once
 
 #include <cmath>
+#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 namespace fh_sim {
 // The single source of "firmware time". The bridge writes this each tick.
 inline uint32_t clock_ms = 0;
+
+// Captured Serial output, split into complete lines. The firmware's own
+// Serial.printf warnings (e.g. "[OOR] servo N requested X") land here so the
+// SIL can surface them via the binding — we capture the firmware's reports, we
+// don't manufacture them.
+inline std::vector<std::string> serial_lines;
+inline std::string serial_partial;
+
+inline void serial_write(const char* s) {
+    for (; *s; ++s) {
+        if (*s == '\n') {
+            serial_lines.push_back(serial_partial);
+            serial_partial.clear();
+        } else {
+            serial_partial += *s;
+        }
+    }
+    if (serial_lines.size() > 8192)  // bound memory on long runs
+        serial_lines.erase(serial_lines.begin(), serial_lines.begin() + 4096);
+}
 }  // namespace fh_sim
 
 inline uint32_t millis() { return fh_sim::clock_ms; }
@@ -40,16 +62,30 @@ inline long map(long x, long in_min, long in_max, long out_min, long out_max) {
 #define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 #endif
 
-// Serial: discard everything. printf is variadic with a format string.
+// Serial: format like the real Arduino Serial and capture into fh_sim::serial_lines
+// (so the firmware's own warnings are observable), instead of going to a UART.
 struct _FhFakeSerial {
     void begin(long) {}
-    template <typename... A>
-    void printf(const char*, A...) {}
+    void printf(const char* fmt, ...) {
+        char buf[512];
+        va_list ap;
+        va_start(ap, fmt);
+        vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+        fh_sim::serial_write(buf);
+    }
+    void print(const char* s) { fh_sim::serial_write(s); }
     template <typename T>
     void print(T) {}
+    void println(const char* s) {
+        fh_sim::serial_write(s);
+        fh_sim::serial_write("\n");
+    }
     template <typename T>
-    void println(T) {}
-    void println() {}
+    void println(T) {
+        fh_sim::serial_write("\n");
+    }
+    void println() { fh_sim::serial_write("\n"); }
 };
 inline _FhFakeSerial Serial;
 
