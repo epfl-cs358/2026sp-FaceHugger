@@ -81,3 +81,15 @@ def test_parity_check_passes():
     r = _run([script])
     assert r.returncode == 0, r.stdout + r.stderr
     assert "agree" in r.stdout
+
+
+def test_sim_log_writes_csv_and_png(tmp_path):
+    """`facehugger.py sim ... --log` forwards to the simulator and drops the
+    CSV + plot in the working directory (run in a tmp cwd to avoid clutter)."""
+    r = _run(
+        [FACEHUGGER, "sim", "--clip", CLIP, "--headless", "--settle", "0", "--log"],
+        cwd=tmp_path,
+    )
+    assert r.returncode == 0, r.stderr
+    assert (tmp_path / "sim_log.csv").is_file()
+    assert (tmp_path / "sim_log.png").is_file()

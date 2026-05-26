@@ -100,9 +100,23 @@ def _resolve_blender_bin(version):
 
 
 def _run(cmd, cwd=HERE):
-    """Forward stdout/stderr; return the child's exit code."""
+    """Forward stdout/stderr; return the child's exit code.
+
+    cwd=None runs in the caller's working directory (with HERE added to
+    PYTHONPATH so the `-m pybullet_sim...` / `-m urdf_gen...` packages still
+    import). Used by `sim` so its --log output (sim_log.csv/png) lands where
+    the user invoked the command, not in code/simulation/.
+    """
     print(f"$ {' '.join(str(c) for c in cmd)}")
-    return subprocess.run([str(c) for c in cmd], cwd=str(cwd)).returncode
+    env = None
+    if cwd is None:
+        env = {**os.environ}
+        env["PYTHONPATH"] = os.pathsep.join(
+            [str(HERE), env.get("PYTHONPATH", "")]
+        ).rstrip(os.pathsep)
+    return subprocess.run(
+        [str(c) for c in cmd], cwd=(str(cwd) if cwd else None), env=env
+    ).returncode
 
 
 def cmd_urdf(args):
@@ -126,6 +140,8 @@ def cmd_sim(args):
         cli.append("--float")
     if args.monitor:
         cli.append("--monitor")
+    if args.log:
+        cli.append("--log")
     if args.walk:
         cli.append("--walk")
     if args.trot:
@@ -134,7 +150,8 @@ def cmd_sim(args):
         cli.append("--headless")
     if args.settle is not None:
         cli += ["--settle", str(args.settle)]
-    return _run(cli)
+    # cwd=None: run in the user's directory so --log artifacts land there.
+    return _run(cli, cwd=None)
 
 
 def cmd_blender(args):
@@ -209,6 +226,11 @@ def main():
         "--monitor",
         action="store_true",
         help="print torque + estimated-current status (peak τ, total A, stalls)",
+    )
+    ps.add_argument(
+        "--log",
+        action="store_true",
+        help="record per-step torque/current → summary + sim_log.csv + sim_log.png",
     )
     ps.add_argument("--walk", action="store_true")
     ps.add_argument("--trot", action="store_true")
