@@ -29,6 +29,7 @@ static const GaitParams GAITS[] = {
 SpinalCord::SpinalCord(uint8_t pwm):
     robotState(STATE_IDLE),
     driver(Adafruit_PWMServoDriver(ADDR_SERVO_DRIVER)),
+    face(),
     leg1(Leg(driver, 0,
         Servo(driver, FRONT_RIGHT_LEG_HIP_PCA_CHANNEL,    FRONT_RIGHT_LEG_HIP_DEFAULT_ANGLE),
         Servo(driver, FRONT_RIGHT_LEG_THIGH_PCA_CHANNEL,  FRONT_RIGHT_LEG_THIGH_DEFAULT_ANGLE),
@@ -61,25 +62,31 @@ SpinalCord::SpinalCord(uint8_t pwm):
 void SpinalCord::begin() {
     driver.begin();
     driver.setPWMFreq(60);
+    isInverted = false;
     leg1.returnToDefaultAngles();
     leg2.returnToDefaultAngles();
     leg3.returnToDefaultAngles();
     leg4.returnToDefaultAngles();
+    
+    face.begin();
+    face.setState(EYES_FRONT);
 }
 
 void SpinalCord::processCommand(String dir) {
     lastCommandMs = millis();
     isMovingRequested = (dir != "STOP");
 
-    if      (dir == "FW")   { targetX =  0.0f; targetY =  1.0f; targetYaw =  0.0f; }
-    else if (dir == "BW")   { targetX =  0.0f; targetY = -1.0f; targetYaw =  0.0f; }
-    else if (dir == "L")    { targetX = -1.0f; targetY =  0.0f; targetYaw =  0.0f; }
-    else if (dir == "R")    { targetX =  1.0f; targetY =  0.0f; targetYaw =  0.0f; }
-    else if (dir == "FW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; }
-    else if (dir == "FW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; }
-    else if (dir == "BW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; }
-    else if (dir == "BW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; }
-    else if (dir == "STOP") { targetX =  0.0f; targetY =  0.0f; targetYaw =  0.0f; }
+    if      (dir == "FW")   { targetX =  0.0f; targetY =  1.0f; targetYaw =  0.0f; face.setState(EYES_FRONT); }
+    else if (dir == "BW")   { targetX =  0.0f; targetY = -1.0f; targetYaw =  0.0f; face.setState(EYES_FRONT); }
+    else if (dir == "L")    { targetX = -1.0f; targetY =  0.0f; targetYaw =  0.0f; face.setState(EYES_LEFT); }
+    else if (dir == "R")    { targetX =  1.0f; targetY =  0.0f; targetYaw =  0.0f; face.setState(EYES_RIGHT); }
+    // Eyes look opposite the rotation: turning left shows the right-eye image
+    // and vice versa (rotation direction / targetYaw itself is unchanged).
+    else if (dir == "FW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; face.setState(EYES_LEFT); }
+    else if (dir == "FW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; face.setState(EYES_RIGHT); }
+    else if (dir == "BW_R") { targetX =  0.0f; targetY =  0.0f; targetYaw = -1.0f; face.setState(EYES_LEFT); }
+    else if (dir == "BW_L") { targetX =  0.0f; targetY =  0.0f; targetYaw =  1.0f; face.setState(EYES_RIGHT); }
+    else if (dir == "STOP") { targetX =  0.0f; targetY =  0.0f; targetYaw =  0.0f; face.setState(EYES_FRONT); }
 }
 
 void SpinalCord::walk()     { robotState = STATE_WALK; }
@@ -155,6 +162,8 @@ void SpinalCord::update() {
             leg4.returnToDefaultAngles();
             break;
     }
+    
+    face.update();
 }
 
 void SpinalCord::setGait(GaitType g) {
@@ -190,6 +199,12 @@ void SpinalCord::tickGait() {
     Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
     const bool isCrab = (currentGait_ == GAIT_CRAB);
 
+    // Scale foot lift by how much motion is actually commanded. Without this the
+    // legs lift every cycle even with zero input, so the robot creeps on its own
+    // (the "crab moves with no app input" bug). The sweep below is already
+    // input-scaled, so only the lift needed gating.
+    const float motionMag = fminf(1.0f, fmaxf(fabsf(activeX), fmaxf(fabsf(activeY), fabsf(activeYaw))));
+
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
         const float legPhase = fmodf(globalPhase - cfg.offsets[i] + 1.0f, 1.0f);
 
@@ -203,7 +218,7 @@ void SpinalCord::tickGait() {
             // Swing: foot in the air returning to front
             const float p = (legPhase - cfg.duty) / (1.0f - cfg.duty);
             sweep = cfg.step_length_deg * (-0.5f + p);
-            lift  = sinf(p * (float)M_PI) * cfg.step_height_deg;
+            lift  = sinf(p * (float)M_PI) * cfg.step_height_deg * motionMag;
         }
 
         float sh = NEUTRAL[i].sh;
@@ -243,16 +258,18 @@ void SpinalCord::tickGait() {
     }
 }
 
-// Port of the validated JS Trot script (v7.5 "strict 4-phase square motion").
-// Front legs use 4 discrete hip positions per cycle with constant lift during swing;
-// rear legs use a continuous hip sweep with sinusoidal lift during swing.
-// All joint deltas are scaled by 2/3 around neutral to match scalePose() in the JS.
+// Trot. Rear legs: continuous sweep + sine lift (validated v7.5). Front legs: the
+// STANCE keeps the validated discrete waypoints — the front foot slip-repositions on
+// the ground and must NOT traction-sweep, or it counter-propels and cancels the rear
+// legs. The SWING is smoothed (continuous hip return + sine lift arc): an airborne
+// foot carries no traction, so smoothing it is propulsion-neutral and only softens the
+// mechanical look. All joint deltas scaled by 2/3 around neutral (scalePose).
 void SpinalCord::tickTrot() {
-    constexpr float STEP_LENGTH = 40.0f;
-    constexpr float STEP_HEIGHT = 50.0f;
+    constexpr float STEP_LENGTH = 55.0f;       // tunable: rear-leg stride amplitude (was 40)
+    constexpr float STEP_HEIGHT = 50.0f;       // tunable: foot lift height
     constexpr float DUTY        = 0.50f;
     constexpr float PERIOD_S    = 1.5f;
-    constexpr float SCALE       = 2.0f / 3.0f;
+    constexpr float SCALE       = 0.80f;       // tunable: overall amplitude vs neutral (was 2/3)
     constexpr float YAW_GAIN    = 2.0f;
 
     // Phase offsets per leg index [FR, FL, RR, RL] — JS uses fr/bl=0.5, fl/br=0.0.
@@ -300,10 +317,22 @@ void SpinalCord::tickTrot() {
             const float hipBack  = n + (HIP_IN[idx]  - n) * mag;
             const float hipFront = n + (HIP_OUT[idx] - n) * mag;
 
-            if      (legPhase >= 0.50f && legPhase <  0.75f) { sh = hipFront; lift = STEP_HEIGHT * mag; }
-            else if (legPhase >= 0.75f && legPhase <= 1.00f) { sh = hipBack;  lift = STEP_HEIGHT * mag; }
-            else if (legPhase >= 0.00f && legPhase <  0.25f) { sh = hipBack;  lift = 0.0f; }
-            else                                              { sh = hipFront; lift = 0.0f; }
+            if (legPhase < DUTY) {
+                // Stance: KEEP the validated discrete waypoints. The front foot is a
+                // near-static support that slip-repositions hipBack -> hipFront on the
+                // ground. It must NOT traction-sweep here — a continuous ground sweep
+                // turns the front legs into counter-propulsors that cancel the rear
+                // legs (that was the "back legs are useless" bug).
+                sh   = (legPhase < 0.25f) ? hipBack : hipFront;
+                lift = 0.0f;
+            } else {
+                // Swing: foot is airborne, so smoothing here is propulsion-neutral.
+                // Sweep the hip continuously hipFront -> hipBack and lift on a sine
+                // arc, replacing the old rectangular lift block + mid-air hip snap.
+                const float swing = (legPhase - DUTY) / (1.0f - DUTY);
+                sh   = hipFront + (hipBack - hipFront) * swing;
+                lift = sinf(swing * (float)M_PI) * STEP_HEIGHT * mag;
+            }
         } else {
             // Rear legs: continuous hip sweep scaled by forward magnitude only
             // (yaw handled by the yawMode branch above).
@@ -471,6 +500,9 @@ void SpinalCord::invertRobot() {
     // No re-pose: the next motion tick (gait, clip, stand) applies the mirror
     // via applyServos automatically. Re-posing here was fighting animation playback
     // when called mid-clip. Resetting the gait phase keeps gait timing coherent.
+    // (main's hardcoded inverted-pose table is intentionally dropped — it's the
+    // pre-Change-D behaviour this branch replaced; the eye-state feedback is kept.)
+    face.setState(isInverted ? EYES_CONFUSED : EYES_FRONT);
     gaitPhaseStartMs_ = millis();
 }
 

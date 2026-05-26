@@ -4,7 +4,7 @@ import { IndividualSelectionButton } from "../components/IndividualSelectionButt
 import { AppText } from "../components/text/AppText";
 import { ClipList } from "../components/ClipList";
 import { sendCommand } from "../services/socket";
-import { InvertRobotPacket } from "../api/api-messages";
+import { InvertRobotPacket, restAllServosPackets, neutralStancePackets } from "../api/api-messages";
 
 export function Actions() {
     const [pendingInvert, setPendingInvert] = useState(false);
@@ -12,6 +12,16 @@ export function Actions() {
     const onConfirmInvert = () => {
         sendCommand(JSON.stringify(InvertRobotPacket));
         setPendingInvert(false);
+    };
+
+    // Reset every servo to 90° with one CMD_CALIBRATE (T:4) packet per joint.
+    const onRestPose = () => {
+        restAllServosPackets(90).forEach(pkt => sendCommand(JSON.stringify(pkt)));
+    };
+
+    // Drive every servo to the neutral standing pose (one T:4 packet per joint).
+    const onNeutralStance = () => {
+        neutralStancePackets().forEach(pkt => sendCommand(JSON.stringify(pkt)));
     };
 
     return (
@@ -32,6 +42,20 @@ export function Actions() {
                         />
                     </View>
                 )}
+            </View>
+            <View style={styles.actionRow}>
+                <IndividualSelectionButton
+                    selected={false}
+                    title="Rest pose (all servos 90°)"
+                    onClick={onRestPose}
+                />
+            </View>
+            <View style={styles.actionRow}>
+                <IndividualSelectionButton
+                    selected={false}
+                    title="Neutral stance"
+                    onClick={onNeutralStance}
+                />
             </View>
             <ClipList />
         </View>

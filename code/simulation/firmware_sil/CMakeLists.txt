@@ -40,6 +40,7 @@ pybind11_add_module(fh_sim
     "${FW}/nervous_system/leg.cpp"
     "${FW}/nervous_system/motion_math.cpp"
     "${FW}/nervous_system/kinematics.cpp"
+    "${FW}/nervous_system/face.cpp"      # OLED eyes; no-op against the hal/ display stubs
     "${FW}/brain/network.cpp"            # the EXACT T: command dispatch
     "${FW}/brain/clip_list_serializer.cpp"
 )

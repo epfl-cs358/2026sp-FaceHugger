@@ -25,3 +25,39 @@ export const requestClipList = () =>
 
 export const playClip = (id: number) =>
     sendCommand(JSON.stringify({ T: 7, c: id }));
+
+//Calibration packets
+export const calibrationPacket = (leg: number, servo: number, angle: number) =>
+    ({T: 4, id: leg, servo_id: servo, a: angle} as ServoCalibration);
+
+// One CMD_CALIBRATE per (leg 0-3, servo 0-2) at 90° — resets every servo.
+export const restAllServosPackets = (angle: number = 90) => {
+    const packets: ServoCalibration[] = [];
+    for (let leg = 0; leg < 4; leg++) {
+        for (let servo = 0; servo < 3; servo++) {
+            packets.push(calibrationPacket(leg, servo, angle));
+        }
+    }
+    return packets;
+};
+
+// Neutral standing pose — raw servo angles per [leg id][servo_id] = [hip, thigh, knee].
+// Mirrors the firmware per-servo *_DEFAULT_ANGLE in config.h (returnToDefaultAngles()).
+// Keep in sync if the firmware defaults change.
+const NEUTRAL_STANCE_ANGLES: number[][] = [
+    [90, 150, 53],  // leg 0 - front right
+    [75, 30, 130],  // leg 1 - front left
+    [90, 40, 130],  // leg 2 - rear right
+    [90, 150, 50],  // leg 3 - rear left
+];
+
+// One CMD_CALIBRATE per joint to drive every servo to the neutral stance.
+export const neutralStancePackets = () => {
+    const packets: ServoCalibration[] = [];
+    NEUTRAL_STANCE_ANGLES.forEach((servos, leg) => {
+        servos.forEach((angle, servo) => {
+            packets.push(calibrationPacket(leg, servo, angle));
+        });
+    });
+    return packets;
+};

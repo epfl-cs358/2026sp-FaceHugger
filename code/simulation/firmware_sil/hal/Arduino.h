@@ -62,6 +62,15 @@ inline long map(long x, long in_min, long in_max, long out_min, long out_max) {
 #define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 #endif
 
+// PROGMEM / F(): no-ops on the host (flash-string placement is an MCU concern).
+// The firmware's OLED sprite tables (eye_sprites.h) and F("...") logs use these.
+#ifndef PROGMEM
+#define PROGMEM
+#endif
+#ifndef F
+#define F(string_literal) (string_literal)
+#endif
+
 // Serial: format like the real Arduino Serial and capture into fh_sim::serial_lines
 // (so the firmware's own warnings are observable), instead of going to a UART.
 struct _FhFakeSerial {
