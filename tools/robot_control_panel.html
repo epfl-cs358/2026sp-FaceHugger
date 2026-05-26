@@ -110,6 +110,9 @@
       <button data-dir="BW">↓ BW</button>
       <button data-dir="BW_R">↘ BW_R</button>
     </div>
+    <div class="hint"><b>Set a gait first</b> (Gait card → Set gait) — with gait NONE the
+      firmware's walk state ticks nothing. <b>Hold</b> a direction to keep moving: a single
+      tap stops after the firmware's ~0.5 s deadman; releasing sends STOP.</div>
   </div>
 
   <!-- Gait (T:5) + Action (T:6) -->
@@ -256,8 +259,29 @@
   });
   document.querySelectorAll('button[data-state]').forEach(b =>
     b.onclick = () => send({T:2, s: parseInt(b.dataset.state,10)}));
-  document.querySelectorAll('button[data-dir]').forEach(b =>
-    b.onclick = () => send({T:1, dir: b.dataset.dir}));
+  // Direction buttons auto-repeat while held (like the app's joystick) so motion
+  // outlasts the firmware's 500 ms deadman; releasing a direction sends STOP.
+  const HOLD_MS = 150;
+  let holdTimer = null;
+  function startHold(dir){
+    send({T:1, dir});
+    if (dir === 'STOP') return;
+    clearInterval(holdTimer);
+    holdTimer = setInterval(() => send({T:1, dir}), HOLD_MS);
+  }
+  function stopHold(sendStop){
+    if (!holdTimer) return;
+    clearInterval(holdTimer); holdTimer = null;
+    if (sendStop) send({T:1, dir:'STOP'});
+  }
+  document.querySelectorAll('button[data-dir]').forEach(b => {
+    const dir = b.dataset.dir;
+    b.addEventListener('mousedown', () => startHold(dir));
+    b.addEventListener('mouseup',   () => stopHold(dir !== 'STOP'));
+    b.addEventListener('mouseleave',() => stopHold(dir !== 'STOP'));
+    b.addEventListener('touchstart', e => { e.preventDefault(); startHold(dir); }, {passive:false});
+    b.addEventListener('touchend',   e => { e.preventDefault(); stopHold(dir !== 'STOP'); }, {passive:false});
+  });
 
   // --- Sim telemetry (SSE) — separate from the WS robot API; local debug only ---
   const STALL_NM = 2.94;  // QYRC DSS-230MG stall; matches sim_monitor.STALL_TORQUE_NM
