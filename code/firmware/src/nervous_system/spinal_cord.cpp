@@ -17,6 +17,11 @@ static const uint32_t CLIP_RETURN_MS = 500;  // ease to NEUTRAL at clip end
 // smoothed = alpha*prev + (1-alpha)*target. Higher = smoother but laggier. Tunable.
 static const float CLIP_EMA_ALPHA = 0.75f;
 
+// T:6 (CMD_ACTION_SELECTION invert) is a stateless toggle; a duplicated/retried
+// packet would double-flip. Ignore a second invert within this window. The app
+// (PR #99) is the primary guard against the spam; this is firmware-side insurance.
+static const uint32_t INVERT_DEBOUNCE_MS = 250;
+
 // Gait parameters (step values are in degrees, pre-scaled to 2/3 of raw JS values).
 // Offsets order: [LEG_FR, LEG_FL, LEG_RR, LEG_RL]
 static const GaitParams GAITS[] = {
@@ -56,6 +61,7 @@ SpinalCord::SpinalCord(uint8_t pwm):
     activeX(0.0f), activeY(0.0f), activeYaw(0.0f),
     isMovingRequested(false), lastCommandMs(0), isInverted(false)
     , clipState_{ CLIP_DONE, 0, 0, 0, 0 }
+    , lastInvertMs_(0), hasInverted_(false)
 {
 }
 
@@ -63,6 +69,8 @@ void SpinalCord::begin() {
     driver.begin();
     driver.setPWMFreq(60);
     isInverted = false;
+    hasInverted_  = false;   // clear invert-debounce state on boot
+    lastInvertMs_ = 0;
     leg1.returnToDefaultAngles();
     leg2.returnToDefaultAngles();
     leg3.returnToDefaultAngles();
@@ -118,9 +126,27 @@ void SpinalCord::stand() {
     // Standing / neutral reference pose — the per-leg NEUTRAL[] table the gaits launch
     // from and ease back to. Mirrors tickGait at zero input (sweep=lift=0).
     robotState = STATE_STAND;
+    goToNeutral();
+}
+
+void SpinalCord::goToNeutral() {
+    // Invert-aware instant neutral: applyServos applies the pitch mirror when
+    // isInverted, so an inverted robot holds the INVERTED neutral. Use this in
+    // place of Leg::returnToDefaultAngles() on every gait/clip stop path — that
+    // raw-defaults path bypasses the mirror and silently un-inverts the robot.
     Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
     for (uint8_t i = 0; i < LEG_COUNT; ++i)
         applyServos(legs[i], translateToServo(i, NEUTRAL[i].sh, NEUTRAL[i].th, NEUTRAL[i].kn));
+}
+
+void SpinalCord::easeToNeutral(uint32_t ms) {
+    // Non-blocking ease to the (invert-aware) neutral, for the clip-return glide.
+    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+    for (uint8_t i = 0; i < LEG_COUNT; ++i) {
+        ServoTriple n = applyInvert(
+            translateToServo(i, NEUTRAL[i].sh, NEUTRAL[i].th, NEUTRAL[i].kn), isInverted);
+        legs[i]->setJointAnglesTimed(n.hip, n.thigh, n.knee, ms);
+    }
 }
 
 void SpinalCord::applyCalibration(int channel, int angle) {
@@ -188,11 +214,8 @@ void SpinalCord::tickGait() {
     // Graceful stop: when movement requested is gone and active vector is near zero,
     // wait for a clean phase boundary then return to standing pose.
     if (!isMovingRequested && fabsf(activeX) < 0.01f && fabsf(activeY) < 0.01f && fabsf(activeYaw) < 0.01f && globalPhase < 0.05f) {
-        leg1.returnToDefaultAngles();
-        leg2.returnToDefaultAngles();
-        leg3.returnToDefaultAngles();
-        leg4.returnToDefaultAngles();
-        robotState = STATE_IDLE;
+        goToNeutral();              // invert-aware: holds the mirrored neutral if inverted
+        robotState = STATE_STAND;   // actively hold the stand (no manual T:2 needed)
         return;
     }
 
@@ -289,11 +312,8 @@ void SpinalCord::tickTrot() {
 
     // Graceful stop on a clean phase boundary when the user released the stick.
     if (!isMovingRequested && mag < 0.05f && fabsf(activeYaw) < 0.05f && globalPhase < 0.05f) {
-        leg1.returnToDefaultAngles();
-        leg2.returnToDefaultAngles();
-        leg3.returnToDefaultAngles();
-        leg4.returnToDefaultAngles();
-        robotState = STATE_IDLE;
+        goToNeutral();              // invert-aware: holds the mirrored neutral if inverted
+        robotState = STATE_STAND;   // actively hold the stand (no manual T:2 needed)
         return;
     }
 
@@ -472,9 +492,10 @@ void SpinalCord::tickClip() {
                                      clipSmoothed_[i][2])));
             }
             if (step.action == CLIP_ACT_BEGIN_RETURN) {
-                // Final pose applied; start the non-blocking ease to NEUTRAL.
-                for (uint8_t i = 0; i < LEG_COUNT; ++i)
-                    legs[i]->returnToDefaultAnglesTimed(CLIP_RETURN_MS);
+                // Final pose applied; start the non-blocking ease to the (invert-aware)
+                // neutral — so a clip that ends while inverted glides to the inverted
+                // neutral instead of snapping upright.
+                easeToNeutral(CLIP_RETURN_MS);
             }
             break;
         }
@@ -483,7 +504,7 @@ void SpinalCord::tickClip() {
             break;
         case CLIP_ACT_FINISH:
             for (uint8_t i = 0; i < LEG_COUNT; ++i) legs[i]->tickEase(); // snap to target
-            robotState = STATE_IDLE;
+            robotState = STATE_STAND;   // hold the neutral stand, not inert IDLE
             break;
         case CLIP_ACT_NONE:
         default:
@@ -496,6 +517,13 @@ void SpinalCord::setInverted(bool flag) {
 }
 
 void SpinalCord::invertRobot() {
+    // Debounce a duplicated/retried T:6 so it can't double-flip (the first invert
+    // is always honoured; only a SECOND within the window is dropped).
+    uint32_t now = millis();
+    if (hasInverted_ && (now - lastInvertMs_) < INVERT_DEBOUNCE_MS) return;
+    hasInverted_  = true;
+    lastInvertMs_ = now;
+
     isInverted = !isInverted;
     // No re-pose: the next motion tick (gait, clip, stand) applies the mirror
     // via applyServos automatically. Re-posing here was fighting animation playback
@@ -503,7 +531,7 @@ void SpinalCord::invertRobot() {
     // (main's hardcoded inverted-pose table is intentionally dropped — it's the
     // pre-Change-D behaviour this branch replaced; the eye-state feedback is kept.)
     face.setState(isInverted ? EYES_CONFUSED : EYES_FRONT);
-    gaitPhaseStartMs_ = millis();
+    gaitPhaseStartMs_ = now;
 }
 
 SpinalCord::Snapshot SpinalCord::snapshot() const {

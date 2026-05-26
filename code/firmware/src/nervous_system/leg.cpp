@@ -80,6 +80,15 @@ void Leg::updateServos(double hipAngle, double thighAngle, double kneeAngle){
     kneeServo.setServoAngle(kneeAngle);
 }
 
+void Leg::setJointAnglesTimed(double hip, double thigh, double knee, uint32_t ms) {
+    // Non-blocking ease to an explicit servo triple (already invert-resolved by the
+    // caller). Used by the clip-return ease so it can target the MIRRORED neutral
+    // when inverted, instead of the upright defaults returnToDefaultAnglesTimed gives.
+    hipServo.setServoAngleTimed(hip, ms);
+    thighServo.setServoAngleTimed(thigh, ms);
+    kneeServo.setServoAngleTimed(knee, ms);
+}
+
 void Leg::returnToDefaultAngles(){
     hipServo.returnToDefaultAngle();
     thighServo.returnToDefaultAngle();

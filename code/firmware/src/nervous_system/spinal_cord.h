@@ -69,11 +69,19 @@ class SpinalCord{
         bool isMovingRequested;
         bool isInverted;
         uint32_t lastCommandMs;
+        uint32_t lastInvertMs_;   // timestamp of the last accepted T:6 toggle (debounce)
+        bool     hasInverted_;    // false until the first invert, so it is never debounced away
 
         void tickGait();
         void tickTrot();
         void tickYawRotation();
         void tickClip();
+
+        // Invert-aware "hold neutral" helpers. Unlike Leg::returnToDefaultAngles*
+        // (which write the UPRIGHT defaults raw and bypass the pitch mirror), these
+        // route through the mirror so an inverted robot holds the inverted neutral.
+        void goToNeutral();              // instant
+        void easeToNeutral(uint32_t ms); // non-blocking ease (clip return)
 
         // Single invert choke point: writes a leg's servo triple, mirroring the
         // pitch joints (thigh, knee) about 90 when isInverted. Every motion source
