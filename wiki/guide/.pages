@@ -7,4 +7,5 @@ nav:
   - assembly.md
   - software.md
   - calibration.md
+  - remote_control_app.md
   - toolchain

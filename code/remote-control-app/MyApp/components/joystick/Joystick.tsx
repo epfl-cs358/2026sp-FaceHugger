@@ -83,8 +83,7 @@ const joystickStyles = StyleSheet.create({
         alignItems: 'center',
         width: backgroundWidth,
         height: backgroundHeight,
-        opacity: 0.5,
-        backgroundColor: orangeColor,
+        backgroundColor: 'rgba(255, 196, 59, 0.5)',
         borderRadius: 100
     },
     joystickMovingPartCircle: {
