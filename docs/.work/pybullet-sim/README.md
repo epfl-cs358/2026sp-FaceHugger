@@ -66,6 +66,16 @@ see `REPORT.md §7`.
   lists these; treat them as deleted.
 - **`clip_player.py` docstring fixed** — it now correctly states link1 gets the
   per-leg axis sign too (REPORT.md §7 item 4 is resolved).
+- **SIL Step 3 executed — firmware-backed WebSocket API + control panel:**
+  `facehugger.py serve` (`firmware_sil/ws_sim.py`, default :8081) serves the
+  API_SPEC `T:` protocol and drives PyBullet via the firmware. The **command
+  dispatch is the compiled firmware** — `network.cpp::handleParsedMessage` (+
+  `clip_list_serializer` + ArduinoJson) is compiled into `fh_sim` and routed to a
+  shared global `spinalCord`, so API changes reflect automatically (no Python
+  mirror). `tools/robot_control_panel.html` (single file, no build) drives both the
+  sim (`ws://localhost:8081`) and the real robot (`ws://<ip>:81`); the app can too.
+  `test_sil_ws.py` covers it. `websockets` added to requirements. Global-spinalCord
+  refactor verified behavior-preserving (goldens unchanged). 89 tests pass.
 - **SIL Step 2 + default-flip executed:** clip playback now **defaults to the
   exact firmware** (`facehugger.py sim --clip <name>`); `--python` forces the
   re-port. The firmware `.so` **auto-rebuilds** when firmware sources change

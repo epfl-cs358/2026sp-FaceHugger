@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FaceHugger Control Panel</title>
+<!--
+  Standalone WebSocket control panel for the FaceHugger robot API (API_SPEC v1.1).
+  No build, no deps — open this file in a browser. Works against BOTH:
+    - the sim:        ws://localhost:8081   (firmware_sil/ws_sim.py)
+    - the real robot: ws://<robot-ip>:81
+  Every button shows the exact JSON it sends and logs whatever the target replies.
+-->
+<style>
+  :root{
+    --bg:#0f1115;--panel:#1b1f2a;--panel2:#232838;--line:#2a3040;--ink:#e6e9ef;
+    --dim:#aab2c5;--faint:#7c8499;--accent:#5ad1c4;--amber:#f2b366;--red:#ef6f6f;
+    --green:#7bd88f;--mono:'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px}
+  header{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    background:radial-gradient(800px 200px at 80% -80px,rgba(90,209,196,.12),transparent 60%)}
+  header h1{font-size:18px;margin:0;font-weight:700}
+  header h1 span{color:var(--accent)}
+  .conn{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  input,select{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 9px;font-family:var(--mono);font-size:13px}
+  input.url{width:230px}
+  input.num{width:60px}
+  button{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button:active{transform:translateY(1px)}
+  button.primary{background:var(--accent);color:#08110f;border-color:var(--accent);font-weight:600}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--red);display:inline-block}
+  .dot.on{background:var(--green)}
+  .wrap{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:22px 24px;max-width:1200px}
+  @media(max-width:860px){.wrap{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .card h2{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);margin:0 0 12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  .row label{font-size:12px;color:var(--faint);min-width:62px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .log{grid-column:1/-1}
+  #log{background:#0b0d12;border:1px solid var(--line);border-radius:10px;padding:12px;height:300px;overflow:auto;font-family:var(--mono);font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+  .log-tx{color:var(--amber)} .log-rx{color:var(--green)} .log-sys{color:var(--faint)} .log-err{color:var(--red)}
+  .hint{font-size:11px;color:var(--faint);margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Face<span>Hugger</span> · Control Panel</h1>
+  <div class="conn">
+    <input id="url" class="url" value="ws://localhost:8081" spellcheck="false">
+    <button id="connectBtn" class="primary">Connect</button>
+    <span class="dot" id="dot"></span><span id="status" class="hint">disconnected</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- Clips -->
+  <div class="card">
+    <h2>Clips (T:8 / T:7)</h2>
+    <div class="row">
+      <button id="listBtn">List clips (T:8)</button>
+      <select id="clipSel"><option value="">— list first —</option></select>
+    </div>
+    <div class="row">
+      <button id="playBtn">▶ Play clip (T:7)</button>
+    </div>
+    <div class="hint">T:8 asks the robot for its compiled-in clips; T:7 plays the selected one.</div>
+  </div>
+
+  <!-- State (T:2) -->
+  <div class="card">
+    <h2>State machine (T:2)</h2>
+    <div class="grid3">
+      <button data-state="0">IDLE</button>
+      <button data-state="5">STAND</button>
+      <button data-state="1">WALK</button>
+      <button data-state="2">ACTION</button>
+      <button data-state="4">REST</button>
+      <button data-state="3">FAILSAFE</button>
+    </div>
+  </div>
+
+  <!-- Move (T:1) -->
+  <div class="card">
+    <h2>Move (T:1) — sends {"dir": …}</h2>
+    <div class="grid3">
+      <button data-dir="FW_L">↖ FW_L</button>
+      <button data-dir="FW">↑ FW</button>
+      <button data-dir="FW_R">↗ FW_R</button>
+      <button data-dir="L">← L</button>
+      <button data-dir="STOP">■ STOP</button>
+      <button data-dir="R">→ R</button>
+      <button data-dir="BW_L">↙ BW_L</button>
+      <button data-dir="BW">↓ BW</button>
+      <button data-dir="BW_R">↘ BW_R</button>
+    </div>
+  </div>
+
+  <!-- Gait (T:5) + Action (T:6) -->
+  <div class="card">
+    <h2>Gait (T:5) &amp; Action (T:6)</h2>
+    <div class="row">
+      <label>Gait</label>
+      <select id="gaitSel">
+        <option value="0">0 — NONE</option>
+        <option value="1">1 — WALK</option>
+        <option value="2">2 — TROT</option>
+        <option value="3">3 — CRAB</option>
+      </select>
+      <button id="gaitBtn">Set gait</button>
+    </div>
+    <div class="row">
+      <button id="invertBtn">⤾ Invert robot (T:6, a:0)</button>
+    </div>
+  </div>
+
+  <!-- Calibrate (T:4) -->
+  <div class="card">
+    <h2>Calibrate servo (T:4)</h2>
+    <div class="row">
+      <label>leg id</label><input id="calLeg" class="num" type="number" value="2" min="0" max="3">
+      <label>servo</label><input id="calServo" class="num" type="number" value="2" min="0" max="2">
+      <label>angle</label><input id="calAngle" class="num" type="number" value="90" min="0" max="180">
+      <button id="calBtn">Send</button>
+    </div>
+    <div class="hint">servo: 0 hip · 1 thigh · 2 knee. Drives that PCA channel directly.</div>
+  </div>
+
+  <!-- Telemetry -->
+  <div class="card">
+    <h2>Telemetry (T:10, robot → panel)</h2>
+    <div id="telem" class="hint">no telemetry yet — connect to a target that broadcasts it</div>
+  </div>
+
+  <!-- Log -->
+  <div class="card log">
+    <h2>Wire log <button id="clearBtn" style="float:right;padding:3px 8px">clear</button></h2>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+  let ws = null;
+  const $ = id => document.getElementById(id);
+  const logEl = $('log');
+
+  function log(kind, text){
+    const t = new Date().toLocaleTimeString();
+    const cls = {tx:'log-tx', rx:'log-rx', sys:'log-sys', err:'log-err'}[kind] || 'log-sys';
+    const arrow = {tx:'→', rx:'←', sys:'·', err:'✗'}[kind] || '·';
+    const div = document.createElement('div');
+    div.className = cls;
+    div.textContent = `${t} ${arrow} ${text}`;
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setStatus(on, msg){
+    $('dot').classList.toggle('on', on);
+    $('status').textContent = msg;
+    $('connectBtn').textContent = on ? 'Disconnect' : 'Connect';
+  }
+
+  function send(obj){
+    if(!ws || ws.readyState !== WebSocket.OPEN){ log('err','not connected'); return; }
+    const s = JSON.stringify(obj);
+    ws.send(s);
+    log('tx', s);
+  }
+
+  function connect(){
+    const url = $('url').value.trim();
+    try { ws = new WebSocket(url); }
+    catch(e){ log('err', String(e)); return; }
+    setStatus(false, 'connecting…');
+    ws.onopen = () => { setStatus(true, 'connected to ' + url); log('sys','connected'); };
+    ws.onclose = () => { setStatus(false, 'disconnected'); log('sys','closed'); ws = null; };
+    ws.onerror = () => log('err','socket error (is the target running?)');
+    ws.onmessage = ev => {
+      log('rx', ev.data);
+      let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+      if (Array.isArray(msg.clips)) populateClips(msg.clips);
+      if (msg.T === 10) showTelemetry(msg);
+    };
+  }
+
+  function populateClips(clips){
+    const sel = $('clipSel');
+    sel.innerHTML = '';
+    clips.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.id; o.textContent = `${c.id}: ${c.name} (${c.ms} ms)`;
+      sel.appendChild(o);
+    });
+    log('sys', `loaded ${clips.length} clips`);
+  }
+
+  function showTelemetry(m){
+    const states = ['IDLE','WALK','ACTION','FAILSAFE','REST','STAND'];
+    $('telem').innerHTML =
+      `state: <b>${states[m.s] ?? m.s}</b> · gait: <b>${m.g}</b> · progress: ${m.pc}` +
+      (m.servo_deg ? `<br>servo°: ${JSON.stringify(m.servo_deg)}` : '') +
+      (m.e ? `<br><span style="color:var(--red)">err: ${m.e}</span>` : '');
+  }
+
+  // --- wiring ---
+  $('connectBtn').onclick = () => { if (ws) ws.close(); else connect(); };
+  $('clearBtn').onclick = () => logEl.innerHTML = '';
+  $('listBtn').onclick = () => send({T:8});
+  $('playBtn').onclick = () => {
+    const v = $('clipSel').value;
+    if (v === '') { log('err','list clips and pick one first'); return; }
+    send({T:7, c: parseInt(v,10)});
+  };
+  $('gaitBtn').onclick = () => send({T:5, g: parseInt($('gaitSel').value,10)});
+  $('invertBtn').onclick = () => send({T:6, a:0});
+  $('calBtn').onclick = () => send({
+    T:4, id: +$('calLeg').value, servo_id: +$('calServo').value, a: +$('calAngle').value
+  });
+  document.querySelectorAll('button[data-state]').forEach(b =>
+    b.onclick = () => send({T:2, s: parseInt(b.dataset.state,10)}));
+  document.querySelectorAll('button[data-dir]').forEach(b =>
+    b.onclick = () => send({T:1, dir: b.dataset.dir}));
+
+  log('sys','ready — set the target URL and Connect. Sim: ws://localhost:8081 · Robot: ws://<ip>:81');
+</script>
+</body>
+</html>

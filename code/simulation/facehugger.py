@@ -197,6 +197,22 @@ def cmd_all(args):
     return cmd_sim(args)
 
 
+def cmd_serve(args):
+    cli = [
+        sys.executable,
+        "-m",
+        "firmware_sil.ws_sim",
+        "--host",
+        args.host,
+        "--port",
+        str(args.port),
+    ]
+    if args.gui:
+        cli.append("--gui")
+    # cwd=None: run in the user's dir (HERE on PYTHONPATH) so firmware_sil imports.
+    return _run(cli, cwd=None)
+
+
 def main():
     p = argparse.ArgumentParser(
         prog="facehugger",
@@ -304,6 +320,18 @@ def main():
     pa.add_argument("--headless", action="store_true")
     pa.add_argument("--settle", type=float, default=None)
     pa.set_defaults(func=cmd_all)
+
+    pserve = sub.add_parser(
+        "serve",
+        help="run the firmware-backed WebSocket robot API (drive from the app / "
+        "tools/robot_control_panel.html)",
+    )
+    pserve.add_argument("--host", default="localhost")
+    pserve.add_argument(
+        "--port", type=int, default=8081, help="default 8081 (81 is privileged)"
+    )
+    pserve.add_argument("--gui", action="store_true", help="show the PyBullet window")
+    pserve.set_defaults(func=cmd_serve)
 
     args = p.parse_args()
     sys.exit(args.func(args))

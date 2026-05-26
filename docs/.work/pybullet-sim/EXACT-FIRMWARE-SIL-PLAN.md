@@ -426,10 +426,21 @@ golden — comparison flips to fail); intentional changes are re-baked via
 (Out-of-range is checked on the final servo angles; pre-clamp flagging would need a
 binding addition — noted, not done.)
 
-**Step 3 — WS server + HTML control panel (built alongside, D2/D4).** Python
-`websockets` server on :81 → `FirmwareControl.command`; `tools/robot_control_panel.html`
-(works against sim and real robot). Stand these up even though only clip commands
-reach motion yet — immediately useful for manual poking.
+**Step 3 — WS server + HTML control panel. ✅ DONE (upgraded to option ii).**
+`firmware_sil/ws_sim.py` serves the API_SPEC `T:` protocol (`facehugger.py serve`,
+default :8081) and drives PyBullet via the firmware. Per a follow-up request, the
+**command dispatch is the COMPILED firmware**, not a Python mirror: `network.cpp`'s
+`handleParsedMessage` (+ `clip_list_serializer` + ArduinoJson) is compiled into
+`fh_sim` and routed to a shared global `spinalCord`; the binding's
+`handle_message(json)` runs it and returns any `sendTXT` reply (e.g. the real
+buildClipListJson for T:8). So firmware API changes reflect automatically.
+`tools/robot_control_panel.html` (no-build, single file) drives both the sim
+(`ws://localhost:8081`) and the real robot (`ws://<ip>:81`); the unmodified app can
+too. `test_sil_ws.py` proves a real client gets firmware clip discovery + commands.
+Telemetry (robot→panel T:10, broadcast every 500 ms) stays Python (it's
+firmware-emitted elsewhere, not in handleParsedMessage). `websockets` added to
+requirements. Global-`spinalCord` refactor verified behavior-preserving (golden
+clip suite unchanged).
 
 **Step 4 — Gait via SIL.** Feed `(gait, X/Y/Yaw)` commands into `FirmwareControl`;
 same harness and assertions as the clip suite.
