@@ -61,6 +61,12 @@ def main():
         help="print a torque + estimated-current status line periodically "
         "(per-leg angles, peak torque, total current [WARN >10A], [STALL] joints)",
     )
+    parser.add_argument(
+        "--log",
+        action="store_true",
+        help="record per-joint torque/current every step; on exit print a "
+        "summary table and write sim_log.csv + sim_log.png (additive to --monitor)",
+    )
     args = parser.parse_args()
 
     cfg = build_config()
@@ -74,6 +80,7 @@ def main():
             loop=args.loop,
             float_mode=args.float_mode,
             monitor=args.monitor,
+            log=args.log,
         )
     elif args.walk:
         run_gait(
@@ -83,6 +90,7 @@ def main():
             settle_s=args.settle,
             float_mode=args.float_mode,
             monitor=args.monitor,
+            log=args.log,
         )
     elif args.trot:
         run_gait(
@@ -92,6 +100,7 @@ def main():
             settle_s=args.settle,
             float_mode=args.float_mode,
             monitor=args.monitor,
+            log=args.log,
         )
     else:
         run_stand(
@@ -100,6 +109,7 @@ def main():
             settle_s=args.settle,
             float_mode=args.float_mode,
             monitor=args.monitor,
+            log=args.log,
         )
 
 

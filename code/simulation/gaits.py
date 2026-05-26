@@ -214,20 +214,53 @@ def _settle(robot_id, joint_map, cfg, duration_s):
         p.stepSimulation()
 
 
-def _make_step_monitor(robot_id, joint_map, every=30):
-    """Return an on_step(i) callback that prints a torque + estimated-current
-    status line every `every` sim steps (~8 Hz at 240 Hz). Enabled by --monitor;
-    shows per-leg angles, peak joint torque, total estimated current ([WARN >10A])
-    and any stalling joint ([STALL]). See sim_monitor.py."""
+def _make_step_monitor(robot_id, joint_map, every=30, logger=None):
+    """Return an on_step(i) callback for the sim loops.
+
+    --monitor: prints a torque + estimated-current status line every `every`
+    sim steps (~8 Hz at 240 Hz) — per-leg angles, peak joint torque, total
+    estimated current ([WARN >10A]) and any stalling joint ([STALL]).
+
+    --log: if `logger` (a sim_monitor.SimLogger) is given, records every step
+    (not just every `every`) for the end-of-run summary/CSV/plot. Reads torques
+    once per step and shares them with the periodic print. See sim_monitor.py.
+    """
     import sim_monitor
 
     def on_step(i):
-        if i % every == 0:
-            torques = sim_monitor.read_joint_torques(robot_id, joint_map)
+        do_print = i % every == 0
+        if logger is None and not do_print:
+            return
+        torques = sim_monitor.read_joint_torques(robot_id, joint_map)
+        if logger is not None:
+            logger.record(i * TIMESTEP, torques)
+        if do_print:
             pos = sim_monitor.read_joint_pos_deg(robot_id, joint_map)
             print(sim_monitor.format_status(i * TIMESTEP, torques, pos))
 
     return on_step
+
+
+def _make_logger(joint_map, log):
+    """Build a SimLogger over the joint set when --log is set, else None."""
+    if not log:
+        return None
+    import sim_monitor
+
+    return sim_monitor.SimLogger(list(joint_map.keys()))
+
+
+def _finalize_log(logger):
+    """End-of-run output for --log: summary table, CSV, and 3-panel plot.
+
+    Called from each run_* finally block so it runs even on Ctrl+C / p.error.
+    No-op when logging is disabled.
+    """
+    if logger is None:
+        return
+    logger.summary()
+    logger.save_csv("sim_log.csv")
+    logger.plot("sim_log.png")
 
 
 def _connect_and_setup(cfg, gui, float_mode=False):
@@ -332,7 +365,7 @@ def _print_banner(cfg):
         )
 
 
-def run_stand(cfg, gui=True, settle_s=0.5, float_mode=False, monitor=False):
+def run_stand(cfg, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False):
     robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
     _print_banner(cfg)
     if float_mode:
@@ -341,7 +374,12 @@ def run_stand(cfg, gui=True, settle_s=0.5, float_mode=False, monitor=False):
         print(f"\n[settle] holding stance for {settle_s:.2f}s before idle loop")
         _settle(robot_id, joint_map, cfg, settle_s)
     print("\nStanding - Ctrl+C to exit.")
-    on_step = _make_step_monitor(robot_id, joint_map) if monitor else None
+    logger = _make_logger(joint_map, log)
+    on_step = (
+        _make_step_monitor(robot_id, joint_map, logger=logger)
+        if (monitor or log)
+        else None
+    )
     step = 0
     try:
         while p.isConnected():
@@ -356,10 +394,18 @@ def run_stand(cfg, gui=True, settle_s=0.5, float_mode=False, monitor=False):
     finally:
         if p.isConnected():
             p.disconnect()
+        _finalize_log(logger)
 
 
 def run_clip(
-    cfg, clip_name, gui=True, settle_s=0.5, loop=False, float_mode=False, monitor=False
+    cfg,
+    clip_name,
+    gui=True,
+    settle_s=0.5,
+    loop=False,
+    float_mode=False,
+    monitor=False,
+    log=False,
 ):
     """Load and play an animation clip by name in PyBullet.
 
@@ -394,7 +440,12 @@ def run_clip(
     print(
         f"\n[clip] playing '{clip.name}' ({clip.duration_ms} ms){loop_note}{mon_note}"
     )
-    on_step = _make_step_monitor(robot_id, joint_map) if monitor else None
+    logger = _make_logger(joint_map, log)
+    on_step = (
+        _make_step_monitor(robot_id, joint_map, logger=logger)
+        if (monitor or log)
+        else None
+    )
     player = ClipPlayer(robot_id, joint_map, clip, cfg.servo_force, cfg.servo_velocity)
     try:
         player.play_blocking(gui=gui, loop=loop, on_step=on_step)
@@ -403,9 +454,12 @@ def run_clip(
     finally:
         if p.isConnected():
             p.disconnect()
+        _finalize_log(logger)
 
 
-def run_gait(cfg, gait_name, gui=True, settle_s=0.5, float_mode=False, monitor=False):
+def run_gait(
+    cfg, gait_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
+):
     if gait_name not in GAITS:
         raise ValueError(f"Unknown gait: {gait_name}")
     gait = GAITS[gait_name]
@@ -438,7 +492,12 @@ def run_gait(cfg, gait_name, gui=True, settle_s=0.5, float_mode=False, monitor=F
     cycles = _precompute_cycle(cfg, gait) if draw_overlay else None
     draw_every = 4
 
-    on_step = _make_step_monitor(robot_id, joint_map) if monitor else None
+    logger = _make_logger(joint_map, log)
+    on_step = (
+        _make_step_monitor(robot_id, joint_map, logger=logger)
+        if (monitor or log)
+        else None
+    )
     t = 0.0
     step = 0
     try:
@@ -475,3 +534,4 @@ def run_gait(cfg, gait_name, gui=True, settle_s=0.5, float_mode=False, monitor=F
     finally:
         if p.isConnected():
             p.disconnect()
+        _finalize_log(logger)
