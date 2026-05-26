@@ -19,6 +19,8 @@ Reader-facing outputs, candidates to promote into the real repo docs / wiki.
   the actionable bit for adapting the firmware and updating older docs.
 - **`report.html`** — the same report rendered as a self-contained styled page
   (sticky TOC, syntax-highlighted code). Open directly in a browser; no build.
+- **`REORG-PLAN.md`** — executable migration plan to split `code/simulation/`
+  into `pybullet_sim/` (runtime) + `urdf_gen/` (build). Proposal, not yet run.
 
 ## Evidence
 
@@ -36,3 +38,20 @@ Generated 2026-05-26. The report flags seven places where prose docs lag the
 live code/URDF (joint names `link1/2/3` not `shoulder/hip/knee`, asymmetric
 shoulder ROM, per-leg shoulder axis sign, the 2026-05-25 BR un-mirror, etc.) —
 see `REPORT.md §7`.
+
+### Changes since the report snapshot (2026-05-26, same day)
+
+`REPORT.md` is a snapshot; the code moved slightly after it was written:
+
+- **Servo corrected to QYRC DSS-230MG** (30 kg·cm → 2.94 N·m, ~2 A). The
+  monitor stall model and `facehugger_config.yaml` `effort_nm` now both use
+  2.94, matching the URDF's `effort="2.94"` (no drift). `mass_kg: 0.300` is an
+  unverified placeholder.
+- **`SimLogger` + `--log` flag** added to `sim_monitor.py` / `simulate.py` —
+  per-step torque/current capture → summary + `sim_log.csv` + `sim_log.png`.
+  Additive; `--monitor` unchanged.
+- **Dead files removed**: `teleop.py`, `terrain.py` (stubs) and `view_urdf.py`
+  (the `view` subcommand is gone — use `sim`). The report's §1 file-map still
+  lists these; treat them as deleted.
+- **`clip_player.py` docstring fixed** — it now correctly states link1 gets the
+  per-leg axis sign too (REPORT.md §7 item 4 is resolved).
