@@ -47,18 +47,39 @@ Produces `build/fh_sim.<ext>.so`. It is **not committed** (rebuilt locally / in
 CI). Contributors without a C++ toolchain skip this and use the Python re-port
 (`firmware_port/`); `test_sil_poc.py` skips automatically when `fh_sim` is absent.
 
-## Verify
+## Use it
 
 ```bash
-conda run -n facehugger python -m pytest test_sil_poc.py -v
+cd code/simulation
+python facehugger.py sim --clip "wave" --headless --sil   # play via the exact firmware
+```
+Default (no `--sil`) uses the Python re-port (`firmware_port/`).
+
+## Verify (run from code/simulation/, not this dir)
+
+```bash
+cd code/simulation
+conda run -n facehugger python -m pytest test_sil_poc.py test_sil_clip_suite.py -v
 ```
 
-Proves: the firmware plays a clip with all servo angles in `[0,180]`; SIL output
-matches the Python re-port's `translate_to_servo` at frame 0 to within the
-firmware's whole-degree truncation (≤ 1°); and the bridge drives PyBullet joints
-through a full clip headless.
+- `test_sil_poc.py` — the firmware plays a clip with all angles in `[0,180]`; SIL
+  matches the Python re-port at frame 0 within the firmware's whole-degree
+  truncation (≤ 1°); the bridge drives PyBullet headless; `--sil` runs end-to-end.
+- `test_sil_clip_suite.py` — replays **every** clip through the firmware and asserts
+  an **exact** match to its committed golden trace (`golden/*.json`). A firmware or
+  clip-export change that shifts any servo angle fails here.
+
+## Golden traces
+
+`golden/<clip>.json` is the recorded servo-angle trace (10 Hz, whole degrees) the
+firmware produces for each clip — the exporter/firmware regression baseline.
+Regenerate **only** for intentional changes, then review the diff:
+
+```bash
+cd code/simulation && conda run -n facehugger python -m firmware_sil.gen_golden
+```
 
 ## Status
 
-Step 1 of `docs/.work/pybullet-sim/EXACT-FIRMWARE-SIL-PLAN.md` (proof of concept).
-Not yet wired into `facehugger.py sim --sil` — that's Step 2.
+Steps 1–2 of `docs/.work/pybullet-sim/EXACT-FIRMWARE-SIL-PLAN.md` done. Next:
+Step 3 (WebSocket server on :81 + `tools/robot_control_panel.html`).

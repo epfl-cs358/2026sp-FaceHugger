@@ -408,17 +408,29 @@ def run_clip(
     float_mode=False,
     monitor=False,
     log=False,
+    sil=False,
 ):
     """Load and play an animation clip by name in PyBullet.
 
-    Looks up clip_name in animation/exported_clips/clips_all.h,
-    settles the robot to stance, then plays the clip via ClipPlayer.
-    loop=True (GUI only) replays the clip continuously so you can watch
-    cumulative behaviour over time; physics state carries across loops.
-    float_mode=True: no gravity/floor, body pinned — watch the clip's pure
-    joint geometry without the robot falling (skips the settle step).
-    monitor=True: print a torque + estimated-current status line periodically.
+    By default the joint driver is the Python re-port (firmware_port.ClipPlayer).
+    sil=True instead drives the joints with the EXACT firmware code compiled to
+    the host (firmware_sil) — what the robot would actually command. The Python
+    re-port reads animation/exported_clips/clips_all.h; the SIL reads the
+    firmware's own clips_all.h (so it tests what gets flashed).
+    loop=True (GUI only) replays continuously; float_mode pins the body;
+    monitor/log add the torque/current readout + capture.
     """
+    if sil:
+        return _run_clip_sil(
+            cfg,
+            clip_name,
+            gui=gui,
+            settle_s=settle_s,
+            float_mode=float_mode,
+            monitor=monitor,
+            log=log,
+        )
+
     from firmware_port.clip_loader import (
         DEFAULT_CLIPS_H,
         get_clip_by_name,
@@ -446,6 +458,47 @@ def run_clip(
     player = ClipPlayer(robot_id, joint_map, clip, cfg.servo_force, cfg.servo_velocity)
     try:
         player.play_blocking(gui=gui, loop=loop, on_step=on_step)
+    except (KeyboardInterrupt, p.error):
+        pass
+    finally:
+        if p.isConnected():
+            p.disconnect()
+        _finalize_log(logger)
+
+
+def _run_clip_sil(
+    cfg, clip_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
+):
+    """Play a clip through the compiled firmware (software-in-the-loop)."""
+    from firmware_sil.sil_bridge import FirmwareSILDriver
+
+    driver = FirmwareSILDriver()  # raises a clear error if fh_sim isn't built
+    if clip_name not in driver.clip_names():
+        raise KeyError(
+            f"clip {clip_name!r} not in firmware clips {driver.clip_names()}"
+        )
+
+    robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
+    _print_banner(cfg)
+    if float_mode:
+        print("[float] no gravity/floor, body pinned — showing joint geometry")
+    elif settle_s > 0:
+        print(f"\n[settle] holding stance for {settle_s:.2f}s before clip")
+        _settle(robot_id, joint_map, cfg, settle_s)
+
+    mon_note = "  [monitor: torque/current]" if monitor else ""
+    print(f"\n[clip][SIL] playing '{clip_name}' via exact firmware code{mon_note}")
+    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
+    try:
+        driver.play_clip_blocking(
+            robot_id,
+            joint_map,
+            clip_name,
+            cfg.servo_force,
+            cfg.servo_velocity,
+            gui=gui,
+            on_step=on_step,
+        )
     except (KeyboardInterrupt, p.error):
         pass
     finally:

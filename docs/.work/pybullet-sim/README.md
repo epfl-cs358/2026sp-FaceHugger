@@ -66,6 +66,13 @@ see `REPORT.md §7`.
   lists these; treat them as deleted.
 - **`clip_player.py` docstring fixed** — it now correctly states link1 gets the
   per-leg axis sign too (REPORT.md §7 item 4 is resolved).
+- **SIL Step 2 executed:** `facehugger.py sim --clip <name> --sil` plays a clip
+  through the exact firmware (default stays the Python re-port). `gen_golden.py`
+  bakes a per-clip servo-angle golden trace into `firmware_sil/golden/`; the new
+  `test_sil_clip_suite.py` replays each clip through the firmware and asserts an
+  **exact** match — so any firmware/clip change that shifts a servo angle fails CI
+  (the exporter guard). `pybind11` added to `requirements.txt` (build-time only).
+  88 tests pass.
 - **SIL Step 1 executed (proof of concept):** `firmware_sil/` compiles the exact
   firmware `SpinalCord` (unchanged, via `hal/` shims + CMake/pybind11) into the
   `fh_sim` module; `sil_bridge.py` drives PyBullet from the firmware's own servo

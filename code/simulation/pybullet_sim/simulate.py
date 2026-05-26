@@ -67,6 +67,13 @@ def main():
         help="record per-joint torque/current every step; on exit print a "
         "summary table and write sim_log.csv + sim_log.png (additive to --monitor)",
     )
+    parser.add_argument(
+        "--sil",
+        action="store_true",
+        help="play the clip through the EXACT firmware code (firmware_sil, "
+        "compiled) instead of the Python re-port; requires the fh_sim build "
+        "(see code/simulation/firmware_sil/README.md). Clips only.",
+    )
     args = parser.parse_args()
 
     cfg = build_config()
@@ -81,6 +88,7 @@ def main():
             float_mode=args.float_mode,
             monitor=args.monitor,
             log=args.log,
+            sil=args.sil,
         )
     elif args.walk:
         run_gait(

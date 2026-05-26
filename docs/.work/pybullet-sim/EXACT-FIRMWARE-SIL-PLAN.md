@@ -408,11 +408,18 @@ injected sim clock.
 > "mock the hardware, zero firmware changes." Swap in ArduinoMock via `FetchContent`
 > if a future compiled file needs a fuller Arduino surface.
 
-**Step 2 — `--sil` flag + SIL clip suite.** Wire `facehugger.py sim --sil` /
-`simulate.py` to switch the joint driver to `sil_bridge` (default stays
-`firmware_port`). Drive **all** clips from the firmware's own `clips_all.h`; add
-golden-trace + out-of-range (pre-clamp) assertions; CI builds the CMake lib and runs
-the suite. **Headline deliverable — this validates the exporter.**
+**Step 2 — `--sil` flag + SIL clip suite. ✅ DONE.** `facehugger.py sim --sil` /
+`simulate.py --sil` switch the clip joint driver to `firmware_sil` (default stays
+`firmware_port`; `run_clip(..., sil=True)` → `_run_clip_sil`). `gen_golden.py`
+records a deterministic 10 Hz servo-angle trace per clip into
+`firmware_sil/golden/*.json` (committed); `test_sil_clip_suite.py` replays every
+clip through the firmware and asserts an **exact** match to its golden, plus
+`[0,180]` range, plus that every firmware clip has a golden. **A firmware/clip
+change that shifts any servo angle ≥1° fails the suite** (verified by mutating a
+golden — comparison flips to fail); intentional changes are re-baked via
+`python -m firmware_sil.gen_golden` and reviewed as a golden diff. 88 tests pass.
+(Out-of-range is checked on the final servo angles; pre-clamp flagging would need a
+binding addition — noted, not done.)
 
 **Step 3 — WS server + HTML control panel (built alongside, D2/D4).** Python
 `websockets` server on :81 → `FirmwareControl.command`; `tools/robot_control_panel.html`

@@ -13,6 +13,8 @@ What it proves:
   - the SIL bridge can drive PyBullet joints through a whole clip headless.
 """
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -21,6 +23,7 @@ pytest.importorskip("pybullet")
 
 SIM_DIR = Path(__file__).resolve().parent
 FW_CLIPS = SIM_DIR / ".." / "firmware" / "src" / "nervous_system" / "clips_all.h"
+FACEHUGGER = SIM_DIR / "facehugger.py"
 CLIP = "wave"
 
 
@@ -114,3 +117,27 @@ def test_sil_drives_pybullet_headless():
     # The clip drove the firmware, which drove the joints: at least one moved.
     total_motion = sum(abs(e - s) for e, s in zip(end, start))
     assert total_motion > 1e-3, f"joints did not move (total {total_motion:.5f})"
+
+
+def test_facehugger_sim_sil_flag_runs():
+    """`facehugger.py sim --clip wave --headless --sil` plays via the firmware SIL."""
+    _driver_or_skip()  # skip if fh_sim isn't built
+    r = subprocess.run(
+        [
+            sys.executable,
+            str(FACEHUGGER),
+            "sim",
+            "--clip",
+            CLIP,
+            "--headless",
+            "--settle",
+            "0",
+            "--sil",
+        ],
+        cwd=str(SIM_DIR),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert r.returncode == 0, r.stderr
+    assert "[SIL]" in r.stdout, r.stdout

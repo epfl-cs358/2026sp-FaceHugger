@@ -72,6 +72,36 @@ def servo_angles_to_joint_targets(angles12):
     return targets
 
 
+def trace_clip(fc, clip_name, record_every=24, step_hz=240):
+    """Deterministic servo-angle trace of a clip through the firmware.
+
+    Ticks the firmware at `step_hz` over the clip's duration (t_ms = step*1000/hz)
+    and records the 12 servo angles (whole degrees, as the robot receives them)
+    every `record_every` steps. Used by both the golden generator and the clip
+    suite, so they tick the *identical* sequence — the trace is a pure function of
+    the firmware code + the clip data, making any servo-angle change detectable.
+
+    Returns: list of [t_ms, [12 int degrees]].
+    """
+    cid = fc.clip_id_by_name(clip_name)
+    if cid < 0:
+        raise KeyError(f"clip {clip_name!r} not found")
+    duration_ms = fc.clip_duration_ms(cid)
+    fc.set_clock_ms(0)
+    fc.play_clip(cid)
+    samples = []
+    step = 0
+    while True:
+        t_ms = int(step * 1000.0 / step_hz)
+        fc.tick(t_ms)
+        if step % record_every == 0:
+            samples.append([t_ms, [int(round(a)) for a in fc.servo_angles()]])
+        if t_ms >= duration_ms:
+            break
+        step += 1
+    return samples
+
+
 class FirmwareSILDriver:
     """Plays clips through the real firmware code, driving PyBullet joints."""
 
