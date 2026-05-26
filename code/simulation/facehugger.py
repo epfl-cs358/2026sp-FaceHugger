@@ -4,7 +4,6 @@ facehugger — single-entry CLI wrapping the simulation pipeline.
 Subcommands:
   urdf      regenerate generated/facehugger.urdf from generated/fusion_export.json
   sim       run simulate.py (default: stand; --walk / --trot for gaits)
-  view      open generated/facehugger.urdf in PyBullet's viewer (no physics)
   blender   import the URDF into Blender (placement-only, no rig by default;
             --rigged builds an armature with IK + foot-target Empties for
             animation work)
@@ -13,7 +12,6 @@ Subcommands:
 Examples:
   python facehugger.py urdf
   python facehugger.py sim --walk
-  python facehugger.py view
   python facehugger.py blender                                # default 5.1, placement-only
   python facehugger.py blender --rigged                       # armature + IK rig
   python facehugger.py blender --blender-version 5.2          # specific version
@@ -37,7 +35,6 @@ REPO_ROOT = HERE.parent.parent
 
 GENERATE_URDF = HERE / "generate_urdf.py"
 SIMULATE = HERE / "simulate.py"
-VIEW_URDF = HERE / "view_urdf.py"
 VISUALIZE = REPO_ROOT / "animation" / "scripts" / "visualize_urdf.py"
 VISUALIZE_RIGGED = REPO_ROOT / "animation" / "scripts" / "urdf_to_blender_rigged.py"
 
@@ -138,10 +135,6 @@ def cmd_sim(args):
     return _run(cli)
 
 
-def cmd_view(_args):
-    return _run([sys.executable, VIEW_URDF])
-
-
 def cmd_blender(args):
     blender = _resolve_blender_bin(args.blender_version)
 
@@ -220,9 +213,6 @@ def main():
     ps.add_argument("--headless", action="store_true")
     ps.add_argument("--settle", type=float, default=None)
     ps.set_defaults(func=cmd_sim)
-
-    pv = sub.add_parser("view", help="open URDF in PyBullet viewer")
-    pv.set_defaults(func=cmd_view)
 
     pb = sub.add_parser("blender", help="open the URDF in Blender")
     pb.add_argument(

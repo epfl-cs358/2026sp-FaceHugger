@@ -241,13 +241,20 @@ def _make_step_monitor(robot_id, joint_map, every=30, logger=None):
     return on_step
 
 
-def _make_logger(joint_map, log):
-    """Build a SimLogger over the joint set when --log is set, else None."""
-    if not log:
-        return None
+def setup_step_hook(robot_id, joint_map, monitor, log):
+    """Build the (on_step, logger) pair shared by the run_* loops.
+
+    Returns (None, None) when neither --monitor nor --log is set. When --log,
+    the SimLogger is returned too so the caller can _finalize_log() it after
+    the loop. See _make_step_monitor / sim_monitor.SimLogger.
+    """
+    if not (monitor or log):
+        return None, None
     import sim_monitor
 
-    return sim_monitor.SimLogger(list(joint_map.keys()))
+    logger = sim_monitor.SimLogger(list(joint_map.keys())) if log else None
+    on_step = _make_step_monitor(robot_id, joint_map, logger=logger)
+    return on_step, logger
 
 
 def _finalize_log(logger):
@@ -374,12 +381,7 @@ def run_stand(cfg, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=
         print(f"\n[settle] holding stance for {settle_s:.2f}s before idle loop")
         _settle(robot_id, joint_map, cfg, settle_s)
     print("\nStanding - Ctrl+C to exit.")
-    logger = _make_logger(joint_map, log)
-    on_step = (
-        _make_step_monitor(robot_id, joint_map, logger=logger)
-        if (monitor or log)
-        else None
-    )
+    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
     step = 0
     try:
         while p.isConnected():
@@ -440,12 +442,7 @@ def run_clip(
     print(
         f"\n[clip] playing '{clip.name}' ({clip.duration_ms} ms){loop_note}{mon_note}"
     )
-    logger = _make_logger(joint_map, log)
-    on_step = (
-        _make_step_monitor(robot_id, joint_map, logger=logger)
-        if (monitor or log)
-        else None
-    )
+    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
     player = ClipPlayer(robot_id, joint_map, clip, cfg.servo_force, cfg.servo_velocity)
     try:
         player.play_blocking(gui=gui, loop=loop, on_step=on_step)
@@ -492,12 +489,7 @@ def run_gait(
     cycles = _precompute_cycle(cfg, gait) if draw_overlay else None
     draw_every = 4
 
-    logger = _make_logger(joint_map, log)
-    on_step = (
-        _make_step_monitor(robot_id, joint_map, logger=logger)
-        if (monitor or log)
-        else None
-    )
+    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
     t = 0.0
     step = 0
     try:
