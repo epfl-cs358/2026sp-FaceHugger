@@ -38,30 +38,38 @@ There are two ways to drive the robot:
 
 ## 1. File map
 
-The simulation lives in `code/simulation/`. Files are grouped by role.
+The simulation lives in `code/simulation/`, split into two packages: the
+**runtime** (`pybullet_sim/`) and the **URDF build step** (`urdf_gen/`). The CLI
+(`facehugger.py`) and the shared config + artifacts stay at the top level.
 
-### Engine + entry points
+> **Path note.** Inline `file:line` references later in this report use bare
+> module names (e.g. `gaits.py:242`, `servo_convention.py:98`). Those modules now
+> live under `pybullet_sim/` and `pybullet_sim/interpreter/` respectively — see
+> the tables below for the full path of each.
+
+### Top level — `code/simulation/`
+
+| File | Role |
+|---|---|
+| `facehugger.py` | CLI dispatcher: `urdf` / `sim` / `blender` / `all`. Runs the runtime/build packages via `python -m`. |
+| `facehugger_config.yaml` | Deliberately thin config: only data CAD can't know (servo specs, leg ids/mounts). Shared by both packages. |
+| `generated/facehugger.urdf` | The kinematic source of truth. Never hand-edited. |
+| `test_pipeline_regression.py` | End-to-end regression net (subprocess-driven, via the CLI). |
+| `test_package_structure.py` | Pins the package boundaries (importable, `-m` entry point). |
+
+### Runtime — `pybullet_sim/`
 
 | File | Lines | Role |
 |---|---:|---|
-| `facehugger.py` | 290 | CLI dispatcher: `urdf` / `sim` / `view` / `blender` / `all` subcommands. |
 | `simulate.py` | 107 | `argparse` front-end for `sim`. Does **no** PyBullet work — hands off to `gaits.py`. |
-| `gaits.py` | 477 | The real PyBullet wiring: connect, load, configure physics, the step loop, and the gait engine. |
+| `gaits.py` | ~540 | The real PyBullet wiring: connect, load, configure physics, the step loop, and the gait engine. |
 | `helpers.py` | 229 | Shared plumbing: URDF XML parsing, joint-name→index map, the `setJointMotorControl2` wrappers. |
-| `constants.py` | 20 | `TIMESTEP = 1/240`, `URDF_PATH`, stance angles. |
-| `sim_monitor.py` | 82 | `--monitor` readout: applied torque from `getJointState`, linear torque→current model. |
-| `view_urdf.py` | 65 | Standalone no-physics URDF viewer. Functional but slated for removal. |
+| `constants.py` | ~22 | `TIMESTEP = 1/240`, `URDF_PATH`, stance angles (resolves paths from `SIM_ROOT`). |
+| `sim_monitor.py` | ~230 | `--monitor` readout + `SimLogger` (`--log`): torque from `getJointState`, torque→current model. |
+| `kinematics.py` | 362 | `build_config()` (reads geometry from the URDF), forward `fk_v2`, inverse `ik_v2`. |
+| `test_sim_monitor.py` | 50 | Unit tests for the torque/current math. |
 
-### Kinematics + config
-
-| File | Lines | Role |
-|---|---:|---|
-| `kinematics.py` | 362 | `build_config()` (reads geometry from the URDF), forward kinematics `fk_v2`, inverse kinematics `ik_v2`. |
-| `facehugger_config.yaml` | — | Deliberately thin: only data CAD can't know (servo effort/velocity, leg ids/mounts). |
-| `generate_urdf.py` | 1188 | CAD-export → URDF generator. Owns the shoulder-rest derivation. |
-| `generated/facehugger.urdf` | — | The kinematic source of truth. Never hand-edited. |
-
-### Clip interpreter (`pybullet_interpreter/`)
+### Clip interpreter — `pybullet_sim/interpreter/`
 
 | File | Lines | Role |
 |---|---:|---|
@@ -69,28 +77,25 @@ The simulation lives in `code/simulation/`. Files are grouped by role.
 | `clip_loader.py` | 140 | Parses `clips_all.h` (C arrays) into `ClipData`/`ClipFrame` dataclasses. |
 | `clip_player.py` | 215 | Interpolates frames, maps joints, and drives PyBullet. Lazy `import pybullet`. |
 | `gait_interpreter.py` | 15 | Stub — `NotImplementedError`. Reserved for future gait playback. |
+| `__init__.py` | — | Public API re-exports (explicit `__all__`). |
 | `tests/` | — | Pure-math tests (no PyBullet) that lock down the convention contract. |
 
-### Verification
+### URDF build — `urdf_gen/`
 
 | File | Lines | Role |
 |---|---:|---|
+| `generate_urdf.py` | 1188 | CAD-export → URDF generator. Owns the shoulder-rest derivation. Resolves `generated/` from `SIM_ROOT`. |
 | `verify_export_parity.py` | 141 | Proves the sim interprets exported clips identically to the firmware/browser. |
-| `test_sim_monitor.py` | 50 | Unit tests for the torque/current math. |
 
-### Stubs (look usable, aren't)
-
-`teleop.py` and `terrain.py` import cleanly but every entry point raises
-`NotImplementedError` — survivors from a pre-merge branch. Neither sits on the
-PyBullet path.
+> The pre-merge stub files `teleop.py`, `terrain.py`, and the redundant
+> `view_urdf.py` (+ the `view` subcommand) were removed; they no longer exist.
 
 ---
 
 ## 2. How the simulation talks to PyBullet
 
 `simulate.py` is only an argument parser; the canonical engine-setup path is
-`gaits._connect_and_setup`. The same eight-step pattern is repeated (more simply)
-by the standalone `view_urdf.py`.
+`gaits._connect_and_setup`.
 
 ### 2.1 Connecting to the physics server
 

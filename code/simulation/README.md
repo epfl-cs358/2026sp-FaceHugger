@@ -14,10 +14,16 @@ fusion_export.json    (CAD tree + mesh_files manifest)
 fusion_export.txt     (human-readable tree)
 exported_meshes/*.stl (8 files: chassis + per-side L/R brackets + per-side L/R shoulder + shared upper/lower + servo)
    │
-   └── generate_urdf.py ──► facehugger.urdf ──┬─► simulate.py  (PyBullet)
-                                              │
-                                              └─► visualize_urdf.py  (Blender 5.x)
+   └── urdf_gen/generate_urdf.py ──► facehugger.urdf ──┬─► pybullet_sim/  (PyBullet sim + clip interpreter)
+                                                       │
+                                                       └─► visualize_urdf.py  (Blender 5.x)
 ```
+
+The code is split into two packages: **`pybullet_sim/`** (the runtime —
+`simulate`, `gaits`, `kinematics`, `helpers`, `constants`, `sim_monitor`, and the
+clip `interpreter/`) and **`urdf_gen/`** (`generate_urdf`, `verify_export_parity`).
+`facehugger.py` + `facehugger_config.yaml` + `generated/` stay at the top. Run
+modules with `python -m pybullet_sim.simulate` from `code/simulation/`, not by path.
 
 ## Prerequisites
 
@@ -45,11 +51,11 @@ Re-runs preserve user edits to `mesh_files._servo_role_assignment` in the JSON.
 cd code/simulation
 
 python facehugger.py urdf                 # regenerate generated/facehugger.urdf
-python facehugger.py view                 # open URDF in PyBullet's viewer (no physics)
 python facehugger.py sim                  # GUI, standing pose
 python facehugger.py sim --walk           # walk gait
 python facehugger.py sim --trot           # trot gait
 python facehugger.py sim --headless       # no GUI — CI smoke-check
+python facehugger.py sim --clip "wave" --headless   # play a baked clip via the interpreter
 python facehugger.py blender                          # URDF in Blender, placement-only
 python facehugger.py blender --rigged                 # animator-facing rig (armature + IK)
 python facehugger.py blender --blender-version 5.2    # specific Blender version
@@ -100,17 +106,6 @@ Common pitfalls:
 - **STL imports silently fail in `--background`** — make sure you're on Blender 5.0+. The placement-only script's `clear_scene` works around a `wm.read_factory_settings(use_empty=True)` quirk that bricked STL import on older versions.
 - **Rigged scene drifts from placement baseline** — at all-zero pose the two should match within 0.5 mm. If they don't, the rig is composing transforms wrong; open both `.blend` outputs and overlay. See [animation/scripts/README.md](../../animation/scripts/README.md) for the rig-build details.
 
-`view` mouse controls:
-
-| Action | How |
-| --- | --- |
-| Orbit | left-drag |
-| Pan | ctrl + left-drag |
-| Zoom | scroll |
-| Quit | close window or Ctrl+C |
-
-The viewer holds the body fixed with gravity off — nothing moves on its own.
-
 The `sim` simulator reads geometry from the URDF + `facehugger_config.yaml`; no hardcoded leg lengths or stances in Python.
 
 The URDF generator (`urdf` subcommand):
@@ -143,13 +138,17 @@ Angles are in degrees in the yaml; `generate_urdf.py` converts to the URDF's rad
 
 ```
 code/simulation/
-  facehugger.py                 CLI entry point — wraps the scripts below
+  facehugger.py                 CLI entry point — runs the packages below via `python -m`
   facehugger_config.yaml        semantic config (hand-edited)
-  generate_urdf.py              URDF generator
-  simulate.py                   PyBullet simulator (constants/helpers/kinematics/gaits)
-  view_urdf.py                  PyBullet URDF viewer (no physics)
   README.md                     this file
   docs/                         pipeline docs (PIPELINE_SPEC, ASSEMBLY_HIERARCHY, …)
+  pybullet_sim/                 runtime package
+    simulate.py                 PyBullet simulator front-end (constants/helpers/kinematics/gaits)
+    gaits.py kinematics.py helpers.py constants.py sim_monitor.py
+    interpreter/                clip loader + servo-convention + clip player (+ tests/)
+  urdf_gen/                     build package
+    generate_urdf.py            URDF generator
+    verify_export_parity.py     sim↔firmware export parity check
   generated/                    artifacts produced by the Fusion add-in / generator
     fusion_export.json          CAD tree (do not edit)
     fusion_export.txt           human-readable tree

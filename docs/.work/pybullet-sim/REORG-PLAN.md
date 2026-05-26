@@ -1,7 +1,11 @@
 # `code/simulation/` reorganization — migration plan
 
-**Status:** proposal, not yet executed (2026-05-26). Reviewed structure agreed;
-this document is the executable plan for a future dedicated change.
+**Status:** ✅ EXECUTED (2026-05-26, commit `e787788`) via TDD — a subprocess
+regression net (`test_pipeline_regression.py`) stayed green across the move and
+4 structure tests (`test_package_structure.py`) flipped red→green. 70 tests pass
+under conda env `facehugger`. The plan below is kept as the record of what was
+done; one deviation: it shipped as a single atomic commit (the cross-file import
+rewrites don't bisect cleanly) rather than the 5-commit sequence in §6.
 
 **Goal:** split the flat `code/simulation/` directory into two clear concerns —
 **URDF generation** (the build step that *produces* the URDF from CAD) and the

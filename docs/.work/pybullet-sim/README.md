@@ -55,3 +55,9 @@ see `REPORT.md §7`.
   lists these; treat them as deleted.
 - **`clip_player.py` docstring fixed** — it now correctly states link1 gets the
   per-leg axis sign too (REPORT.md §7 item 4 is resolved).
+- **Reorg executed** (commit `e787788`): `code/simulation/` split into
+  `pybullet_sim/` (runtime, incl. `interpreter/`) + `urdf_gen/` (build). The CLI
+  (`facehugger.py sim ...`) is unchanged; internally it now runs
+  `python -m pybullet_sim.simulate`. REPORT.md §1 reflects the new layout;
+  REORG-PLAN.md is marked executed. Verified by `test_pipeline_regression.py`
+  (e2e) + `test_package_structure.py` — 70 tests pass.
