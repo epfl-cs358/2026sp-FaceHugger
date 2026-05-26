@@ -20,7 +20,12 @@ Reader-facing outputs, candidates to promote into the real repo docs / wiki.
 - **`report.html`** — the same report rendered as a self-contained styled page
   (sticky TOC, syntax-highlighted code). Open directly in a browser; no build.
 - **`REORG-PLAN.md`** — executable migration plan to split `code/simulation/`
-  into `pybullet_sim/` (runtime) + `urdf_gen/` (build). Proposal, not yet run.
+  into `pybullet_sim/` (runtime) + `urdf_gen/` (build). ✅ executed.
+- **`GAIT-AND-PARITY-PLAN.md`** — design (plan only, not implemented) for a
+  firmware-faithful gait interpreter and a unified firmware↔sim control path;
+  weighs Python re-port vs compile-and-call-firmware (SIL/FFI) vs
+  hardware-in-the-loop, and analyses how strongly parity can be guaranteed.
+  Backed by `research/fw-control-surface.md` + `research/sim-parity-infra.md`.
 
 ## Evidence
 
