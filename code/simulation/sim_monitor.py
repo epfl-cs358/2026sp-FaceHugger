@@ -13,9 +13,7 @@ read_joint_pos_deg do the PyBullet reads.
 
 import math
 
-STALL_TORQUE_NM = (
-    2.94  # QYRC DSS-230MG — 30 kg·cm stall torque (matches servo.effort_nm)
-)
+STALL_TORQUE_NM = 2.94  # QYRC DSS-230MG 30 kg·cm stall (== servo.effort_nm)
 STALL_CURRENT_A = 2.0  # QYRC DSS-230MG — ~2 A max draw at stall
 CURRENT_LIMIT_A = 10.0  # supply / multiplexer budget (12 servos × ~0.8 A realistic avg)
 STALL_WARN_NM = 2.5  # ~85% of stall — flag a joint whose applied torque exceeds this
@@ -95,24 +93,36 @@ class SimLogger:
     sim_monitor stays dependency-light (same spirit as the lazy pybullet import).
     """
 
-    def __init__(self, joint_names: list):
+    # ~5 min at the 240 Hz sim step. Caps memory on an open-ended `run_stand
+    # --log` session (otherwise ~18 MB/min); gait/clip runs are far shorter.
+    MAX_SAMPLES = 240 * 60 * 5
+
+    def __init__(self, joint_names: list, max_samples: int = MAX_SAMPLES):
         self.joint_names = list(joint_names)
+        self.max_samples = max_samples
         self.t: list = []
         self.torque = {n: [] for n in self.joint_names}
         self.current = {n: [] for n in self.joint_names}
         self.total_current: list = []
+        self._capped = False
 
     def record(self, t: float, torques: dict) -> None:
-        """Append one timestep: time + per-joint torque & estimated current."""
+        """Append one timestep: time + per-joint torque & estimated current.
+
+        Silently stops (with a one-time warning) once max_samples is reached so
+        a long-running session can't grow the buffers without bound.
+        """
+        if len(self.t) >= self.max_samples:
+            if not self._capped:
+                print(f"[log] reached {self.max_samples} samples — capping capture")
+                self._capped = True
+            return
         self.t.append(t)
-        total = 0.0
         for n in self.joint_names:
             tau = torques.get(n, 0.0)
-            amps = estimate_current_a(tau)
             self.torque[n].append(tau)
-            self.current[n].append(amps)
-            total += amps
-        self.total_current.append(total)
+            self.current[n].append(estimate_current_a(tau))
+        self.total_current.append(sum(self.current[n][-1] for n in self.joint_names))
 
     def summary(self) -> None:
         """Print a per-joint max/mean torque & current table for the run."""
