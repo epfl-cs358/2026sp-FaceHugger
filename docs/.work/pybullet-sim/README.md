@@ -26,6 +26,12 @@ Reader-facing outputs, candidates to promote into the real repo docs / wiki.
   weighs Python re-port vs compile-and-call-firmware (SIL/FFI) vs
   hardware-in-the-loop, and analyses how strongly parity can be guaranteed.
   Backed by `research/fw-control-surface.md` + `research/sim-parity-infra.md`.
+- **`EXACT-FIRMWARE-SIL-PLAN.md`** + **`.html`** — the focused plan (for review)
+  for running the *exact flashed firmware C++* in the sim via SIL: how to compile
+  the hardware-coupled control code against a mock/HAL layer, bind it to Python,
+  drive PyBullet, test every firmware/clip change, simulate the JS app over the
+  WebSocket API entrypoint, and tune masses. The headline option from the
+  parity plan, made concrete. Open with the `.html` for a styled read.
 
 ## Evidence
 
