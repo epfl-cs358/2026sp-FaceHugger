@@ -419,12 +419,12 @@ def run_clip(
     joint geometry without the robot falling (skips the settle step).
     monitor=True: print a torque + estimated-current status line periodically.
     """
-    from .interpreter.clip_loader import (
+    from firmware_port.clip_loader import (
         DEFAULT_CLIPS_H,
         get_clip_by_name,
         load_clips_all_h,
     )
-    from .interpreter.clip_player import ClipPlayer
+    from firmware_port.clip_player import ClipPlayer
 
     clips = load_clips_all_h(DEFAULT_CLIPS_H)
     clip = get_clip_by_name(clips, clip_name)

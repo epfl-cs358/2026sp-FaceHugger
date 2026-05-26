@@ -66,6 +66,10 @@ see `REPORT.md §7`.
   lists these; treat them as deleted.
 - **`clip_player.py` docstring fixed** — it now correctly states link1 gets the
   per-leg axis sign too (REPORT.md §7 item 4 is resolved).
+- **SIL Step 0 executed:** the Python clip re-port moved
+  `pybullet_sim/interpreter/ → firmware_port/` (top-level package), imports
+  repointed, structure test re-pinned; 71 tests green, clip playback + parity
+  unchanged. (First step of `EXACT-FIRMWARE-SIL-PLAN.md`.)
 - **Reorg executed** (commit `e787788`): `code/simulation/` split into
   `pybullet_sim/` (runtime, incl. `interpreter/`) + `urdf_gen/` (build). The CLI
   (`facehugger.py sim ...`) is unchanged; internally it now runs

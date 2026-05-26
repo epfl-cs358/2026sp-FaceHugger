@@ -28,7 +28,7 @@ There are two ways to drive the robot:
 1. **Procedural gaits** (`gaits.py` + `kinematics.py`) — a phase-clock generates
    foot trajectories, IK turns them into joint angles, and those are pushed to
    PyBullet's position controllers.
-2. **Clip playback** (`pybullet_interpreter/`) — baked animation clips
+2. **Clip playback** (`firmware_port/`) — baked animation clips
    (`clips_all.h`, math-space degrees) are interpolated per frame, converted
    through `translate_to_servo → clamp → servo_to_radians`, and pushed to the same
    controllers. This path is byte-for-byte identical to the ESP32 firmware's clip
@@ -38,14 +38,16 @@ There are two ways to drive the robot:
 
 ## 1. File map
 
-The simulation lives in `code/simulation/`, split into two packages: the
-**runtime** (`pybullet_sim/`) and the **URDF build step** (`urdf_gen/`). The CLI
-(`facehugger.py`) and the shared config + artifacts stay at the top level.
+The simulation lives in `code/simulation/`, split into packages: the **runtime**
+(`pybullet_sim/`), the firmware-faithful clip re-port (`firmware_port/`, relocated
+from `pybullet_sim/interpreter/` in Step 0 of the SIL plan), and the **URDF build
+step** (`urdf_gen/`). The CLI (`facehugger.py`) and the shared config + artifacts
+stay at the top level.
 
 > **Path note.** Inline `file:line` references later in this report use bare
-> module names (e.g. `gaits.py:242`, `servo_convention.py:98`). Those modules now
-> live under `pybullet_sim/` and `pybullet_sim/interpreter/` respectively — see
-> the tables below for the full path of each.
+> module names (e.g. `gaits.py:242`, `servo_convention.py:98`). Those modules live
+> under `pybullet_sim/` and `firmware_port/` respectively — see the tables below
+> for the full path of each.
 
 ### Top level — `code/simulation/`
 
@@ -69,7 +71,7 @@ The simulation lives in `code/simulation/`, split into two packages: the
 | `kinematics.py` | 362 | `build_config()` (reads geometry from the URDF), forward `fk_v2`, inverse `ik_v2`. |
 | `test_sim_monitor.py` | 50 | Unit tests for the torque/current math. |
 
-### Clip interpreter — `pybullet_sim/interpreter/`
+### Clip interpreter (Python re-port) — `firmware_port/`
 
 | File | Lines | Role |
 |---|---:|---|

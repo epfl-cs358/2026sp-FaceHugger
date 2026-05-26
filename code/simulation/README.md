@@ -19,11 +19,13 @@ exported_meshes/*.stl (8 files: chassis + per-side L/R brackets + per-side L/R s
                                                        └─► visualize_urdf.py  (Blender 5.x)
 ```
 
-The code is split into two packages: **`pybullet_sim/`** (the runtime —
-`simulate`, `gaits`, `kinematics`, `helpers`, `constants`, `sim_monitor`, and the
-clip `interpreter/`) and **`urdf_gen/`** (`generate_urdf`, `verify_export_parity`).
-`facehugger.py` + `facehugger_config.yaml` + `generated/` stay at the top. Run
-modules with `python -m pybullet_sim.simulate` from `code/simulation/`, not by path.
+The code is split into packages: **`pybullet_sim/`** (the runtime — `simulate`,
+`gaits`, `kinematics`, `helpers`, `constants`, `sim_monitor`), **`firmware_port/`**
+(the firmware-faithful clip re-port — `servo_convention`, `clip_loader`,
+`clip_player`; the Python fallback / parity reference), and **`urdf_gen/`**
+(`generate_urdf`, `verify_export_parity`). `facehugger.py` + `facehugger_config.yaml`
++ `generated/` stay at the top. Run modules with `python -m pybullet_sim.simulate`
+from `code/simulation/`, not by path.
 
 ## Prerequisites
 
@@ -145,7 +147,8 @@ code/simulation/
   pybullet_sim/                 runtime package
     simulate.py                 PyBullet simulator front-end (constants/helpers/kinematics/gaits)
     gaits.py kinematics.py helpers.py constants.py sim_monitor.py
-    interpreter/                clip loader + servo-convention + clip player (+ tests/)
+  firmware_port/                firmware-faithful clip re-port (Python fallback / parity ref)
+    servo_convention.py clip_loader.py clip_player.py gait_interpreter.py (+ tests/)
   urdf_gen/                     build package
     generate_urdf.py            URDF generator
     verify_export_parity.py     sim↔firmware export parity check

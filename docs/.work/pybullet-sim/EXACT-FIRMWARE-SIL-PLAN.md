@@ -383,10 +383,12 @@ guaranteed."** For validating your exporter, G1 is exactly what you need.
 
 ## 10. Sequencing (locked scope — implement step by step when we start)
 
-**Step 0 — Relocate the re-port (D5).** `git mv pybullet_sim/interpreter/ →
-firmware_port/`; repoint imports in `gaits.py`, `verify_export_parity.py`, and the
-interpreter tests; keep `test_pipeline_regression.py` green. Pure move, no new
-behaviour — gives the SIL a clean sibling to slot next to.
+**Step 0 — Relocate the re-port (D5). ✅ DONE.** `git mv pybullet_sim/interpreter/
+→ firmware_port/`; repointed imports in `gaits.py`, `verify_export_parity.py`, and
+the interpreter tests (`parents[3]→[2]`, `pybullet_sim.interpreter→firmware_port`);
+`clip_loader` repo-root walk `parents[4]→[3]`; the structure test now pins
+`firmware_port`. Pure move — 71 tests green, clip playback + parity unchanged. Gives
+the SIL a clean sibling to slot next to.
 
 **Step 1 — SIL proof of concept (Option A, one clip).** Scaffold `firmware_sil/`:
 the `hal/` shims (ArduinoMock via `FetchContent` for `Arduino.h` + our injected

@@ -2,9 +2,10 @@
 
 RED before the migration (the packages don't exist yet), GREEN after. They pin
 the package boundaries the reorg introduces: the runtime is importable as
-`pybullet_sim`, its clip interpreter as `pybullet_sim.interpreter`, the URDF
-build step as `urdf_gen`, and `python -m pybullet_sim.simulate` is a working
-entry point. Run from code/simulation/.
+`pybullet_sim`, the firmware-faithful clip re-port as a top-level `firmware_port`
+package (relocated from `pybullet_sim/interpreter/` in Step 0 of the SIL plan),
+the URDF build step as `urdf_gen`, and `python -m pybullet_sim.simulate` is a
+working entry point. Run from code/simulation/.
 
 Requires pybullet (conda env `facehugger`).
 """
@@ -41,11 +42,11 @@ def test_runtime_package_imports():
     assert r.returncode == 0, r.stderr
 
 
-def test_interpreter_subpackage_imports():
+def test_firmware_port_package_imports():
     r = _run(
         [
             "-c",
-            "from pybullet_sim.interpreter import servo_convention, clip_loader, clip_player",
+            "from firmware_port import servo_convention, clip_loader, clip_player",
         ]
     )
     assert r.returncode == 0, r.stderr
