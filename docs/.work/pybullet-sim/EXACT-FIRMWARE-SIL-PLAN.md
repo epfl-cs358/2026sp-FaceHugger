@@ -25,8 +25,11 @@ layer + mass tuning).
   as the no-C++-toolchain fallback.
 - **D6 — `code/simulation/firmware_sil/`**, built with **CMake** (points at the
   firmware sources directly), as a sibling of `pybullet_sim/` and `firmware_port/`.
-- **`--sil` flag** switches the joint driver to the firmware SIL bridge; default
-  (no flag) keeps the Python re-port so nothing breaks without a C++ toolchain.
+- **Driver default — FLIPPED (2026-05-26):** clip playback now **defaults to the
+  exact firmware** (auto-built); `--python` forces the Python re-port. No silent
+  fallback — if the toolchain is missing, `--clip` errors with a "use --python"
+  hint. Only `--clip` uses this driver (stand/walk/trot are unaffected). The
+  firmware `.so` auto-rebuilds when firmware sources change.
 
 ---
 
@@ -198,10 +201,10 @@ Key points:
   (`from pybullet_sim.interpreter… import …`) must repoint to `firmware_port`, and
   the interpreter tests' `sys.path`/imports update accordingly. Guard it with the
   existing `test_pipeline_regression.py` net (it must stay green across the move).
-- **The `--sil` flag (LOCKED):** `facehugger.py sim --sil` (and the underlying
-  `simulate.py`) switches the joint driver from `firmware_port` (the Python
-  re-port) to `firmware_sil.sil_bridge`. **Default = no flag = Python re-port**, so
-  contributors without a C++ toolchain are unaffected.
+- **Driver flag (updated 2026-05-26):** clip playback **defaults to the firmware**
+  (`firmware_sil.sil_bridge`, auto-built); `--python` forces the Python re-port
+  (`firmware_port`) for toolchain-less machines. Only `--clip` uses this driver, so
+  stand/walk/trot are unaffected.
 
 **Testing any firmware change:** rebuild `fh_sim` (CI step), then:
 - **Clip validation:** play every clip in `clips_all.h` through the SIL; assert no
@@ -334,13 +337,15 @@ guaranteed."** For validating your exporter, G1 is exactly what you need.
 
 ---
 
-## 8. Build & CI integration; risks
+## 8. Build &amp; integration; risks
 
-- **Build:** a `native`-style target (PlatformIO `env:native` already exists, or a
-  standalone CMake) compiles the firmware sources + HAL/mock + `sim_api` into
-  `fh_sim.{so,dylib}`. The sim's `uv` dev loop gains an optional "build the SIL lib"
-  step; CI builds it once and runs the SIL clip suite. Keep the Python re-port as
-  the no-build fallback so `facehugger.py sim` works without a C++ toolchain.
+- **Build:** a standalone CMake target compiles the firmware sources + HAL mock +
+  `bindings.cpp` into `fh_sim.{so,dylib}`. It auto-rebuilds on demand when firmware
+  sources change (no manual step); `python -m firmware_sil.sil_bridge --check` is an
+  optional pre-run freshness gate. **No GitHub CI is set up for this** (decided
+  2026-05-26 — not needed for now); the SIL tests run wherever you run pytest and
+  skip if `fh_sim` isn't built. The Python re-port (`--python`) is the no-toolchain
+  path for `--clip`.
 - **Risks / honest caveats:**
   - *float determinism:* host `double` == ESP32 soft-float `double` for IEEE-754
     ops; safe. (Don't rely on `float` extended precision — the code uses `float`
@@ -377,7 +382,7 @@ guaranteed."** For validating your exporter, G1 is exactly what you need.
   it stays as the no-C++-toolchain fallback (not deleted).
 - **D6 — `code/simulation/firmware_sil/`** (sibling of `pybullet_sim/` and
   `firmware_port/`), built with **CMake** pointing at the firmware sources by path.
-- **`--sil` flag** selects the SIL bridge; default keeps the Python re-port.
+- **Driver default** = firmware (auto-built); `--python` forces the re-port.
 
 ---
 
@@ -408,9 +413,9 @@ injected sim clock.
 > "mock the hardware, zero firmware changes." Swap in ArduinoMock via `FetchContent`
 > if a future compiled file needs a fuller Arduino surface.
 
-**Step 2 — `--sil` flag + SIL clip suite. ✅ DONE.** `facehugger.py sim --sil` /
-`simulate.py --sil` switch the clip joint driver to `firmware_sil` (default stays
-`firmware_port`; `run_clip(..., sil=True)` → `_run_clip_sil`). `gen_golden.py`
+**Step 2 — driver default + SIL clip suite. ✅ DONE.** Clip playback **defaults to
+the firmware** (`firmware_sil`, auto-built); `--python` forces the re-port
+(`run_clip(..., python_port=…)` → `_run_clip_sil` by default). `gen_golden.py`
 records a deterministic 10 Hz servo-angle trace per clip into
 `firmware_sil/golden/*.json` (committed); `test_sil_clip_suite.py` replays every
 clip through the firmware and asserts an **exact** match to its golden, plus

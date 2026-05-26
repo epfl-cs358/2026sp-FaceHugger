@@ -408,19 +408,22 @@ def run_clip(
     float_mode=False,
     monitor=False,
     log=False,
-    sil=False,
+    python_port=False,
 ):
     """Load and play an animation clip by name in PyBullet.
 
-    By default the joint driver is the Python re-port (firmware_port.ClipPlayer).
-    sil=True instead drives the joints with the EXACT firmware code compiled to
-    the host (firmware_sil) — what the robot would actually command. The Python
-    re-port reads animation/exported_clips/clips_all.h; the SIL reads the
-    firmware's own clips_all.h (so it tests what gets flashed).
-    loop=True (GUI only) replays continuously; float_mode pins the body;
+    By DEFAULT the joints are driven by the EXACT firmware code compiled to the
+    host (firmware_sil) — i.e. what the robot would actually command — and the
+    fh_sim module is auto-rebuilt if firmware sources changed. This requires a
+    C++ toolchain; if it is unavailable the run errors (use --python instead).
+
+    python_port=True instead uses the Python re-port (firmware_port.ClipPlayer),
+    which needs no toolchain. The re-port reads animation/exported_clips/
+    clips_all.h; the firmware (default) reads the firmware's own clips_all.h.
+    loop=True (GUI, re-port only) replays continuously; float_mode pins the body;
     monitor/log add the torque/current readout + capture.
     """
-    if sil:
+    if not python_port:
         return _run_clip_sil(
             cfg,
             clip_name,
@@ -472,7 +475,14 @@ def _run_clip_sil(
     """Play a clip through the compiled firmware (software-in-the-loop)."""
     from firmware_sil.sil_bridge import FirmwareSILDriver
 
-    driver = FirmwareSILDriver()  # raises a clear error if fh_sim isn't built
+    try:
+        driver = FirmwareSILDriver()  # auto-builds fh_sim if stale/missing
+    except ImportError as e:
+        raise SystemExit(
+            f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
+            "play clips with the Python re-port instead:\n"
+            f"  python facehugger.py sim --clip {clip_name!r} --python"
+        ) from e
     if clip_name not in driver.clip_names():
         raise KeyError(
             f"clip {clip_name!r} not in firmware clips {driver.clip_names()}"

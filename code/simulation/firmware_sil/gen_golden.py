@@ -4,8 +4,8 @@ Run this ONLY when the firmware's clip output is *intentionally* changed (a clip
 re-export, or a deliberate edit to the control math). It plays every clip through
 the compiled firmware (fh_sim) and writes one golden JSON per clip under
 firmware_sil/golden/. test_sil_clip_suite.py replays the same clips and asserts an
-exact match — so an *unintentional* firmware change fails CI, and an intentional
-one shows up as a reviewable diff in these golden files.
+exact match — so an *unintentional* firmware change fails the test suite, and an
+intentional one shows up as a reviewable diff in these golden files.
 
 Usage (after building fh_sim — see firmware_sil/README.md):
     cd code/simulation

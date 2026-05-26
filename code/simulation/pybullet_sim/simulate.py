@@ -68,11 +68,12 @@ def main():
         "summary table and write sim_log.csv + sim_log.png (additive to --monitor)",
     )
     parser.add_argument(
-        "--sil",
+        "--python",
+        dest="python_port",
         action="store_true",
-        help="play the clip through the EXACT firmware code (firmware_sil, "
-        "compiled) instead of the Python re-port; requires the fh_sim build "
-        "(see code/simulation/firmware_sil/README.md). Clips only.",
+        help="play the clip with the Python re-port (firmware_port) instead of the "
+        "default — which is the EXACT compiled firmware (firmware_sil, auto-built). "
+        "Use --python when you have no C++ toolchain. Clips only.",
     )
     args = parser.parse_args()
 
@@ -88,7 +89,7 @@ def main():
             float_mode=args.float_mode,
             monitor=args.monitor,
             log=args.log,
-            sil=args.sil,
+            python_port=args.python_port,
         )
     elif args.walk:
         run_gait(

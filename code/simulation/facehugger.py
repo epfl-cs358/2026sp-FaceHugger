@@ -142,8 +142,8 @@ def cmd_sim(args):
         cli.append("--monitor")
     if args.log:
         cli.append("--log")
-    if args.sil:
-        cli.append("--sil")
+    if args.python_port:
+        cli.append("--python")
     if args.walk:
         cli.append("--walk")
     if args.trot:
@@ -235,10 +235,11 @@ def main():
         help="record per-step torque/current → summary + sim_log.csv + sim_log.png",
     )
     ps.add_argument(
-        "--sil",
+        "--python",
+        dest="python_port",
         action="store_true",
-        help="drive clips with the exact compiled firmware (firmware_sil) instead "
-        "of the Python re-port; needs the fh_sim build",
+        help="drive clips with the Python re-port instead of the default exact "
+        "compiled firmware (firmware_sil); use when you have no C++ toolchain",
     )
     ps.add_argument("--walk", action="store_true")
     ps.add_argument("--trot", action="store_true")

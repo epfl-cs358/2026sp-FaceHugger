@@ -119,8 +119,9 @@ def test_sil_drives_pybullet_headless():
     assert total_motion > 1e-3, f"joints did not move (total {total_motion:.5f})"
 
 
-def test_facehugger_sim_sil_flag_runs():
-    """`facehugger.py sim --clip wave --headless --sil` plays via the firmware SIL."""
+def test_facehugger_sim_clip_defaults_to_firmware():
+    """`facehugger.py sim --clip wave --headless` defaults to the firmware SIL
+    (no flag needed); --python would force the re-port instead."""
     _driver_or_skip()  # skip if fh_sim isn't built
     r = subprocess.run(
         [
@@ -132,7 +133,6 @@ def test_facehugger_sim_sil_flag_runs():
             "--headless",
             "--settle",
             "0",
-            "--sil",
         ],
         cwd=str(SIM_DIR),
         capture_output=True,
@@ -140,4 +140,4 @@ def test_facehugger_sim_sil_flag_runs():
         timeout=120,
     )
     assert r.returncode == 0, r.stderr
-    assert "[SIL]" in r.stdout, r.stdout
+    assert "[SIL]" in r.stdout, r.stdout  # default went through the firmware driver

@@ -49,14 +49,14 @@ CI). Contributors without a C++ toolchain skip this and use the Python re-port
 
 ### Auto-rebuild (no stale firmware)
 
-`--sil` never runs a stale `.so`: `sil_bridge.load_fh_sim()` compares the built
-module's mtime against every source under `code/firmware/src/`, `hal/`,
+The firmware driver never runs a stale `.so`: `sil_bridge.load_fh_sim()` compares
+the built module's mtime against every source under `code/firmware/src/`, `hal/`,
 `bindings.cpp`, and `CMakeLists.txt`, and **recompiles before importing** if any
 is newer (or the `.so` is missing). So editing firmware and re-running
-`facehugger.py sim --sil` always reflects the change.
+`facehugger.py sim --clip ...` always reflects the change.
 
 - Skip the auto-rebuild (warn loudly instead): set `FH_SIL_NO_BUILD=1`.
-- CI / pre-run gate:
+- Optional pre-run freshness gate (no GitHub CI is set up for this):
   ```bash
   python -m firmware_sil.sil_bridge --check   # exit 1 if stale (no build)
   python -m firmware_sil.sil_bridge           # rebuild if stale, then report
@@ -66,9 +66,12 @@ is newer (or the `.so` is missing). So editing firmware and re-running
 
 ```bash
 cd code/simulation
-python facehugger.py sim --clip "wave" --headless --sil   # play via the exact firmware
+python facehugger.py sim --clip "wave" --headless            # DEFAULT: exact firmware (auto-built)
+python facehugger.py sim --clip "wave" --headless --python   # force the Python re-port (no toolchain)
 ```
-Default (no `--sil`) uses the Python re-port (`firmware_port/`).
+Clip playback **defaults to the exact firmware**; `--python` forces the re-port
+(`firmware_port/`). Only `--clip` uses this driver — stand/`--walk`/`--trot` are
+unaffected, so a toolchain-less machine can still run those.
 
 ## Verify (run from code/simulation/, not this dir)
 
@@ -79,7 +82,8 @@ conda run -n facehugger python -m pytest test_sil_poc.py test_sil_clip_suite.py 
 
 - `test_sil_poc.py` — the firmware plays a clip with all angles in `[0,180]`; SIL
   matches the Python re-port at frame 0 within the firmware's whole-degree
-  truncation (≤ 1°); the bridge drives PyBullet headless; `--sil` runs end-to-end.
+  truncation (≤ 1°); the bridge drives PyBullet headless; the default clip path
+  (no flag) runs end-to-end through the firmware.
 - `test_sil_clip_suite.py` — replays **every** clip through the firmware and asserts
   an **exact** match to its committed golden trace (`golden/*.json`). A firmware or
   clip-export change that shifts any servo angle fails here.
