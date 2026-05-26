@@ -66,6 +66,14 @@ see `REPORT.md §7`.
   lists these; treat them as deleted.
 - **`clip_player.py` docstring fixed** — it now correctly states link1 gets the
   per-leg axis sign too (REPORT.md §7 item 4 is resolved).
+- **SIL Step 1 executed (proof of concept):** `firmware_sil/` compiles the exact
+  firmware `SpinalCord` (unchanged, via `hal/` shims + CMake/pybind11) into the
+  `fh_sim` module; `sil_bridge.py` drives PyBullet from the firmware's own servo
+  angles. `test_sil_poc.py` proves a clip plays in-range, the SIL output matches
+  the Python re-port at frame 0 to 0.888° (firmware whole-degree truncation), and
+  the bridge drives PyBullet headless. 74 tests green. Not yet wired to
+  `--sil` (Step 2). Note: `hal/Arduino.h` is a minimal hand-rolled shim for the PoC
+  (the control files use only millis/map/constrain/Serial/String), not ArduinoMock.
 - **SIL Step 0 executed:** the Python clip re-port moved
   `pybullet_sim/interpreter/ → firmware_port/` (top-level package), imports
   repointed, structure test re-pinned; 71 tests green, clip playback + parity

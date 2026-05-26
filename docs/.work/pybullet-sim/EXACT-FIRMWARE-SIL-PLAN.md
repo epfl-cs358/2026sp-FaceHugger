@@ -390,15 +390,23 @@ the interpreter tests (`parents[3]→[2]`, `pybullet_sim.interpreter→firmware_
 `firmware_port`. Pure move — 71 tests green, clip playback + parity unchanged. Gives
 the SIL a clean sibling to slot next to.
 
-**Step 1 — SIL proof of concept (Option A, one clip).** Scaffold `firmware_sil/`:
-the `hal/` shims (ArduinoMock via `FetchContent` for `Arduino.h` + our injected
-millis backing, empty `Wire.h`, recording `Adafruit_PWMServoDriver.h`,
-`network_stubs.h`); `CMakeLists.txt` pointing at
-`code/firmware/src/nervous_system/*.cpp` (excluding `network.cpp`) with `hal/` first
-on the include path; `bindings.cpp` (`pybind11` `FirmwareControl`:
-`command`/`tick`/`servo_angles`); `sil_bridge.py`. Drive one clip through PyBullet
-via the SIL, `millis()` fed from the sim clock. Confirms the exact firmware code
-runs end-to-end.
+**Step 1 — SIL proof of concept (Option A, one clip). ✅ DONE.** Scaffolded
+`firmware_sil/`: `hal/` shims, `CMakeLists.txt` (CMake → `pybind11`, points at
+`code/firmware/src/nervous_system/*.cpp` excluding `network.cpp`, `hal/` first on
+the include path), `bindings.cpp` (`pybind11` `FirmwareControl`:
+`tick`/`play_clip`/`servo_angles`), `sil_bridge.py`. The exact firmware
+`SpinalCord` compiles unchanged and runs on the host; `test_sil_poc.py` proves a
+clip plays with all servo angles in `[0,180]`, **SIL matches the Python re-port's
+`translate_to_servo` at frame 0 to 0.888°** (= the firmware's whole-degree
+truncation), and the bridge drives PyBullet headless. `millis()` is fed from an
+injected sim clock.
+
+> **Deviation from D1 (flagged):** for the PoC `hal/Arduino.h` is a ~50-line
+> hand-rolled shim, *not* ByteNana/ArduinoMock. Reason: the compiled control files
+> use only `millis`/`map`/`constrain`/`Serial`/`String`, so the hand-rolled shim is
+> smaller, network-free (no `FetchContent`/GoogleTest), and deterministic — still
+> "mock the hardware, zero firmware changes." Swap in ArduinoMock via `FetchContent`
+> if a future compiled file needs a fuller Arduino surface.
 
 **Step 2 — `--sil` flag + SIL clip suite.** Wire `facehugger.py sim --sil` /
 `simulate.py` to switch the joint driver to `sil_bridge` (default stays
