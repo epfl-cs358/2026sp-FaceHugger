@@ -1,11 +1,29 @@
 # Plan — run the *exact* firmware code in the PyBullet sim (SIL)
 
-**Status:** PLAN ONLY (2026-05-26), for review. Nothing implemented. This is the
-concrete design for compiling the **actual flashed firmware C++** and driving the
-PyBullet robot with it — so that a clip/gait that looks right in sim is *guaranteed*
-to issue the same servo commands on the real robot, and any firmware change is
-testable in sim before flashing. Extends `GAIT-AND-PARITY-PLAN.md` (this is its
-"Approach B", committed to and expanded with the JS/WebSocket layer + mass tuning).
+**Status:** PLAN ONLY (2026-05-26). **Decisions D1–D6 LOCKED** (§9) — still nothing
+implemented; this is the agreed spec to build from, step by step. It compiles the
+**actual flashed firmware C++** and drives the PyBullet robot with it — so a
+clip/gait that looks right in sim is *guaranteed* to issue the same servo commands
+on the real robot, and any firmware change is testable in sim before flashing.
+Extends `GAIT-AND-PARITY-PLAN.md` (its "Approach B", expanded with the JS/WebSocket
+layer + mass tuning).
+
+### Locked decisions (the short version)
+- **D1 — Mock the hardware, zero firmware changes.** `ArduinoFake` for
+  `Arduino.h`/`millis()`; a recording `Adafruit_PWMServoDriver` mock; `WiFi`/
+  `WebSocketsServer`/`network.cpp` **stubbed** (log + return, not compiled). All
+  shims isolated in `firmware_sil/hal/`; firmware source untouched.
+- **D2 — Python `websockets` server on :81** + a **standalone single-file HTML
+  control panel** that drives *both* the sim and the real robot.
+- **D3 — `pybind11`** for the bindings.
+- **D4 — Clips first** (validates the exporter), then gait, then WS/JS — but the WS
+  server + HTML panel are built alongside from the start.
+- **D5 — Keep the Python re-port**, relocated to `code/simulation/firmware_port/`
+  as the no-C++-toolchain fallback.
+- **D6 — `code/simulation/firmware_sil/`**, built with **CMake** (points at the
+  firmware sources directly), as a sibling of `pybullet_sim/` and `firmware_port/`.
+- **`--sil` flag** switches the joint driver to the firmware SIL bridge; default
+  (no flag) keeps the Python re-port so nothing breaks without a C++ toolchain.
 
 ---
 
@@ -55,42 +73,32 @@ logic that calls it* (`tickGait`, `tickClip`, the state machine) does not, becau
 it pulls in Arduino + the PCA9685 driver + `millis()`. To run that exact code on
 the host we must satisfy those dependencies **without changing the firmware logic**.
 
-### Two ways to make the exact code compile on the host
+### How we make the exact code compile on the host — **Option A (LOCKED)**
 
-**Option A — Mock the hardware layer (zero firmware changes).**
-Provide host implementations of the headers the firmware includes:
-- `Arduino.h` → a shim (or the `ArduinoFake` PlatformIO lib): `millis()` returns an
-  **injectable** sim clock; `map()`, `constrain()`, `Serial` as no-ops/host stdio.
-- `Wire.h` → empty stub (only `#include`d, never used for logic).
-- `Adafruit_PWMServoDriver` → a **recording mock**: `setPWM(ch, 0, pulse)` stores
-  the pulse per channel. (Or tap one level up at `Servo::servoAngle` via
-  `getServoAngle()` to avoid the integer PWM map.)
-- `ArduinoJson` → the real lib (it's cross-platform; already a `native` dep).
+Mock the hardware layer; **zero firmware changes**. All shims live in
+`firmware_sil/hal/` and are put on the include path *ahead of* the real Arduino
+libs, so the exact `spinal_cord.cpp` / `servo.cpp` / `leg.cpp` compile unmodified.
 
-The exact `spinal_cord.cpp` / `servo.cpp` / `leg.cpp` compile **unmodified**. This
-is the standard PlatformIO native-testing pattern for Arduino code.
-- *Pro:* firmware source is untouched — provably "the code you flash."
-- *Con:* you maintain a faithful PCA9685 mock + Arduino shim; `millis()` injection
-  needs a hook (ArduinoFake provides one; a custom shim is ~30 lines).
+| Firmware include | Host shim in `firmware_sil/hal/` | Behaviour |
+|---|---|---|
+| `<Arduino.h>` | **`ArduinoFake`** (PlatformIO registry) | `millis()` **injectable** (set from the sim clock each tick); `delay()` no-op; `map()`/`constrain()` real; `Serial` → host stdio. |
+| `<Wire.h>` | `Wire.h` | empty stub (only `#include`d, never used for logic). |
+| `<Adafruit_PWMServoDriver.h>` | `Adafruit_PWMServoDriver.h` | **recording mock** — `setPWM(channel, 0, pulse)` stores `(channel, pulse)` in a buffer the Python side can read; `setPWMFreq`/`begin` no-ops. |
+| `<WiFi.h>`, `<WebSocketsServer.h>` (network) | `network_stubs.h` | **stub out completely** — log the call and return; **`network.cpp` is not compiled at all** (the Python `websockets` server replaces it, §5). |
+| `<ArduinoJson.h>` | the real lib | cross-platform; only needed if we later compile the command dispatch (not in scope now). |
 
-**Option B — Introduce a tiny hardware seam in the firmware (HAL).**
-Refactor the firmware so the servo sink and clock are behind interfaces
-(`IServoBus::writeAngle(ch, deg)`, `IClock::millis()`), injected at construction.
-The ESP32 build injects the PCA9685 + real `millis`; the sim injects a recording
-sink + a sim clock.
-- *Pro:* clean, explicit seam; no mocking a third-party lib; better firmware
-  architecture; the recorded value is servo **degrees** (no PWM-truncation noise).
-- *Con:* it changes the firmware — but the changed firmware is still exactly what
-  you flash, so SIL fidelity is preserved. It's a one-time, low-risk refactor
-  (the choke points are already centralised: `Servo::setServoAngle`,
-  `SpinalCord::update`'s `millis()` reads).
-
-**Recommendation:** **Option B**, scoped tightly. It's the difference between
-"perpetually mocking the Adafruit lib's surface" and "one clock + one servo-bus
-interface." The seam is small because the firmware already funnels every write
-through `Servo::setServoAngle` and reads time only via `millis()`. If you want
-*zero* firmware change first, start with Option A (it proves the concept), then
-migrate to B. **Decision needed on review (§9, D1).**
+Notes:
+- **`millis()` is the determinism hinge** — it must come from the injected sim
+  clock, never the host wall clock. ArduinoFake lets us set its return value; the
+  bridge sets it to `step * 1000/240` before each `tick`.
+- **The recording PCA9685 mock is the seam.** We can read servo *degrees* two ways:
+  (a) recover from the stored pulse via the inverse of the firmware's
+  `map(deg,0,180,150,600)`, or (b) call `Servo::getServoAngle()` (the firmware
+  already stores the post-clamp angle). The bridge will expose both; (b) avoids the
+  integer-PWM truncation, (a) lets us also verify the electrical map if wanted.
+- **Why not the HAL-seam alternative:** it would be cleaner firmware but requires
+  touching firmware; you chose A so the SIL provably runs *exactly* the flashed
+  source. (The HAL option is retained only as a future note, not planned.)
 
 ### Why this guarantees what you want
 Either way, the bytes from the exporter → `clips_all.h` → **the exact firmware
@@ -103,16 +111,11 @@ cannot make.
 
 ## 3. The FFI binding — how Python calls the firmware
 
-Two standard options:
-
-- **`ctypes`** (stdlib): call C functions across a clean `extern "C"` boundary. We'd
-  write a thin `sim_api.cpp` exposing C functions (`fh_sim_create()`,
-  `fh_sim_command(json)`, `fh_sim_tick(t_ms)`, `fh_sim_read_servos(double out[12])`).
-  Simple, no extra deps, but we hand-marshal structs.
-- **`pybind11`**: bind the C++ `SpinalCord` class directly to a Python object.
-  Richer (call methods, return arrays), nicer ergonomics, but adds a build dep and
-  a compile step. **Recommended** — the control core is class-based (`SpinalCord`),
-  so binding the object is the natural fit.
+**`pybind11` (LOCKED, D3).** Bind the C++ `SpinalCord` class directly to a Python
+object — the control core is class-based, so binding the object is the natural fit
+(richer than `ctypes`: call methods, return arrays). `pybind11` is the build
+dependency and the CMake target links it. (`ctypes` was the lighter alternative;
+not chosen.)
 
 ### Entry-point contract (the seam the sim drives)
 ```
@@ -132,18 +135,43 @@ step**; the servo *degrees themselves now come from the firmware*, not the port.
 
 ## 4. Where it lives + how a firmware change gets tested
 
-A small package, e.g. `code/simulation/firmware_sil/` (sibling to `pybullet_sim/`):
+**The agreed layout (D5/D6, LOCKED):**
 ```
-firmware_sil/
-  hal/                 host Arduino shim + recording servo bus (+ sim clock)   [Option A]
-                       OR  the injected sim backends                            [Option B]
-  sim_api.cpp          extern "C" / pybind11 entry point over SpinalCord
-  build.py / CMake     compile the exact firmware sources + hal -> fh_sim.{so,dylib}
-  bridge.py            FirmwareControl wrapper + the PyBullet driver loop
+code/simulation/
+  pybullet_sim/                    physics runtime (simulate/gaits/kinematics/
+                                   helpers/constants/sim_monitor) — unchanged
+  firmware_port/                   ← the Python re-port, RELOCATED here (D5)
+    servo_convention.py            (was pybullet_sim/interpreter/servo_convention.py)
+    clip_player.py  clip_loader.py  gait_interpreter.py  __init__.py  tests/
+  firmware_sil/                    ← NEW (D6), the exact-firmware SIL
+    hal/
+      Arduino.h                    millis() injectable, delay() no-op, Serial→stdio
+      Wire.h                       empty stubs
+      Adafruit_PWMServoDriver.h    recording mock — setPWM writes to a buffer
+      network_stubs.h              WiFi/WebSocketsServer no-ops that log calls
+    bindings.cpp                   pybind11: the FirmwareControl class over SpinalCord
+    CMakeLists.txt                 points at code/firmware/src/... by path + pybind11
+    sil_bridge.py                  load the .so, tick, read servo angles → PyBullet
+tools/
+  robot_control_panel.html         standalone API tester for sim AND real robot (§5)
 ```
-The build pulls firmware sources **by path** from `code/firmware/src/...` (not
-copies) so there is no second copy to drift. A `facehugger.py sim --firmware`
-flag (TBD) selects the SIL driver over the Python re-port.
+
+Key points:
+- **CMake (not PlatformIO native)** because we need `pybind11`; CMake points at the
+  firmware sources **by path** (`code/firmware/src/nervous_system/*.cpp`) — no
+  copies, so nothing drifts — with `firmware_sil/hal/` first on the include path so
+  the shims shadow the real Arduino/Adafruit/network headers. `network.cpp` is
+  excluded from the source list.
+- **The re-port relocation (D5)** is a rename `pybullet_sim/interpreter/ →
+  firmware_port/`. It carries an import-rewiring sub-task: `pybullet_sim/gaits.py`
+  (`from .interpreter.clip_loader import …`) and `urdf_gen/verify_export_parity.py`
+  (`from pybullet_sim.interpreter… import …`) must repoint to `firmware_port`, and
+  the interpreter tests' `sys.path`/imports update accordingly. Guard it with the
+  existing `test_pipeline_regression.py` net (it must stay green across the move).
+- **The `--sil` flag (LOCKED):** `facehugger.py sim --sil` (and the underlying
+  `simulate.py`) switches the joint driver from `firmware_port` (the Python
+  re-port) to `firmware_sil.sil_bridge`. **Default = no flag = Python re-port**, so
+  contributors without a C++ toolchain are unaffected.
 
 **Testing any firmware change:** rebuild `fh_sim` (CI step), then:
 - **Clip validation:** play every clip in `clips_all.h` through the SIL; assert no
@@ -177,21 +205,34 @@ simulated robot, stand up that same entrypoint in front of the SIL core:
    telemetry/state back to app                        PyBullet robot moves
 ```
 
-Two fidelity levels for the **command-handling** layer:
-- **(i) Python WS shim (recommended first):** a Python `websockets` server on :81
-  parses the `T:` JSON and calls `FirmwareControl.command(...)`. The motion code is
-  exact; only the transport+parse glue is Python. The app can't tell it's a sim.
-- **(ii) Exact network handler:** compile `network.cpp`'s `onWebSocketEvent`
-  dispatch into the host core too (mock `WebSocketsServer`, feed it frames). Maximal
-  fidelity of the command path, but the links2004 WebSockets lib is ESP-oriented and
-  awkward on host — so the JSON→command **dispatch** is worth extracting/compiling;
-  the socket transport is best left to Python. (Decision §9, D2.)
+**Command-handling layer — Python `websockets` server (LOCKED, D2).** A Python
+`websockets` server on :81 parses the `T:` JSON and calls
+`FirmwareControl.command(...)`. The motion code is exact; only the transport+parse
+glue is Python. The app can't tell it's a sim. (We do **not** compile
+`network.cpp`; it's stubbed per D1.)
 
-For the **JS itself**: run the Expo app (or a headless JS test harness / Playwright
-against the web build) pointed at `ws://localhost:81`. The JS runs unmodified and
-drives the simulated robot end-to-end. This validates: app → protocol → firmware
-command handling → motion — the whole loop, on the desktop, before touching
-hardware. It also becomes a regression test for `API_SPEC.md` drift.
+### The standalone HTML control panel (D2) — primary test tool for sim **and** robot
+A single self-contained file `tools/robot_control_panel.html` — **no framework, no
+build, no deps** — that talks raw WebSocket to either target:
+- **IP/port field** at the top, default `localhost:81` (sim); type the robot's IP to
+  drive the real hardware over the same protocol. A Connect/Disconnect + status dot.
+- **One button per API command** in `code/API_SPEC.md` (`T:1` move, `T:2` state,
+  `T:5` gait, `T:6` invert, `T:7` play clip, `T:8` list clips, `T:4` calibrate, …),
+  with the few inputs each needs (direction, gait id, clip name, channel/angle).
+- **Shows the exact JSON** it will send on each click (so you can eyeball the wire
+  format), and **shows the response/ack** streamed back.
+- Because it speaks the protocol, not an SDK, it works **identically against the sim
+  WS server and the real robot** — your one tool for both. It also doubles as living
+  documentation of `API_SPEC.md` and a manual regression check for protocol drift.
+
+This panel is built **alongside** the WS server from the start (D4), even before the
+gait/WS motion paths are fully wired — it's immediately useful for poking the sim
+and the robot by hand.
+
+**The JS app itself:** the unmodified Expo app (or a headless Playwright run of the
+web build) can also point at `ws://localhost:81` and drive the simulated robot
+end-to-end — app → protocol → firmware command handling → motion, on the desktop,
+before touching hardware.
 
 ---
 
@@ -288,34 +329,63 @@ guaranteed."** For validating your exporter, G1 is exactly what you need.
 
 ---
 
-## 9. Decisions for you to make on review
+## 9. Decisions — LOCKED (2026-05-26)
 
-- **D1 — Mock (A) vs HAL seam (B)** for compiling the exact code. (Recommend: start
-  A to prove it, land B for maintainability. Are you OK touching firmware?)
-- **D2 — Network layer fidelity:** Python WS shim (i) vs compiling the exact
-  `network.cpp` dispatch (ii). (Recommend i first.)
-- **D3 — FFI:** `pybind11` (recommended) vs `ctypes`.
-- **D4 — Scope of first cut:** clips only, or clips + gait + the WS/JS loop? (Recommend:
-  clips via SIL first — directly validates your exporter — then gait, then WS/JS.)
-- **D5 — Keep the Python re-port?** as a no-C++-toolchain fallback + a second
-  independent implementation for the parity triangle, or retire it once SIL lands.
-- **D6 — Where does `fh_sim` build live:** firmware repo (PlatformIO env) vs sim
-  package (CMake)? (Affects who owns the build.)
+- **D1 — Option A, mock the hardware, zero firmware changes.** ArduinoFake for
+  `Arduino.h`/`millis()`; recording `Adafruit_PWMServoDriver` mock (stores
+  `(channel, pulse)`); `WiFi`/`WebSocketsServer`/`network.cpp` **stubbed out**
+  (log + return, not compiled). All shims isolated in `firmware_sil/hal/`.
+- **D2 — Python `websockets` server on :81**, plus a standalone single-file
+  `tools/robot_control_panel.html` (IP/port field, one button per API command,
+  shows sent JSON + response) that drives **both** the sim and the real robot.
+- **D3 — `pybind11`** for the bindings.
+- **D4 — Clips first** (validates the exporter), then gait, then WS/JS; the WS
+  server + HTML panel are built alongside from the start.
+- **D5 — Keep the Python re-port**, relocated to `code/simulation/firmware_port/`;
+  it stays as the no-C++-toolchain fallback (not deleted).
+- **D6 — `code/simulation/firmware_sil/`** (sibling of `pybullet_sim/` and
+  `firmware_port/`), built with **CMake** pointing at the firmware sources by path.
+- **`--sil` flag** selects the SIL bridge; default keeps the Python re-port.
 
 ---
 
-## 10. Suggested sequencing (when approved — not now)
+## 10. Sequencing (locked scope — implement step by step when we start)
 
-1. **Proof of concept (Option A, clips):** Arduino shim + recording PCA9685 mock;
-   compile `spinal_cord.cpp` + deps natively; `extern "C"` `tick`/`read_servos`;
-   ctypes; play one clip through PyBullet via SIL. Confirms the exact code runs.
-2. **SIL clip suite:** drive all clips from the firmware `clips_all.h`; golden-trace
-   + out-of-range assertions; wire into CI. **This validates your exporter.**
-3. **Gait via SIL:** feed `(gait, X/Y/Yaw)` commands; same harness.
-4. **HAL seam (Option B)** + `pybind11`: retire the mock for a clean injected seam.
-5. **WebSocket entrypoint:** Python WS server on :81 → `FirmwareControl.command`;
-   point the Expo app at it; full-stack SIL.
-6. **Mass/physics tuning** (§6): calibrate against real measurements; lock config.
+**Step 0 — Relocate the re-port (D5).** `git mv pybullet_sim/interpreter/ →
+firmware_port/`; repoint imports in `gaits.py`, `verify_export_parity.py`, and the
+interpreter tests; keep `test_pipeline_regression.py` green. Pure move, no new
+behaviour — gives the SIL a clean sibling to slot next to.
 
-Each step is independently useful; step 2 already delivers the headline goal —
-**"test the exported clips in sim and know they'll run correctly on the robot."**
+**Step 1 — SIL proof of concept (Option A, one clip).** Scaffold `firmware_sil/`:
+the `hal/` shims (ArduinoFake `Arduino.h`, empty `Wire.h`, recording
+`Adafruit_PWMServoDriver.h`, `network_stubs.h`); `CMakeLists.txt` pointing at
+`code/firmware/src/nervous_system/*.cpp` (excluding `network.cpp`) with `hal/` first
+on the include path; `bindings.cpp` (`pybind11` `FirmwareControl`:
+`command`/`tick`/`servo_angles`); `sil_bridge.py`. Drive one clip through PyBullet
+via the SIL, `millis()` fed from the sim clock. Confirms the exact firmware code
+runs end-to-end.
+
+**Step 2 — `--sil` flag + SIL clip suite.** Wire `facehugger.py sim --sil` /
+`simulate.py` to switch the joint driver to `sil_bridge` (default stays
+`firmware_port`). Drive **all** clips from the firmware's own `clips_all.h`; add
+golden-trace + out-of-range (pre-clamp) assertions; CI builds the CMake lib and runs
+the suite. **Headline deliverable — this validates the exporter.**
+
+**Step 3 — WS server + HTML control panel (built alongside, D2/D4).** Python
+`websockets` server on :81 → `FirmwareControl.command`; `tools/robot_control_panel.html`
+(works against sim and real robot). Stand these up even though only clip commands
+reach motion yet — immediately useful for manual poking.
+
+**Step 4 — Gait via SIL.** Feed `(gait, X/Y/Yaw)` commands into `FirmwareControl`;
+same harness and assertions as the clip suite.
+
+**Step 5 — Full-stack JS loop.** Point the unmodified Expo app at the sim WS server;
+validate app → protocol → firmware → motion; regression-guard `API_SPEC.md`.
+
+**Step 6 — Mass/physics tuning** (§6): weigh servos + chassis, set inertials,
+calibrate against real `--log` traces; lock the tuned config; re-run the SIL clip
+suite to confirm commands unchanged.
+
+Each step is independently useful and leaves the sim working (default driver is
+always the Python re-port). **Step 2 already delivers the headline goal — test the
+exported clips in the sim and know they'll run correctly on the robot.**
