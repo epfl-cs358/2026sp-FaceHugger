@@ -110,8 +110,8 @@
           <span><b>Companion</b> EXACT-FIRMWARE-SIL-PLAN.md</span>
         </div>
         <div class="callout good" style="margin-top:22px">
-          <b>Locked:</b> D1 mock the hardware (ArduinoFake + recording PCA9685 mock; network stubbed),
-          zero firmware changes · D2 Python <code>websockets</code> on :81 + a standalone HTML control
+          <b>Locked:</b> D1 mock the hardware (ByteNana/ArduinoMock via CMake + injected millis; recording
+          PCA9685 mock; network stubbed), zero firmware changes · D2 Python <code>websockets</code> on :81 + a standalone HTML control
           panel for sim &amp; robot · D3 <code>pybind11</code> · D4 clips first, then gait, then WS/JS ·
           D5 keep the Python re-port (moved to <code>firmware_port/</code>) · D6
           <code>firmware_sil/</code> built with CMake · a <code>--sil</code> flag switches drivers
@@ -164,14 +164,29 @@
       so the exact <code>spinal_cord/servo/leg.cpp</code> compile unmodified.</p>
       <table>
         <tr><th>Firmware include</th><th>Host shim</th><th>Behaviour</th></tr>
-        <tr><td><code>&lt;Arduino.h&gt;</code></td><td><b>ArduinoFake</b></td><td><code>millis()</code> <b>injectable</b> (set from the sim clock each tick); <code>delay()</code> no-op; <code>map()</code>/<code>constrain()</code> real; <code>Serial</code> → stdio.</td></tr>
+        <tr><td><code>&lt;Arduino.h&gt;</code></td><td><b>ByteNana/ArduinoMock</b> (CMake) + own millis</td><td><code>Arduino.h</code>/<code>Stream</code>/<code>Serial</code>/<code>WString</code> shims from ArduinoMock; <code>millis()</code>/<code>micros()</code> <b>backed by an injected sim-clock variable</b> (not a mock expectation); <code>delay()</code> no-op; <code>map()</code>/<code>constrain()</code> real.</td></tr>
         <tr><td><code>&lt;Wire.h&gt;</code></td><td><code>Wire.h</code></td><td>empty stub (only <code>#include</code>d).</td></tr>
         <tr><td><code>&lt;Adafruit_PWMServoDriver.h&gt;</code></td><td>recording mock</td><td><code>setPWM(ch,0,pulse)</code> stores <code>(channel,pulse)</code> in a Python-readable buffer; <code>begin</code>/<code>setPWMFreq</code> no-ops.</td></tr>
         <tr><td><code>&lt;WiFi.h&gt;</code>, <code>&lt;WebSocketsServer.h&gt;</code></td><td><code>network_stubs.h</code></td><td><b>stubbed</b> — log + return; <b><code>network.cpp</code> not compiled</b> (Python WS server replaces it, §5).</td></tr>
       </table>
+      <div class="callout note"><b>Arduino mock — verified (D1 detail).</b> <code>ArduinoFake</code> is
+      <em>not</em> a CMake package (PlatformIO/FakeIt-based), so it can't be pulled by CMake. Verified two
+      clean options: <b>ByteNana/ArduinoMock</b> (real <code>CMakeLists.txt</code> → <code>FetchContent</code>
+      + <code>target_link_libraries(… ArduinoNativeMocks)</code>; ships Arduino.h/Stream/HardwareSerial/WString/
+      times.h) vs <b>vendoring ArduinoFake's headers</b> (FakeIt single-header; <code>millis</code> via
+      <code>When(Method(…,millis)).AlwaysDo(λ)</code>). <b>Chosen: ArduinoMock via FetchContent</b> — the
+      CMake-native one. Both are <em>test-mock</em> frameworks though, so <code>millis()</code> is
+      <b>not</b> driven by a mock expectation — <code>hal/</code> owns a tiny settable clock instead.</div>
+      <pre><span class="c-com">// firmware_sil/hal/sim_clock.h  (concept)</span>
+<span class="c-kw">namespace</span> fh_sim { <span class="c-kw">extern</span> uint32_t clock_ms; }
+<span class="c-kw">inline</span> uint32_t <span class="c-fn">millis</span>() { <span class="c-kw">return</span> fh_sim::clock_ms; }   <span class="c-com">// shadows ArduinoMock's millis</span></pre>
       <ul>
-        <li><b><code>millis()</code> is the determinism hinge</b> — from the injected sim clock, never the wall clock. The bridge sets it to <code>step·1000/240</code> before each <code>tick</code>.</li>
-        <li><b>The recording PCA9685 mock is the seam.</b> Read servo degrees either by inverting the firmware's <code>map(deg,0,180,150,600)</code>, or via <code>Servo::getServoAngle()</code> (post-clamp, no PWM-truncation noise). The bridge exposes both.</li>
+        <li><b><code>millis()</code> is the determinism hinge</b> — the pybind11 bridge sets
+        <code>fh_sim::clock_ms = step·1000/240</code> before each <code>tick()</code>; never the wall clock.
+        Owning the backing keeps gmock/FakeIt machinery out of the hot loop.</li>
+        <li><b>The recording PCA9685 mock is the seam.</b> Read servo degrees either by inverting the
+        firmware's <code>map(deg,0,180,150,600)</code>, or via <code>Servo::getServoAngle()</code>
+        (post-clamp, no PWM-truncation noise). The bridge exposes both.</li>
       </ul>
       <div class="callout good"><b>Why this gives you the guarantee:</b> exporter bytes →
       <code>clips_all.h</code> → <b>the exact firmware <code>tickClip</code>/<code>translateToServo</code></b>
@@ -348,7 +363,7 @@ tools/
       <h2><span class="n">9</span> Decisions — LOCKED (2026-05-26)</h2>
       <table>
         <tr><th>#</th><th>Decision</th><th>Locked choice</th></tr>
-        <tr><td>D1</td><td>Compiling the exact code</td><td>Option A — mock the hardware, zero firmware changes (ArduinoFake + recording PCA9685 mock; network stubbed, not compiled)</td></tr>
+        <tr><td>D1</td><td>Compiling the exact code</td><td>Option A — mock the hardware, zero firmware changes (ByteNana/ArduinoMock via CMake FetchContent + injected millis backing; recording PCA9685 mock; network stubbed, not compiled)</td></tr>
         <tr><td>D2</td><td>WebSocket layer</td><td>Python <code>websockets</code> on :81 + standalone <code>tools/robot_control_panel.html</code> for sim &amp; robot</td></tr>
         <tr><td>D3</td><td>FFI binding</td><td><code>pybind11</code></td></tr>
         <tr><td>D4</td><td>Scope / order</td><td>Clips first (validates the exporter), then gait, then WS/JS; WS+panel built alongside</td></tr>

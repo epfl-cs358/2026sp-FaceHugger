@@ -9,10 +9,13 @@ Extends `GAIT-AND-PARITY-PLAN.md` (its "Approach B", expanded with the JS/WebSoc
 layer + mass tuning).
 
 ### Locked decisions (the short version)
-- **D1 — Mock the hardware, zero firmware changes.** `ArduinoFake` for
-  `Arduino.h`/`millis()`; a recording `Adafruit_PWMServoDriver` mock; `WiFi`/
-  `WebSocketsServer`/`network.cpp` **stubbed** (log + return, not compiled). All
-  shims isolated in `firmware_sil/hal/`; firmware source untouched.
+- **D1 — Mock the hardware, zero firmware changes.** **ByteNana/ArduinoMock** (via
+  CMake `FetchContent`) for the `Arduino.h` surface, with `millis()` backed by an
+  injected sim-clock variable in `hal/` (not a mock expectation); a recording
+  `Adafruit_PWMServoDriver` mock; `WiFi`/`WebSocketsServer`/`network.cpp` **stubbed**
+  (log + return, not compiled). All shims isolated in `firmware_sil/hal/`; firmware
+  source untouched. (`ArduinoFake` was the original idea but isn't a CMake package —
+  see §2.)
 - **D2 — Python `websockets` server on :81** + a **standalone single-file HTML
   control panel** that drives *both* the sim and the real robot.
 - **D3 — `pybind11`** for the bindings.
@@ -81,24 +84,51 @@ libs, so the exact `spinal_cord.cpp` / `servo.cpp` / `leg.cpp` compile unmodifie
 
 | Firmware include | Host shim in `firmware_sil/hal/` | Behaviour |
 |---|---|---|
-| `<Arduino.h>` | **`ArduinoFake`** (PlatformIO registry) | `millis()` **injectable** (set from the sim clock each tick); `delay()` no-op; `map()`/`constrain()` real; `Serial` → host stdio. |
+| `<Arduino.h>` | **ByteNana/ArduinoMock** (via CMake) + our own millis backing | `Arduino.h`/`Stream`/`HardwareSerial`/`WString` shims from ArduinoMock; **`millis()`/`micros()` backed by an injected sim-clock variable** (see note); `delay()` no-op; `map()`/`constrain()` real. |
 | `<Wire.h>` | `Wire.h` | empty stub (only `#include`d, never used for logic). |
 | `<Adafruit_PWMServoDriver.h>` | `Adafruit_PWMServoDriver.h` | **recording mock** — `setPWM(channel, 0, pulse)` stores `(channel, pulse)` in a buffer the Python side can read; `setPWMFreq`/`begin` no-ops. |
 | `<WiFi.h>`, `<WebSocketsServer.h>` (network) | `network_stubs.h` | **stub out completely** — log the call and return; **`network.cpp` is not compiled at all** (the Python `websockets` server replaces it, §5). |
 | `<ArduinoJson.h>` | the real lib | cross-platform; only needed if we later compile the command dispatch (not in scope now). |
 
+#### The Arduino mock — verified choice (D1 detail)
+*Correction:* `ArduinoFake` is **not** a CMake package (it's a PlatformIO-registry /
+FakeIt-based lib), so it can't be pulled by CMake. Verified the two clean options:
+- **ByteNana/ArduinoMock** — has a real `CMakeLists.txt`; integrate via
+  `FetchContent` (or `add_subdirectory(arduino)`) and
+  `target_link_libraries(<tgt> PRIVATE ArduinoNativeMocks)`; exposes `src/` as a
+  public include dir; ships `Arduino.h`/`WString.h`/`Stream.h`/minimal
+  `HardwareSerial`/`times.h(millis,delay)`. GoogleTest/GoogleMock-based (only for
+  *its* tests — as a consumer we just link the shim lib).
+- **Vendor ArduinoFake's `src/` headers** into `hal/` — header-based (FakeIt
+  single-header), no PlatformIO tooling; `millis` mocked via
+  `When(Method(ArduinoFake(), millis)).AlwaysDo(λ)`.
+
+**Decision: ByteNana/ArduinoMock via `FetchContent`** for the Arduino surface — it's
+the CMake-native one. **But `millis()` is *not* taken from a mock-framework
+expectation** (gmock/FakeIt expectations are for unit tests, wrong tool for a clock
+called every tick in a long-running sim). Instead `hal/` provides a tiny millis
+backing:
+```cpp
+// firmware_sil/hal/sim_clock.h  (concept, not final)
+namespace fh_sim { extern uint32_t clock_ms; }
+inline uint32_t millis() { return fh_sim::clock_ms; }   // shadows ArduinoMock's millis
+```
+The pybind11 bridge sets `fh_sim::clock_ms = step * 1000 / 240` before each
+`tick()`. Deterministic, framework-free in the hot loop. (If ArduinoMock's own
+`millis()` turns out to be a settable plain stub, use that directly; otherwise our
+backing wins because `hal/` is first on the include path.)
+
 Notes:
-- **`millis()` is the determinism hinge** — it must come from the injected sim
-  clock, never the host wall clock. ArduinoFake lets us set its return value; the
-  bridge sets it to `step * 1000/240` before each `tick`.
-- **The recording PCA9685 mock is the seam.** We can read servo *degrees* two ways:
-  (a) recover from the stored pulse via the inverse of the firmware's
-  `map(deg,0,180,150,600)`, or (b) call `Servo::getServoAngle()` (the firmware
-  already stores the post-clamp angle). The bridge will expose both; (b) avoids the
-  integer-PWM truncation, (a) lets us also verify the electrical map if wanted.
-- **Why not the HAL-seam alternative:** it would be cleaner firmware but requires
-  touching firmware; you chose A so the SIL provably runs *exactly* the flashed
-  source. (The HAL option is retained only as a future note, not planned.)
+- **`millis()` is the determinism hinge** — it comes from the injected sim clock,
+  never the host wall clock. This is why we own its backing (above) rather than
+  leaving it to the mock framework.
+- **The recording PCA9685 mock is the seam.** Read servo *degrees* two ways:
+  (a) invert the firmware's `map(deg,0,180,150,600)` from the stored pulse, or
+  (b) call `Servo::getServoAngle()` (the firmware stores the post-clamp angle).
+  The bridge exposes both; (b) avoids integer-PWM truncation, (a) also verifies the
+  electrical map if wanted.
+- **Why not the HAL-seam alternative:** cleaner firmware but requires touching
+  firmware; you chose A so the SIL provably runs *exactly* the flashed source.
 
 ### Why this guarantees what you want
 Either way, the bytes from the exporter → `clips_all.h` → **the exact firmware
@@ -331,10 +361,12 @@ guaranteed."** For validating your exporter, G1 is exactly what you need.
 
 ## 9. Decisions — LOCKED (2026-05-26)
 
-- **D1 — Option A, mock the hardware, zero firmware changes.** ArduinoFake for
-  `Arduino.h`/`millis()`; recording `Adafruit_PWMServoDriver` mock (stores
+- **D1 — Option A, mock the hardware, zero firmware changes.** **ByteNana/ArduinoMock**
+  (CMake `FetchContent`) for the `Arduino.h` surface; `millis()` backed by an injected
+  sim-clock variable in `hal/`; recording `Adafruit_PWMServoDriver` mock (stores
   `(channel, pulse)`); `WiFi`/`WebSocketsServer`/`network.cpp` **stubbed out**
-  (log + return, not compiled). All shims isolated in `firmware_sil/hal/`.
+  (log + return, not compiled). All shims isolated in `firmware_sil/hal/`. (Not
+  ArduinoFake — it isn't a CMake package; §2.)
 - **D2 — Python `websockets` server on :81**, plus a standalone single-file
   `tools/robot_control_panel.html` (IP/port field, one button per API command,
   shows sent JSON + response) that drives **both** the sim and the real robot.
@@ -357,8 +389,9 @@ interpreter tests; keep `test_pipeline_regression.py` green. Pure move, no new
 behaviour — gives the SIL a clean sibling to slot next to.
 
 **Step 1 — SIL proof of concept (Option A, one clip).** Scaffold `firmware_sil/`:
-the `hal/` shims (ArduinoFake `Arduino.h`, empty `Wire.h`, recording
-`Adafruit_PWMServoDriver.h`, `network_stubs.h`); `CMakeLists.txt` pointing at
+the `hal/` shims (ArduinoMock via `FetchContent` for `Arduino.h` + our injected
+millis backing, empty `Wire.h`, recording `Adafruit_PWMServoDriver.h`,
+`network_stubs.h`); `CMakeLists.txt` pointing at
 `code/firmware/src/nervous_system/*.cpp` (excluding `network.cpp`) with `hal/` first
 on the include path; `bindings.cpp` (`pybind11` `FirmwareControl`:
 `command`/`tick`/`servo_angles`); `sil_bridge.py`. Drive one clip through PyBullet
