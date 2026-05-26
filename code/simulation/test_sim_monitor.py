@@ -19,17 +19,18 @@ def test_estimate_current_is_linear_and_uses_abs():
 
 
 def test_total_current_sums_all_channels():
-    torques = [m.STALL_TORQUE_NM] * 4  # 4 servos at full stall -> 4 * 2.5 A
+    torques = [m.STALL_TORQUE_NM] * 4  # 4 servos at full stall -> 4 * STALL_CURRENT_A
     assert abs(m.total_current_a(torques) - 4 * m.STALL_CURRENT_A) < 1e-9
 
 
 def test_format_status_flags_overcurrent_and_stall():
-    # 12 joints all at stall torque -> 30 A total (> 10 A budget) and all stalled.
+    # 12 joints all at stall torque -> 12 * STALL_CURRENT_A total (> 10 A budget),
+    # and all above STALL_WARN_NM -> all stalled.
     torques = {f"j{i}": m.STALL_TORQUE_NM for i in range(12)}
     line = m.format_status(1.0, torques)
     assert "[WARN >10A]" in line
     assert "[STALL]" in line
-    assert "est_I=30.0A" in line
+    assert f"est_I={12 * m.STALL_CURRENT_A:.1f}A" in line
 
 
 def test_format_status_quiet_when_within_limits():

@@ -13,10 +13,12 @@ read_joint_pos_deg do the PyBullet reads.
 
 import math
 
-STALL_TORQUE_NM = 2.94  # 30 kg·cm servo stall torque (matches servo.effort_nm)
-STALL_CURRENT_A = 2.5  # approximate stall current at 6 V
-CURRENT_LIMIT_A = 10.0  # supply / multiplexer budget — warn above this total
-STALL_WARN_NM = 2.5  # flag a joint whose applied torque exceeds this
+STALL_TORQUE_NM = (
+    1.472  # DSS-M15S (SER0044) at 7 V — 15 kgf·cm; matches servo.effort_nm
+)
+STALL_CURRENT_A = 2.0  # DSS-M15S (SER0044) stall current at 7 V
+CURRENT_LIMIT_A = 10.0  # supply / multiplexer budget (12 servos × ~0.8 A realistic avg)
+STALL_WARN_NM = 1.25  # ~85% of DSS-M15S (SER0044) stall torque — flag joints above this
 
 _LEGS = ("fr", "fl", "br", "bl")
 

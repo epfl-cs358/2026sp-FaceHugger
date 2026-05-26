@@ -93,8 +93,8 @@ legs:
 # visual.
 # ---------------------------------------------------------------------------
 servo:
-  mass_kg: 0.060        # DFRobot SER0038 spec
-  effort_nm: 2.94       # 30 kg·cm to N·m
+  mass_kg: 0.072        # DSS-M15S (SER0044) datasheet — 72 g per servo
+  effort_nm: 1.472      # DSS-M15S (SER0044) at 7 V — 15 kgf·cm (was 2.94 = 30 kgf·cm, wrong servo)
   velocity_rad_s: 5.0
 
   # Uniform mesh-local rotation applied to every chassis-fixed shoulder
