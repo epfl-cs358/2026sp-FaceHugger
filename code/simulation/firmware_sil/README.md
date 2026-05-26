@@ -47,6 +47,21 @@ Produces `build/fh_sim.<ext>.so`. It is **not committed** (rebuilt locally / in
 CI). Contributors without a C++ toolchain skip this and use the Python re-port
 (`firmware_port/`); `test_sil_poc.py` skips automatically when `fh_sim` is absent.
 
+### Auto-rebuild (no stale firmware)
+
+`--sil` never runs a stale `.so`: `sil_bridge.load_fh_sim()` compares the built
+module's mtime against every source under `code/firmware/src/`, `hal/`,
+`bindings.cpp`, and `CMakeLists.txt`, and **recompiles before importing** if any
+is newer (or the `.so` is missing). So editing firmware and re-running
+`facehugger.py sim --sil` always reflects the change.
+
+- Skip the auto-rebuild (warn loudly instead): set `FH_SIL_NO_BUILD=1`.
+- CI / pre-run gate:
+  ```bash
+  python -m firmware_sil.sil_bridge --check   # exit 1 if stale (no build)
+  python -m firmware_sil.sil_bridge           # rebuild if stale, then report
+  ```
+
 ## Use it
 
 ```bash
