@@ -50,70 +50,76 @@ live code/URDF (joint names `link1/2/3` not `shoulder/hip/knee`, asymmetric
 shoulder ROM, per-leg shoulder axis sign, the 2026-05-25 BR un-mirror, etc.) —
 see `REPORT.md §7`.
 
-### Changes since the report snapshot (2026-05-26, same day)
+### What this branch adds — `feat/pybullet-sim-interpreter` since `feat/animation-flow-integration`
 
-`REPORT.md` is a snapshot; the code moved slightly after it was written:
+This branch grew the simulation from a gait viewer into a firmware-faithful
+animation and control rig. The work came in a few waves; what follows is the whole
+arc in prose, the report snapshot folded in (`REPORT.md` is a point-in-time
+snapshot, so where it and this list disagree, this list is newer).
 
-- **Servo corrected to QYRC DSS-230MG** (30 kg·cm → 2.94 N·m, ~2 A). The
-  monitor stall model and `facehugger_config.yaml` `effort_nm` now both use
-  2.94, matching the URDF's `effort="2.94"` (no drift). `mass_kg: 0.300` is an
-  unverified placeholder.
-- **`SimLogger` + `--log` flag** added to `sim_monitor.py` / `simulate.py` —
-  per-step torque/current capture → summary + `sim_log.csv` + `sim_log.png`.
-  Additive; `--monitor` unchanged.
-- **Dead files removed**: `teleop.py`, `terrain.py` (stubs) and `view_urdf.py`
-  (the `view` subcommand is gone — use `sim`). The report's §1 file-map still
-  lists these; treat them as deleted.
-- **`clip_player.py` docstring fixed** — it now correctly states link1 gets the
-  per-leg axis sign too (REPORT.md §7 item 4 is resolved).
-- **Firmware `[OOR]` pre-clamp detection + SSE sim telemetry added** (on top of
-  Step 3): `Leg::setJointAngles` / `Servo::setServoAngle` now print
-  `[OOR] servo <ch> requested <deg>` *before* clamping to [0,180] — a real bench
-  feature (visible on the serial monitor), captured by the SIL's Serial mock and
-  exposed via `FirmwareControl.drain_serial()` + `servo_channels()`. `serve` also
-  streams a per-joint telemetry frame over **SSE on :8082** (~20 Hz) carrying both
-  the servo-space command (what the robot's servos get) and the same command in
-  URDF-joint degrees, the measured joint angle, a true tracking delta, torque/current,
-  and `pre_clamp_deg`. The control panel renders it (Δ/τ colours, Clamp column, stale
-  banner); `--gui` torque-tints the PyBullet links. SSE is best-effort (WS API runs
-  without `sse-starlette`/`uvicorn`). `sse-starlette`/`uvicorn` added to requirements.
-  Goldens byte-identical (the printf doesn't change servo output). New tests:
-  `test_sil_telemetry.py` (frame schema, drop-stale queue, end-to-end SSE) +
-  clip-suite OOR soft-warn and calibrate-overrange feature lock. 95 tests pass.
-- **SIL Step 3 executed — firmware-backed WebSocket API + control panel:**
-  `facehugger.py serve` (`firmware_sil/ws_sim.py`, default :8081) serves the
-  API_SPEC `T:` protocol and drives PyBullet via the firmware. The **command
-  dispatch is the compiled firmware** — `network.cpp::handleParsedMessage` (+
-  `clip_list_serializer` + ArduinoJson) is compiled into `fh_sim` and routed to a
-  shared global `spinalCord`, so API changes reflect automatically (no Python
-  mirror). `tools/robot_control_panel.html` (single file, no build) drives both the
-  sim (`ws://localhost:8081`) and the real robot (`ws://<ip>:81`); the app can too.
-  `test_sil_ws.py` covers it. `websockets` added to requirements. Global-spinalCord
-  refactor verified behavior-preserving (goldens unchanged). 89 tests pass.
-- **SIL Step 2 + default-flip executed:** clip playback now **defaults to the
-  exact firmware** (`facehugger.py sim --clip <name>`); `--python` forces the
-  re-port. The firmware `.so` **auto-rebuilds** when firmware sources change
-  (staleness check in `sil_bridge.load_fh_sim`; `python -m firmware_sil.sil_bridge
-  --check` is a CI gate). `gen_golden.py` bakes a per-clip servo-angle golden into
-  `firmware_sil/golden/`; `test_sil_clip_suite.py` replays each clip and asserts an
-  **exact** match — any firmware/clip change that shifts a servo angle fails CI
-  (the exporter guard). `pybind11` added to `requirements.txt` (build-time only).
-  Pre-existing `E741` in kinematics fixed; ruff clean. 88 tests pass.
-- **SIL Step 1 executed (proof of concept):** `firmware_sil/` compiles the exact
-  firmware `SpinalCord` (unchanged, via `hal/` shims + CMake/pybind11) into the
-  `fh_sim` module; `sil_bridge.py` drives PyBullet from the firmware's own servo
-  angles. `test_sil_poc.py` proves a clip plays in-range, the SIL output matches
-  the Python re-port at frame 0 to 0.888° (firmware whole-degree truncation), and
-  the bridge drives PyBullet headless. 74 tests green. Not yet wired to
-  `--sil` (Step 2). Note: `hal/Arduino.h` is a minimal hand-rolled shim for the PoC
-  (the control files use only millis/map/constrain/Serial/String), not ArduinoMock.
-- **SIL Step 0 executed:** the Python clip re-port moved
-  `pybullet_sim/interpreter/ → firmware_port/` (top-level package), imports
-  repointed, structure test re-pinned; 71 tests green, clip playback + parity
-  unchanged. (First step of `EXACT-FIRMWARE-SIL-PLAN.md`.)
-- **Reorg executed** (commit `e787788`): `code/simulation/` split into
-  `pybullet_sim/` (runtime, incl. `interpreter/`) + `urdf_gen/` (build). The CLI
-  (`facehugger.py sim ...`) is unchanged; internally it now runs
-  `python -m pybullet_sim.simulate`. REPORT.md §1 reflects the new layout;
-  REORG-PLAN.md is marked executed. Verified by `test_pipeline_regression.py`
-  (e2e) + `test_package_structure.py` — 70 tests pass.
+**A clip interpreter, then the exact firmware behind it.** The first wave ported the
+firmware's clip pipeline into Python — `firmware_port/` (originally
+`pybullet_interpreter/`) with `servo_convention.py` (a line-for-line port of
+`translateToServo`), `clip_loader.py` (parses `clips_all.h`), and `clip_player.py`
+(frame interpolation → joint targets) — and wired it into
+`facehugger.py sim --clip NAME`, alongside two viewing aids: `--loop` to replay a
+clip continuously and `--float` to pin the body weightless so joint geometry can be
+inspected without gravity or a floor. The second wave went further and made the sim
+run the *exact flashed firmware C++* rather than a re-port: `firmware_sil/` compiles
+the real `SpinalCord` unchanged (via `hal/` shims + CMake/pybind11) into an `fh_sim`
+module, and `sil_bridge.py` drives PyBullet from the firmware's own servo angles.
+Clip playback now **defaults to that firmware**, with `--python` forcing the re-port
+as a fallback and parity reference. The compiled module **auto-rebuilds** when
+firmware sources change, and `python -m firmware_sil.sil_bridge --check` is a CI
+freshness gate so a stale build can't silently mislead.
+
+**Parity is enforced, not assumed.** `gen_golden.py` bakes a per-clip servo-angle
+trace into `firmware_sil/golden/`, and `test_sil_clip_suite.py` replays every clip
+and asserts an exact match — any firmware or clip change that shifts a servo angle
+fails CI, which is the exporter guard. That sits on top of an end-to-end regression
+net (`test_pipeline_regression.py`) and a package-structure test, plus the PoC and
+WebSocket suites; 95 tests pass in all.
+
+**Driving the sim like the real robot.** The firmware gained `T:8` (CMD_LIST_CLIPS)
+for clip discovery and the mobile app a matching clip-discovery UI (T:8 request,
+`ClipList`, store, Jest coverage). `facehugger.py serve` then exposed the full
+API_SPEC `T:` protocol over WebSocket (default :8081) — and crucially the command
+dispatch *is* the compiled firmware (`network.cpp::handleParsedMessage` + ArduinoJson,
+routed to a shared `spinalCord`), so any change to the firmware's API handling
+reflects automatically with no Python mirror to drift. `tools/robot_control_panel.html`
+is a single-file, no-build panel that drives both the sim (`ws://localhost:8081`) and
+the real robot (`ws://<ip>:81`); the unmodified app can connect to either too.
+
+**Observability of forces and limits.** A physics-realism pass (plus a foot-friction
+fix that had silently never fired) made the sim's loads meaningful, and `--monitor`
+prints a live torque/current readout. `SimLogger` + `--log` capture per-step
+torque/current to a summary, `sim_log.csv`, and a `sim_log.png` plot. The servo model
+was corrected to the actual hardware, the QYRC DSS-230MG (30 kg·cm → 2.94 N·m, ~2 A);
+the monitor's stall model and `facehugger_config.yaml`'s `effort_nm` now both read
+2.94, matching the URDF (`mass_kg: 0.300` remains an unverified placeholder). Most
+recently the firmware itself learned to warn before it clamps: `Leg::setJointAngles`
+and `Servo::setServoAngle` print `[OOR] servo <ch> requested <deg>` when an angle
+leaves [0,180] — a real bench feature on the serial monitor, captured by the SIL's
+Serial mock. `serve` streams a per-joint telemetry frame over **SSE on :8082** at
+~20 Hz, carrying both the servo-space command (what the real servos receive) and the
+same command in URDF-joint degrees, the measured joint angle, a true tracking delta,
+torque/current, and the pre-clamp request; the panel renders it with Δ/τ colours, a
+Clamp column, and a stale banner, and `--gui` torque-tints the PyBullet links.
+
+**Conventions corrected at the source.** The shoulder/yaw convention was made uniform
+across all four legs — most notably the BR shoulder un-mirror (Change E), propagated
+in lockstep through the three parity-locked `translateToServo` twins (firmware,
+exporter, sim) so robot motion is unchanged — along with fixing an inverted FL
+shoulder yaw direction and switching yaw export to uniform math-space. On the exporter
+side, link1's delta-to-absolute conversion was corrected, the clip export path
+repaired, and clips were re-exported with `clips_all.h` re-bundled and a new
+cross-format verifier added to keep the `.h`/`.js`/sim representations in agreement.
+The Blender N-panel gained a live servo-angle readout and per-clip frame-range sync
+(clip-wide span, honouring the Custom-range selector).
+
+**Structure and documentation.** `code/simulation/` was split into `pybullet_sim/`
+(runtime) + `urdf_gen/` (build), the clip re-port relocated to `firmware_port/`, and
+the dead `teleop.py` / `terrain.py` / `view_urdf.py` stubs removed (there is no `view`
+subcommand — use `sim`). This docs folder is the paper trail: the technical
+`REPORT.md`/`report.html`, the per-subsystem `research/` studies, the executed
+`REORG-PLAN.md`, and the `EXACT-FIRMWARE-SIL-PLAN.md` that the SIL work followed.
