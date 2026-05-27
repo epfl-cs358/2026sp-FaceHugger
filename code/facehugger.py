@@ -35,11 +35,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-REPO_ROOT = HERE.parent.parent
+# This file lives at code/facehugger.py. The simulation packages it shells into
+# (pybullet_sim / urdf_gen / firmware_sil) live in code/simulation/, so module
+# invocations run with cwd=SIM_DIR. Paths resolve from __file__, so the CLI works
+# from any working directory (e.g. `python code/facehugger.py sim`).
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SIM_DIR = REPO_ROOT / "code" / "simulation"
 
-# Runtime + build steps are packages now; invoked as `python -m <pkg>.<mod>`
-# with cwd=HERE (see _run) so pybullet_sim / urdf_gen are importable.
+# Runtime + build steps are packages; invoked as `python -m <pkg>.<mod>` with
+# cwd=SIM_DIR (see _run) so pybullet_sim / urdf_gen / firmware_sil are importable.
 GENERATE_URDF = ["-m", "urdf_gen.generate_urdf"]
 SIMULATE = ["-m", "pybullet_sim.simulate"]
 VISUALIZE = REPO_ROOT / "animation" / "scripts" / "visualize_urdf.py"
@@ -104,10 +108,10 @@ def _resolve_blender_bin(version):
     )
 
 
-def _run(cmd, cwd=HERE):
+def _run(cmd, cwd=SIM_DIR):
     """Forward stdout/stderr; return the child's exit code.
 
-    cwd=None runs in the caller's working directory (with HERE added to
+    cwd=None runs in the caller's working directory (with SIM_DIR added to
     PYTHONPATH so the `-m pybullet_sim...` / `-m urdf_gen...` packages still
     import). Used by `sim` so its --log output (sim_log.csv/png) lands where
     the user invoked the command, not in code/simulation/.
@@ -117,7 +121,7 @@ def _run(cmd, cwd=HERE):
     if cwd is None:
         env = {**os.environ}
         env["PYTHONPATH"] = os.pathsep.join(
-            [str(HERE), env.get("PYTHONPATH", "")]
+            [str(SIM_DIR), env.get("PYTHONPATH", "")]
         ).rstrip(os.pathsep)
     return subprocess.run(
         [str(c) for c in cmd], cwd=(str(cwd) if cwd else None), env=env
@@ -201,12 +205,12 @@ def cmd_sim(args):
 
 def _urdf_stale():
     """True if generated/facehugger.urdf is missing or older than its inputs."""
-    urdf = HERE / "generated" / "facehugger.urdf"
+    urdf = SIM_DIR / "generated" / "facehugger.urdf"
     if not urdf.exists():
         return True
     inputs = [
-        HERE / "generated" / "fusion_export.json",
-        HERE / "facehugger_config.yaml",
+        SIM_DIR / "generated" / "fusion_export.json",
+        SIM_DIR / "facehugger_config.yaml",
     ]
     u = urdf.stat().st_mtime
     return any(p.exists() and p.stat().st_mtime > u for p in inputs)
@@ -293,7 +297,7 @@ def _serve_session(*, host, port, gui, app, app_port, panel=False):
         cli.append("--gui")
     if panel:
         cli.append("--panel")
-    # cwd=None: run in the user's dir (HERE on PYTHONPATH) so firmware_sil imports.
+    # cwd=None: run in the user's dir (SIM_DIR on PYTHONPATH) so firmware_sil imports.
     try:
         return _run(cli, cwd=None)
     finally:

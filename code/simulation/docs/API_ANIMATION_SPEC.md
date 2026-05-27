@@ -17,7 +17,7 @@ numbering, see
 ## 1. Loading the rig
 
 ```bash
-python code/simulation/facehugger.py blender --rigged
+python code/facehugger.py blender --rigged
 ```
 
 Builds a fresh scene with the FaceHugger model + posable rig in
@@ -28,7 +28,7 @@ install path.
 Headless smoke-test variant (CI / scripting):
 
 ```bash
-python code/simulation/facehugger.py blender --rigged \
+python code/facehugger.py blender --rigged \
     --headless --save /tmp/fh_rigged.blend
 ```
 

@@ -23,7 +23,7 @@ pytest.importorskip("pybullet")
 
 SIM_DIR = Path(__file__).resolve().parent.parent  # tests/ -> code/simulation/
 FW_CLIPS = SIM_DIR / ".." / "firmware" / "src" / "nervous_system" / "clips_all.h"
-FACEHUGGER = SIM_DIR / "facehugger.py"
+FACEHUGGER = SIM_DIR.parent / "facehugger.py"  # code/facehugger.py
 CLIP = "wave"
 
 

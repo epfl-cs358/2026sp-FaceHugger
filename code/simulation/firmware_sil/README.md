@@ -53,7 +53,7 @@ The firmware driver never runs a stale `.so`: `sil_bridge.load_fh_sim()` compare
 the built module's mtime against every source under `code/firmware/src/`, `hal/`,
 `bindings.cpp`, and `CMakeLists.txt`, and **recompiles before importing** if any
 is newer (or the `.so` is missing). So editing firmware and re-running
-`facehugger.py sim --clip ...` always reflects the change.
+`code/facehugger.py sim --clip ...` always reflects the change.
 
 - Skip the auto-rebuild (warn loudly instead): set `FH_SIL_NO_BUILD=1`.
 - Optional pre-run freshness gate (no GitHub CI is set up for this):
@@ -65,9 +65,8 @@ is newer (or the `.so` is missing). So editing firmware and re-running
 ## Use it
 
 ```bash
-cd code/simulation
-python facehugger.py sim --clip "wave" --headless            # DEFAULT: exact firmware (auto-built)
-python facehugger.py sim --clip "wave" --headless --python   # force the Python re-port (no toolchain)
+python code/facehugger.py sim --clip "wave" --headless            # DEFAULT: exact firmware (auto-built)
+python code/facehugger.py sim --clip "wave" --headless --python   # force the Python re-port (no toolchain)
 ```
 Clip playback **defaults to the exact firmware**; `--python` forces the re-port
 (`firmware_port/`). Only `--clip` uses this driver — stand/`--walk`/`--trot` are
@@ -108,12 +107,11 @@ API handling reflects automatically — no Python mirror to drift. Only the
 WebSocket transport and the periodic telemetry are Python.
 
 ```bash
-cd code/simulation
-python facehugger.py sim --serve                 # ws://localhost:8081  (or: python -m firmware_sil.ws_sim)
+python code/facehugger.py sim --serve            # ws://localhost:8081  (or, from code/simulation: python -m firmware_sil.ws_sim)
 ```
 
-Then open the control panel (no build/deps). Easiest: run `python facehugger.py sim
---panel` and open the printed `http://localhost:8082/panel`. Or open the file
+Then open the control panel (no build/deps). Easiest: run `python code/facehugger.py
+sim --panel` and open the printed `http://localhost:8082/panel`. Or open the file
 directly at `code/remote-control-app/control-panel/robot_control_panel.html` and set
 the target to `ws://localhost:8081` and Connect. One button per API command (clip
 discovery T:8, play T:7, state T:2, move T:1, gait T:5, invert T:6, calibrate T:4);
@@ -129,7 +127,7 @@ The full mobile app (`code/remote-control-app/MyApp`) can drive the sim exactly 
 it drives the robot. One command brings up the sim, the WebSocket API, and the app:
 
 ```bash
-python facehugger.py sim --app --host 0.0.0.0   # sim + WS API on :8081 + Expo web app
+python code/facehugger.py sim --app --host 0.0.0.0   # sim + WS API on :8081 + Expo web app
 ```
 
 Then in the app's **Settings** screen, tap the **Simulator** preset (or enter the
@@ -164,7 +162,7 @@ requested <deg>` before clamping to [0,180] (visible on the bench serial monitor
 which the SIL's Serial mock captures.
 
 ```bash
-python facehugger.py sim --serve --gui            # ws://localhost:8081 + SSE http://localhost:8082/telemetry
+python code/facehugger.py sim --serve --gui            # ws://localhost:8081 + SSE http://localhost:8082/telemetry
 ```
 
 ## Status

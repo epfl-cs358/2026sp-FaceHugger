@@ -47,24 +47,22 @@ Re-runs preserve user edits to `mesh_files._servo_role_assignment` in the JSON.
 
 ## Driving the pipeline — `facehugger.py`
 
-[facehugger.py](facehugger.py) is the single CLI entry point. Each subcommand wraps one of the underlying scripts:
+[../facehugger.py](../facehugger.py) is the single CLI entry point. It lives at `code/facehugger.py` and resolves its own paths, so run it from the repo root (it shells into this `code/simulation/` package for you). Each subcommand wraps one of the underlying scripts:
 
 ```bash
-cd code/simulation
-
-python facehugger.py urdf                 # regenerate generated/facehugger.urdf
-python facehugger.py sim                  # GUI, standing pose
-python facehugger.py sim --walk           # walk gait (EXACT firmware tickGait, via the SIL)
-python facehugger.py sim --trot           # trot gait (EXACT firmware tickTrot, via the SIL)
-python facehugger.py sim --trot --python  # the Python IK gait instead (no C++ toolchain)
-python facehugger.py sim --headless       # no GUI — CI smoke-check
-python facehugger.py sim --clip "wave" --headless   # play a baked clip via the interpreter
-python facehugger.py blender                          # URDF in Blender, placement-only
-python facehugger.py blender --rigged                 # animator-facing rig (armature + IK)
-python facehugger.py blender --blender-version 5.2    # specific Blender version
-python facehugger.py blender --headless --save /tmp/scene.blend
-python facehugger.py sim --app            # sim + WebSocket API + Expo web app
-python facehugger.py flash                # build + upload the firmware
+python code/facehugger.py urdf                 # regenerate generated/facehugger.urdf
+python code/facehugger.py sim                  # GUI, standing pose
+python code/facehugger.py sim --walk           # walk gait (EXACT firmware tickGait, via the SIL)
+python code/facehugger.py sim --trot           # trot gait (EXACT firmware tickTrot, via the SIL)
+python code/facehugger.py sim --trot --python  # the Python IK gait instead (no C++ toolchain)
+python code/facehugger.py sim --headless       # no GUI — CI smoke-check
+python code/facehugger.py sim --clip "wave" --headless   # play a baked clip via the interpreter
+python code/facehugger.py blender                          # URDF in Blender, placement-only
+python code/facehugger.py blender --rigged                 # animator-facing rig (armature + IK)
+python code/facehugger.py blender --blender-version 5.2    # specific Blender version
+python code/facehugger.py blender --headless --save /tmp/scene.blend
+python code/facehugger.py sim --app            # sim + WebSocket API + Expo web app
+python code/facehugger.py flash                # build + upload the firmware
 ```
 
 ### `blender` subcommand

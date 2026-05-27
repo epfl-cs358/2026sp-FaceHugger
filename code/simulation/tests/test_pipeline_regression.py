@@ -21,7 +21,7 @@ import pytest
 pytest.importorskip("pybullet")
 
 SIM_DIR = Path(__file__).resolve().parent.parent  # tests/ -> code/simulation/
-FACEHUGGER = SIM_DIR / "facehugger.py"
+FACEHUGGER = SIM_DIR.parent / "facehugger.py"  # code/facehugger.py
 URDF = SIM_DIR / "generated" / "facehugger.urdf"
 CLIP = "wave"
 
@@ -55,9 +55,10 @@ def test_urdf_regenerates_byte_identical():
 def test_cli_help_lists_subcommands_without_view():
     r = _run([FACEHUGGER, "--help"])
     assert r.returncode == 0, r.stderr
-    for cmd in ("urdf", "sim", "blender", "all"):
+    for cmd in ("urdf", "sim", "blender", "flash", "app"):
         assert cmd in r.stdout, f"missing subcommand {cmd}"
-    assert "view" not in r.stdout  # removed this session
+    assert "view" not in r.stdout  # removed long ago
+    assert "all" not in r.stdout  # folded away: use `urdf` then `sim`
 
 
 def test_clip_playback_headless_runs():
