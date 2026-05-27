@@ -25,6 +25,9 @@ static const uint32_t INVERT_DEBOUNCE_MS = 250;
 // Glide time when an invert toggle mirrors the current pose in place.
 static const uint32_t INVERT_EASE_MS = 300;
 
+// Glide time when a gait stops gracefully and settles to the standing pose.
+static const uint32_t GAIT_STOP_EASE_MS = 300;
+
 // Gait parameters (step values are in degrees, pre-scaled to 2/3 of raw JS values).
 // Offsets order: [LEG_FR, LEG_FL, LEG_RR, LEG_RL]
 static const GaitParams GAITS[] = {
@@ -226,8 +229,8 @@ void SpinalCord::tickGait() {
     // Graceful stop: when movement requested is gone and active vector is near zero,
     // wait for a clean phase boundary then return to standing pose.
     if (!isMovingRequested && fabsf(activeX) < 0.01f && fabsf(activeY) < 0.01f && fabsf(activeYaw) < 0.01f && globalPhase < 0.05f) {
-        goToNeutral();              // invert-aware: holds the mirrored neutral if inverted
-        robotState = STATE_STAND;   // actively hold the stand (no manual T:2 needed)
+        easeToNeutral(GAIT_STOP_EASE_MS);  // invert-aware glide to the standing pose
+        robotState = STATE_STAND;          // actively hold the stand (no manual T:2 needed)
         return;
     }
 
@@ -324,8 +327,8 @@ void SpinalCord::tickTrot() {
 
     // Graceful stop on a clean phase boundary when the user released the stick.
     if (!isMovingRequested && mag < 0.05f && fabsf(activeYaw) < 0.05f && globalPhase < 0.05f) {
-        goToNeutral();              // invert-aware: holds the mirrored neutral if inverted
-        robotState = STATE_STAND;   // actively hold the stand (no manual T:2 needed)
+        easeToNeutral(GAIT_STOP_EASE_MS);  // invert-aware glide to the standing pose
+        robotState = STATE_STAND;          // actively hold the stand (no manual T:2 needed)
         return;
     }
 
