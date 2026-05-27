@@ -274,12 +274,20 @@ def _serve_session(*, host, port, gui, app, app_port, panel=False):
         app_dir = REPO_ROOT / "code" / "remote-control-app" / "MyApp"
         if not app_dir.is_dir():
             sys.exit(f"app dir not found: {app_dir}")
-        print(
-            f"Web app:   http://localhost:{app_port}  (choose 'Simulator' in Settings)"
-        )
+        print(f"Web app:   http://localhost:{app_port}  (auto-connects to the sim)")
+        # Point the launched web app at the sim by default (config.ts reads these
+        # EXPO_PUBLIC_ vars as its startup target). The Settings screen can still
+        # switch. localhost is correct for the web app on this machine; from a
+        # phone, use the Settings screen with the dev machine's LAN IP.
+        app_env = {
+            **os.environ,
+            "EXPO_PUBLIC_WS_IP": "localhost",
+            "EXPO_PUBLIC_WS_PORT": str(port),
+        }
         app_proc = subprocess.Popen(
             ["npx", "expo", "start", "--web", "--port", str(app_port)],
             cwd=str(app_dir),
+            env=app_env,
         )
     print(f"WebSocket: ws://{host}:{port}   (telemetry SSE on :8082)")
     if panel:
