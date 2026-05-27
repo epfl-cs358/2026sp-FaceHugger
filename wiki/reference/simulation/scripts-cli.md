@@ -55,11 +55,11 @@ With no flag it reports freshness and rebuilds if stale. With `--check` it only 
 
 ## Running the WebSocket server directly
 
-`facehugger.py serve` wraps this, but the module exposes one extra flag, `--sse-port`, that `serve` does not forward. Run the module directly if you need to move the telemetry stream:
+`facehugger.py sim --serve` is the wrapper for this (and `facehugger.py serve` is a deprecated alias for `sim --serve`). The module exposes one extra flag, `--sse-port`, that the wrapper does not forward. Run the module directly if you need to move the telemetry stream:
 
 ```bash
 cd code/simulation
-python -m firmware_sil.ws_sim [--host HOST] [--port PORT] [--gui] [--sse-port PORT]
+python -m firmware_sil.ws_sim [--host HOST] [--port PORT] [--gui] [--sse-port PORT] [--panel]
 ```
 
 | Flag | Default | Meaning |
@@ -68,8 +68,9 @@ python -m firmware_sil.ws_sim [--host HOST] [--port PORT] [--gui] [--sse-port PO
 | `--port` | `8081` | WebSocket port (the robot uses `81`, privileged) |
 | `--gui` | off | show the PyBullet window |
 | `--sse-port` | `8082` | Server-Sent Events telemetry port |
+| `--panel` | off | also host the browser [control panel](../remote-control/control-panel.md) over HTTP at `http://localhost:8082/panel` |
 
-See [Controlling the simulation](pybullet-control.md#serve-drive-the-sim-like-the-robot) for what to connect to it.
+See [Controlling the simulation](pybullet-control.md#sim-serve-drive-the-sim-like-the-robot) for what to connect to it.
 
 ## Blender scripts
 

@@ -318,14 +318,17 @@ python facehugger.py sim                 # GUI, standing pose
 python facehugger.py sim --walk          # walk gait (firmware in the loop)
 python facehugger.py sim --trot          # trot gait
 python facehugger.py sim --clip "wave"   # play a baked clip
-python facehugger.py serve --gui         # firmware-backed WebSocket API on :8081
+python facehugger.py sim --serve         # firmware-backed WebSocket API on :8081
+python facehugger.py sim --app           # sim + WebSocket API + the web app
 ```
 
 `--walk` and `--trot` are separate gaits, both driven by the compiled firmware; pass
-`--python` to use the pure-Python re-port instead (no C++ toolchain needed). `serve`
-runs the same `T:` WebSocket protocol as the real robot, so the mobile app or the
-browser control panel can drive the sim. The full flag surface, the under-the-hood
-firmware-in-the-loop design, and the Blender subcommand are documented in the
+`--python` to use the pure-Python re-port instead (no C++ toolchain needed).
+`sim --serve` runs the same `T:` WebSocket protocol as the real robot, so the mobile
+app or the browser [control panel](../reference/remote-control/control-panel.md) can
+drive the sim; `sim --app` brings up the sim, the API, and the web app together. The
+full flag surface, the under-the-hood firmware-in-the-loop design, and the Blender and
+`flash` subcommands are documented in the
 [simulation CLI reference](../reference/simulation/cli.md).
 
 !!! tip
@@ -352,5 +355,5 @@ spans all of them, because they run in different runtimes.
 
 So "one environment for everything" is not possible across these runtimes, but the
 host-Python side is genuinely one conda env. A `pyproject.toml` for `code/simulation/`
-(with optional-dependency groups for sim, serve, and docs) would be a reasonable
-future tidy-up, but `requirements.txt` is what the project uses today.
+(with optional-dependency groups for sim, the WebSocket API, and docs) would be a
+reasonable future tidy-up, but `requirements.txt` is what the project uses today.

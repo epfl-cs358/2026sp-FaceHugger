@@ -164,9 +164,9 @@ Each tap sends a single calibration packet to that servo. The input field rememb
 
 ## Changing the connection target (IP and port)
 
-The app connects to one WebSocket target, and you can change it at runtime from the **Settings** screen (gear icon): tap the **Robot** preset (`192.168.4.1:81`, the ESP32 AP) or the **Simulator** preset (`localhost:8081`, the PyBullet `serve`), or type any IP and port and tap **Connect**. Switching reconnects immediately.
+The app connects to one WebSocket target, and you can change it at runtime from the **Settings** screen (gear icon): tap the **Robot** preset (`192.168.4.1:81`, the ESP32 AP) or the **Simulator** preset (`localhost:8081`, the PyBullet `sim --serve`), or type any IP and port and tap **Connect**. Switching reconnects immediately.
 
-You only need to leave the Robot preset if the ESP32 is on a router in station mode (use the IP the router assigned, from the serial monitor) or if you are driving the [simulator](../reference/simulation/pybullet-control.md#serve-drive-the-sim-like-the-robot).
+You only need to leave the Robot preset if the ESP32 is on a router in station mode (use the IP the router assigned, from the serial monitor) or if you are driving the [simulator](../reference/simulation/pybullet-control.md#sim-serve-drive-the-sim-like-the-robot).
 
 The startup default and the two presets are defined in `code/remote-control-app/MyApp/config/config.ts` (`DEFAULT_IP` / `DEFAULT_PORT`, `ROBOT_*`, `SIM_*`). When running the app as a web page, the host port is set by the `--port` flag in the `web` npm script (`expo start --web --port 8080`); edit that number, or run `npx expo start --web --port <p>`.
 

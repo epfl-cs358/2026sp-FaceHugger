@@ -25,9 +25,9 @@ Each tick the bridge advances the firmware's clock, runs one `update()`, reads b
 | Needs | CMake + C++17 + pybind11 (auto-builds) | nothing beyond PyBullet |
 | Use when | you want true parity with the robot | you have no C++ toolchain, or want the reference re-port |
 
-The `fh_sim` module **auto-rebuilds** whenever the firmware/HAL/binding sources change, so a fresh `sim` or `serve` never silently runs stale firmware. The staleness check scans the whole firmware `src/` tree, and `clips_all.h` lives there, so re-exporting clips (which rewrites the firmware copy) marks the module stale and the next launch recompiles it. A parity test suite asserts each clip's full servo-angle trace is bit-identical to a committed golden, so any firmware change that shifts an angle fails CI.
+The `fh_sim` module **auto-rebuilds** whenever the firmware/HAL/binding sources change, so a fresh `sim` never silently runs stale firmware. The staleness check scans the whole firmware `src/` tree, and `clips_all.h` lives there, so re-exporting clips (which rewrites the firmware copy) marks the module stale and the next launch recompiles it. A parity test suite asserts each clip's full servo-angle trace is bit-identical to a committed golden, so any firmware change that shifts an angle fails CI.
 
-The rebuild happens **at launch**: a long-running process loads `fh_sim` once and a compiled extension is not hot-reloaded. So after re-exporting or re-flashing clips you must **restart** a running `serve` (or `sim`) for the new clips to appear; otherwise the old in-memory module keeps serving the previous clip set.
+The rebuild happens **at launch**: a long-running process loads `fh_sim` once and a compiled extension is not hot-reloaded. So after re-exporting or re-flashing clips you must **restart** a running `sim` for the new clips to appear; otherwise the old in-memory module keeps serving the previous clip set.
 
 ## Stand, gaits, and clips
 
@@ -37,28 +37,28 @@ The rebuild happens **at launch**: a long-running process loads `fh_sim` once an
 
 `--float` pins the body weightless with no floor, so you see the pure joint geometry of a clip or gait without balance/collapse confounds. It is the best way to compare the sim's joint motion against the real robot.
 
-## `serve`: drive the sim like the robot
+## `sim --serve`: drive the sim like the robot
 
-`facehugger.py serve` exposes the [WebSocket robot API](../remote-control/websocket-api.md) (the `T:` protocol) on port **8081**, with the command dispatch handled by the **compiled firmware's own** `network.cpp::handleParsedMessage`. So any change to the firmware's API handling reflects automatically; there is no Python mirror to drift.
+`facehugger.py sim --serve` exposes the [WebSocket robot API](../remote-control/websocket-api.md) (the `T:` protocol) on port **8081**, with the command dispatch handled by the **compiled firmware's own** `network.cpp::handleParsedMessage`. So any change to the firmware's API handling reflects automatically; there is no Python mirror to drift. (`facehugger.py serve` is a deprecated alias for `sim --serve` and still works.)
 
 ```bash
-python facehugger.py serve --host 0.0.0.0 --gui
+python facehugger.py sim --serve --host 0.0.0.0
 ```
 
 Two clients can drive it:
 
-- **`tools/robot_control_panel.html`**: a single-file, no-build panel. Set the target to `ws://localhost:8081`, then use one button per command (list/play clips, set gait, move, invert, calibrate). Direction buttons auto-repeat while held (to beat the deadman), and a sticky rail shows all-leg telemetry.
-- **The real mobile app** (`code/remote-control-app/MyApp`): run `serve --host 0.0.0.0`, then in the app's **Settings** screen tap the **Simulator** preset (or enter the dev machine's LAN IP and port `8081`) and the app drives the sim exactly as it drives the robot. Tap the **Robot** preset to target hardware again. The startup default lives in `config/config.ts` (`DEFAULT_IP` / `DEFAULT_PORT`).
+- **The browser [control panel](../remote-control/control-panel.md)** (`code/remote-control-app/control-panel/robot_control_panel.html`): a single-file, no-build debug client. The quickest way to open it is `sim --panel`, which hosts it over HTTP at `http://localhost:8082/panel` and points it at the sim for you; otherwise open the file directly and set the target to `ws://localhost:8081`. Use one button per command (list/play clips, set gait, move, invert, calibrate). Direction buttons auto-repeat while held (to beat the deadman), and a sticky rail shows all-leg telemetry.
+- **The real mobile app** (`code/remote-control-app/MyApp`): run `sim --serve --host 0.0.0.0` (or `sim --app`, which launches the app for you), then in the app's **Settings** screen tap the **Simulator** preset (or enter the dev machine's LAN IP and port `8081`) and the app drives the sim exactly as it drives the robot. Tap the **Robot** preset to target hardware again. The startup default lives in `config/config.ts` (`DEFAULT_IP` / `DEFAULT_PORT`). The app is the primary client; the control panel is a debug tool.
 
 !!! note "The deadman is real"
     A single move command stops after ~500 ms (the firmware deadman), and a gait does nothing until a gait is *also* selected. This is faithful firmware behaviour, not a sim quirk. The panel/app must re-issue a held direction, and you must set a gait (`T:5`) before moving.
 
 !!! tip "Just exported a clip and `T:8` doesn't show it?"
-    Restart `serve`. It loads the compiled `fh_sim` once at startup, so a session you launched *before* the re-export keeps serving the old clip set even after the bundle is rebuilt. A fresh `serve` recompiles `fh_sim` from the updated `clips_all.h` and lists the new clip. (The control panel and app also fetch the clip list once on connect, so reconnect them too.) To check the compiled set without launching anything: `python3 -c "import sys; sys.path.insert(0,'.'); sys.path.insert(0,'firmware_sil/build'); import fh_sim; print(fh_sim.FirmwareControl().clip_names())"` from `code/simulation/`.
+    Restart the `sim` session. It loads the compiled `fh_sim` once at startup, so a session you launched *before* the re-export keeps serving the old clip set even after the bundle is rebuilt. A fresh `sim` recompiles `fh_sim` from the updated `clips_all.h` and lists the new clip. (The control panel and app also fetch the clip list once on connect, so reconnect them too.) To check the compiled set without launching anything: `python3 -c "import sys; sys.path.insert(0,'.'); sys.path.insert(0,'firmware_sil/build'); import fh_sim; print(fh_sim.FirmwareControl().clip_names())"` from `code/simulation/`, or run `python facehugger.py sim --list-clips`.
 
 ### Live telemetry (SSE :8082)
 
-Alongside the WebSocket API, `serve` streams a per-joint telemetry frame over Server-Sent Events on **:8082** (`/telemetry`) at ~20 Hz. Each joint reports both the **servo-space** command (what the robot's servos receive) and that command in **URDF-joint degrees** (comparable to the measured angle), plus the tracking delta, torque, estimated current, and any firmware pre-clamp `[OOR]` request. The control panel renders this as a table; with `--gui` the PyBullet links are also torque-tinted. (SSE is best-effort: the WebSocket API still runs if `sse-starlette`/`uvicorn` aren't installed.)
+Alongside the WebSocket API, `sim --serve` streams a per-joint telemetry frame over Server-Sent Events on **:8082** (`/telemetry`) at ~20 Hz. Each joint reports both the **servo-space** command (what the robot's servos receive) and that command in **URDF-joint degrees** (comparable to the measured angle), plus the tracking delta, torque, estimated current, and any firmware pre-clamp `[OOR]` request. The control panel renders this as a table; with `--gui` the PyBullet links are also torque-tinted. (SSE is best-effort: the WebSocket API still runs if `sse-starlette`/`uvicorn` aren't installed.)
 
 ## Torque instrumentation
 

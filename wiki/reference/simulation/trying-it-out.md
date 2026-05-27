@@ -7,7 +7,8 @@ This page is a hands-on tour of what you can run and what each thing should look
 Start by confirming the pipeline builds and the sim runs end to end:
 
 ```bash
-python facehugger.py all --headless
+python facehugger.py urdf
+python facehugger.py sim --headless
 ```
 
 This regenerates the URDF and then runs the simulator with no window. A clean run prints the URDF shoulder-axis check and exits `0` without throwing. The first run also compiles the firmware module (`fh_sim`), which takes a moment; later runs reuse it.
@@ -37,7 +38,7 @@ If you have no C++ toolchain, add `--python` to drive the gait from the pure-Pyt
 
 ## Playing a clip
 
-Clips are baked gestures compiled into the firmware. To see which names are available, read `animation/exported_clips/clips_manifest.json`, or start `serve` (below) and send `T:8` (list clips). Then:
+Clips are baked gestures compiled into the firmware. To see which names are available, run `python facehugger.py sim --list-clips`, read `animation/exported_clips/clips_manifest.json`, or start `sim --serve` (below) and send `T:8` (list clips). Then:
 
 ```bash
 python facehugger.py sim --clip "wave"            # play once
@@ -45,7 +46,7 @@ python facehugger.py sim --clip "wave" --loop     # repeat (GUI only)
 python facehugger.py sim --clip "wave" --float    # geometry only, no balance
 ```
 
-A clip plays, then eases back to the neutral stance. `--loop` carries physics state across repeats so you can watch for drift. If you just re-exported a clip and a running `serve` does not list it, restart `serve` so it reloads the freshly compiled firmware (see [Controlling the simulation](pybullet-control.md#serve-drive-the-sim-like-the-robot)).
+A clip plays, then eases back to the neutral stance. `--loop` carries physics state across repeats so you can watch for drift. If you just re-exported a clip and a running `sim --serve` does not list it, restart it so it reloads the freshly compiled firmware (see [Controlling the simulation](pybullet-control.md#sim-serve-drive-the-sim-like-the-robot)).
 
 ## Torque and current
 
@@ -59,19 +60,21 @@ Joints are colored against two references: green below the continuous torque, am
 
 ## Driving it like the real robot
 
-`serve` runs the same `T:` WebSocket protocol the robot uses, dispatched by the compiled firmware:
+`sim --serve` runs the same `T:` WebSocket protocol the robot uses, dispatched by the compiled firmware:
 
 ```bash
-python facehugger.py serve --gui                 # ws://localhost:8081
-python facehugger.py serve --host 0.0.0.0 --gui  # reachable from a phone
+python facehugger.py sim --serve                 # ws://localhost:8081
+python facehugger.py sim --serve --host 0.0.0.0  # reachable from a phone
+python facehugger.py sim --app                   # also launches the web app
+python facehugger.py sim --panel                 # also hosts the browser control panel
 ```
 
 Two clients can drive it:
 
-- **The browser control panel** (`tools/robot_control_panel.html`) was a quick proof-of-concept for poking the sim: open it, point it at `ws://localhost:8081`, and use one button per command. Direction buttons auto-repeat while held.
-- **The mobile app** (`code/remote-control-app/MyApp`): run `serve --host 0.0.0.0`, then in the app's **Settings** screen tap the **Simulator** preset (or type the dev machine's LAN IP and port `8081`); the app drives the sim exactly as it drives the robot. Tap the **Robot** preset to target hardware.
+- **The browser [control panel](../remote-control/control-panel.md)** (`code/remote-control-app/control-panel/robot_control_panel.html`) is a no-build debug client for poking the sim: run `sim --panel` and open the printed `http://localhost:8082/panel`, or open the file directly and point it at `ws://localhost:8081`. Use one button per command; direction buttons auto-repeat while held.
+- **The mobile app** (`code/remote-control-app/MyApp`): run `sim --app` (which launches the app for you) or `sim --serve --host 0.0.0.0`, then in the app's **Settings** screen tap the **Simulator** preset (or type the dev machine's LAN IP and port `8081`); the app drives the sim exactly as it drives the robot. Tap the **Robot** preset to target hardware.
 
-Two faithful firmware behaviors to expect: a held direction stops after ~500 ms unless re-sent (the deadman), and moving does nothing until you select a gait (`T:5`). The panel and app handle the re-send for you. See [Controlling the simulation](pybullet-control.md#serve-drive-the-sim-like-the-robot).
+Two faithful firmware behaviors to expect: a held direction stops after ~500 ms unless re-sent (the deadman), and moving does nothing until you select a gait (`T:5`). The panel and app handle the re-send for you. See [Controlling the simulation](pybullet-control.md#sim-serve-drive-the-sim-like-the-robot).
 
 ## Animation and export
 

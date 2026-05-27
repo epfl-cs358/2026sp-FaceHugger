@@ -28,4 +28,4 @@ The Zustand store tracks live robot state (`fsmState`, `gaitMode`, `tofDistances
 
 Preset packet constants (`TrotGaitPacket`, `CrabGaitPacket`, `InvertRobotPacket`, etc.) are exported from `api-messages.tsx`; use these rather than constructing raw JSON.
 
-For the full protocol specification see [../api.md](../api.md).
+For the full protocol specification see [../api.md](../api.md). For a no-build laptop debug client that speaks the same protocol, see the [browser control panel](control-panel.md).
