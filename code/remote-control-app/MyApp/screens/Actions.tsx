@@ -6,12 +6,26 @@ import { ClipList } from "../components/ClipList";
 import { sendCommand } from "../services/socket";
 import { useRobotStore } from "../store/robotStore";
 import { orangeColor } from "../colors/colors";
-import { InvertRobotPacket, restAllServosPackets, neutralStancePackets } from "../api/api-messages";
+import { InvertRobotPacket, restAllServosPackets, neutralStancePackets, setClipSmoothing } from "../api/api-messages";
+
+// Clip-playback smoothing presets (T:11 EMA alpha): snappy follows the raw
+// frames, smooth lags and rounds the motion.
+const SMOOTHING_PRESETS: { label: string; alpha: number }[] = [
+    { label: "Snappy", alpha: 0.3 },
+    { label: "Normal", alpha: 0.75 },
+    { label: "Smooth", alpha: 0.9 },
+];
 
 export function Actions() {
     const [pendingInvert, setPendingInvert] = useState(false);
+    const [smoothing, setSmoothing] = useState(0.75);
     const inverted = useRobotStore((s) => s.inverted);
     const setInverted = useRobotStore((s) => s.setInverted);
+
+    const onSmoothing = (alpha: number) => {
+        setSmoothing(alpha);
+        setClipSmoothing(alpha);
+    };
 
     // Flip the robot. T:6 mirrors firmware-driven motion (gaits, flashed clips);
     // the app-side flag mirrors app-streamed clips, which send raw T:4 angles
@@ -58,6 +72,20 @@ export function Actions() {
                     onClick={onNeutralStance}
                 />
             </View>
+            <View style={styles.smoothingRow}>
+                <AppText text="Clip smoothing" size={13} color="#aaa" />
+                <View style={styles.smoothingButtons}>
+                    {SMOOTHING_PRESETS.map((p) => (
+                        <IndividualSelectionButton
+                            key={p.label}
+                            selected={smoothing === p.alpha}
+                            title={p.label}
+                            onClick={() => onSmoothing(p.alpha)}
+                        />
+                    ))}
+                </View>
+            </View>
+
             <ClipList />
 
             {/* Confirm as a bottom sheet so it doesn't reflow the action list. */}
@@ -100,6 +128,14 @@ const styles = StyleSheet.create({
     actionRow: {
         gap: 12,
         alignItems: 'flex-start',
+    },
+    smoothingRow: {
+        gap: 8,
+        alignItems: 'flex-start',
+    },
+    smoothingButtons: {
+        flexDirection: 'row',
+        gap: 8,
     },
     backdrop: {
         flex: 1,
