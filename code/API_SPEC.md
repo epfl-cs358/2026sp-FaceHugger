@@ -107,16 +107,33 @@ Missing or non-bool `inverted` key → silent no-op with Serial warning.
 
 ---
 
-### 7. Play Clip ('T: 7')
-Play a bundled one-shot animation clip by id. The robot plays the clip once on
-its baked timeline, then auto-returns to the neutral standing pose over 500 ms
-and enters IDLE. Clip ids/names come from `clips_manifest.json` (generated with
-`clips_all.h`).
-| Key | Type | Description | Range |
-| :-- | :--- | :---------- | :---- |
-| 'c' | int  | Clip id (index into FH_CLIPS[]) | 0..N-1 |
+### 11. Set Clip Smoothing (`T: 11`)
+Set the clip-playback smoothing factor (per-channel EMA alpha) at runtime — no
+reflash. Lower = snappy, follows the baked frames exactly; higher = smoother but
+laggier. The firmware clamps to a safe range so playback can never stall. Affects
+clip playback only (not gaits or calibration).
 
-**Example:** `{"T": 7, "c": 0}` *(play clip 0; out-of-range ids are ignored)*
+| Key | Type  | Description | Range |
+| :-- | :---- | :---------- | :---- |
+| `a` | float | EMA alpha (smoothing amount) | 0.0–0.95 (clamped); boot default 0.75 |
+
+**Example:** `{"T": 11, "a": 0.5}` *(less smoothing — snappier clips)*
+
+---
+
+### 7. Play Clip ('T: 7')
+Play a bundled animation clip by id. By default the robot plays the clip once on
+its baked timeline, then auto-returns to the neutral standing pose over 500 ms
+and enters IDLE. With `loop: true` it replays from the start at each end instead
+of returning, until another motion command (gait / `T: 2` / a new clip) preempts
+it. Clip ids/names come from `clips_manifest.json` (generated with `clips_all.h`).
+| Key    | Type | Description | Range |
+| :----- | :--- | :---------- | :---- |
+| 'c'    | int  | Clip id (index into FH_CLIPS[]) | 0..N-1 |
+| 'loop' | bool | Replay continuously instead of playing once (optional) | default false |
+
+**Example:** `{"T": 7, "c": 0}` *(play clip 0 once; out-of-range ids are ignored)*
+**Example:** `{"T": 7, "c": 0, "loop": true}` *(loop clip 0 until preempted)*
 
 ---
 
