@@ -2,8 +2,6 @@
 
 **Last updated:** 2026-05-22
 
----
-
 ## Project state
 
 ### What works today
@@ -11,7 +9,7 @@
 - **Baked clips (`clips_all.h`):** Five joint-angle clips (lie-down/stand-up, one-leg lift, tiny wiggle, wave, wiggle) compiled into firmware. See `animation/exported_clips/clips_manifest.json`.
 - **Clip player (T:7):** `tickClip()` plays a clip one-shot, then auto-returns to neutral over 500 ms and transitions to `STATE_IDLE`.
 - **Gait engine:** Procedural WALK/TROT/CRAB gaits in `spinal_cord.cpp`, parameterized by direction and gait mode.
-- **API:** Commands T:1-T:7, T:10 fully spec'd - see [api.md](api.md). T:7 firmware works; mobile app has no clips UI yet.
+- **API:** Commands T:1-T:7, T:10 fully spec'd; see [api.md](api.md). T:7 firmware works; mobile app has no clips UI yet.
 - **Mobile app:** Gait control, leg calibration, invert-robot. No "Clips" screen.
 
 ### Main open threads
@@ -21,8 +19,6 @@
 3. **Runtime adaptability:** IMU correction, terrain adaptation, and clip mirroring designed; no implementation yet.
 4. **Servo numbering alignment:** Proposal in `animation/SERVO_ID_CONVENTION.md` needs firmware confirmation.
 
----
-
 ## Next-gen clip format: `.fhc` and foot-space animation
 
 The key architectural step is shifting from baked joint angles to foot positions + Bezier handles, unlocking runtime IK. The locked design lives in `doc/animation-pipeline/leg-coordinates.md`; the sections below summarize it.
@@ -30,7 +26,7 @@ The key architectural step is shifting from baked joint angles to foot positions
 ### Why foot-space matters
 
 - **Animator-friendly:** Define motion as "foot here," not joint angles.
-- **Portable:** The same clip works across servo calibrations - IK runs at runtime.
+- **Portable:** The same clip works across servo calibrations; IK runs at runtime.
 - **Composable:** Overlays with IMU corrections, terrain sensing, and clip mirroring without re-baking.
 - **Current limitation:** Recalibrating any servo invalidates all baked-angle clips.
 
@@ -66,8 +62,6 @@ Binary format structure is in `doc/animation-pipeline/leg-coordinates.md` §8. T
 - **All foot positions IK-reachable:** Exporter runs `ik_v2` on every keyframe and rejects clips with unreachable poses.
 - **Pole flips near full extension only:** Exporter checks joint limits to prevent servo strain.
 
----
-
 ## Runtime adaptability
 
 With foot-space clips and runtime IK, these features become possible at no extra compute cost.
@@ -91,8 +85,6 @@ Designed in `doc/animation-pipeline/leg-coordinates.md` §5 (`SHARED` layout wit
 
 Play a "wave right leg" clip mirrored to "wave left leg" by flipping the Y foot coordinate, halving the clip count. The exporter generates `mirror_mask = [bool; 4]` at export time; runtime applies the transform per frame. This is a clip property, not a separate firmware feature.
 
----
-
 ## Mobile app: clips UI (T:7 integration)
 
 T:7 (`CMD_PLAY_CLIP`) is fully implemented in firmware. The mobile app has no clips UI yet.
@@ -105,8 +97,6 @@ T:7 (`CMD_PLAY_CLIP`) is fully implemented in firmware. The mobile app has no cl
 - [ ] Show playback progress using the `pc` field from T:10 telemetry (`pc * 100%`). Auto-hide once clip finishes.
 
 Code location hints: gait control UI is in `code/remote-control-app/`; T:6 (invert-robot) is a good reference for the `STATE_ACTION` transition pattern.
-
----
 
 ## Servo numbering alignment
 
@@ -123,8 +113,6 @@ The proposed numbering (`servo_id = leg_idx * 3 + joint_idx`, FL->FR->BL->BR ord
 
 `servo_mapping.yaml` is the single point of agreement between Blender/Python and firmware. Keep it in sync.
 
----
-
 ## Gait authoring and config files
 
 **Status:** Designed in `doc/animation-pipeline/leg-coordinates.md` §7. Not yet implemented.
@@ -136,8 +124,6 @@ Gaits are currently hardcoded in `spinal_cord.cpp`. Proposed direction:
 
 This is a v2+ feature. Pursue only if authoring new gaits becomes a bottleneck.
 
----
-
 ## Known rough edges and quick wins
 
 ### No fixed tick rate
@@ -148,8 +134,6 @@ This is a v2+ feature. Pursue only if authoring new gaits becomes a bottleneck.
 
 **Effort:** ~2 hours. High value.
 
----
-
 ### Gait interruption: no graceful handoff
 
 **Issue:** When a clip pre-empts a gait, the gait stops mid-stride (leg may hang in the air).
@@ -157,8 +141,6 @@ This is a v2+ feature. Pursue only if authoring new gaits becomes a bottleneck.
 **Fix:** Before starting a clip, blend the current pose to nearest neutral stance over ~200 ms. In the `playClip(id)` handler, add a brief `STATE_BLENDING` phase that lerps to neutral, then enter `STATE_ACTION`.
 
 **Effort:** ~4 hours. Noticeable UX improvement.
-
----
 
 ### Servo numbering ambiguity
 
@@ -170,15 +152,11 @@ This is a v2+ feature. Pursue only if authoring new gaits becomes a bottleneck.
 
 **Effort:** ~2 hours + inspection time. Prevents silent servo-order bugs.
 
----
-
 ### No servo command rate limiter
 
 **Status:** Deliberately absent (YAGNI until hardware data exists). See `CONTEXT.md` §"Safety layers."
 
 If servo overheating or current spikes become an issue, add a slew-rate limiter in `setServoAngle()` (e.g., 180 deg in 200 ms max). Existing tests will catch violations.
-
----
 
 ## Suggested next steps
 
@@ -194,8 +172,6 @@ If servo overheating or current spikes become an issue, add a slew-rate limiter 
 | Polish | Gait interruption graceful blend | 4 hrs |
 | Polish | Battery voltage safety gate | 2 hrs |
 | Polish | Servo numbering cross-check with CAD | 2 hrs + inspection |
-
----
 
 ## Design documents as reference
 

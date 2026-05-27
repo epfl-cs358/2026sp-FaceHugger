@@ -4,7 +4,7 @@ This page explains how the simulator actually *drives* the robot: where the join
 
 ## The control model: firmware in the loop
 
-Every motion mode follows the same per-step loop at 240 Hz. The novel part is *where the target angles come from*: by default, **the exact firmware C++ computes them**, compiled to the host as a Python module (`fh_sim`) via pybind11 — software-in-the-loop (SIL).
+Every motion mode follows the same per-step loop at 240 Hz. The novel part is *where the target angles come from*: by default, **the exact firmware C++ computes them**, compiled to the host as a Python module (`fh_sim`) via pybind11. This is software-in-the-loop (SIL).
 
 ```mermaid
 flowchart LR
@@ -13,11 +13,11 @@ flowchart LR
     PB -->|stepSimulation| PB
 ```
 
-Each tick the bridge advances the firmware's clock, runs one `update()`, reads back the 12 servo angles the firmware computed (post-`translateToServo`, post-clamp — the same values the PCA9685 would receive), converts servo degrees to URDF joint radians using the **same per-leg convention the firmware uses** (see [Conventions](../conventions.md)), and commands each joint with `setJointMotorControl2(POSITION_CONTROL)` capped at the servo's effort (2.94 N·m) and velocity. Because the firmware itself is in the loop, a clip or gait that looks right in the sim issues byte-identical servo commands on the robot.
+Each tick the bridge advances the firmware's clock, runs one `update()`, reads back the 12 servo angles the firmware computed (post-`translateToServo`, post-clamp, the same values the PCA9685 would receive), converts servo degrees to URDF joint radians using the **same per-leg convention the firmware uses** (see [Conventions](../conventions.md)), and commands each joint with `setJointMotorControl2(POSITION_CONTROL)` capped at the servo's effort (2.94 N·m) and velocity. Because the firmware itself is in the loop, a clip or gait that looks right in the sim issues byte-identical servo commands on the robot.
 
 ### Default (firmware SIL) vs `--python`
 
-| | Default — firmware SIL | `--python` |
+| | Default (firmware SIL) | `--python` |
 |--|--|--|
 | Source of motion | the exact compiled firmware (`fh_sim`) | a Python re-port of the firmware (`firmware_port/`) |
 | Needs | CMake + C++17 + pybind11 (auto-builds) | nothing beyond PyBullet |
@@ -28,14 +28,14 @@ The `fh_sim` module **auto-rebuilds** whenever the firmware/HAL/binding sources 
 ## Stand, gaits, and clips
 
 - **Stand** (no mode flag): the robot holds the `NEUTRAL[]` pose. Quasi-static; the per-joint hold torque is small (peak ≈ 0.24 N·m, ~8 % of stall).
-- **Gaits** (`--walk` / `--trot`): the firmware's `tickGait` / `tickTrot` run continuously. The sim sets the gait once and **re-issues the move command every tick** so the firmware's 500 ms deadman never trips and the gait keeps running — literally the app's command stream at 240 Hz. The robot spawns at the neutral-stance body height (stable, since the gait oscillates around `NEUTRAL[]`).
-- **Clips** (`--clip NAME`): the firmware's clip player samples a baked, EMA-smoothed math-space frame timeline, converts, and writes. At the end it eases back to the (invert-aware) neutral. Clips are authored in Blender — see [Blender → robot clips](../animation/clip-panel.md).
+- **Gaits** (`--walk` / `--trot`): the firmware's `tickGait` / `tickTrot` run continuously. The sim sets the gait once and **re-issues the move command every tick** so the firmware's 500 ms deadman never trips and the gait keeps running, literally the app's command stream at 240 Hz. The robot spawns at the neutral-stance body height (stable, since the gait oscillates around `NEUTRAL[]`).
+- **Clips** (`--clip NAME`): the firmware's clip player samples a baked, EMA-smoothed math-space frame timeline, converts, and writes. At the end it eases back to the (invert-aware) neutral. Clips are authored in Blender, see [Blender → robot clips](../animation/clip-panel.md).
 
-`--float` pins the body weightless with no floor, so you see the pure joint geometry of a clip or gait without balance/collapse confounds — the best way to compare the sim's joint motion against the real robot.
+`--float` pins the body weightless with no floor, so you see the pure joint geometry of a clip or gait without balance/collapse confounds. It is the best way to compare the sim's joint motion against the real robot.
 
-## `serve` — drive the sim like the robot
+## `serve`: drive the sim like the robot
 
-`facehugger.py serve` exposes the [WebSocket robot API](../remote-control/websocket-api.md) (the `T:` protocol) on port **8081**, with the command dispatch handled by the **compiled firmware's own** `network.cpp::handleParsedMessage`. So any change to the firmware's API handling reflects automatically — there is no Python mirror to drift.
+`facehugger.py serve` exposes the [WebSocket robot API](../remote-control/websocket-api.md) (the `T:` protocol) on port **8081**, with the command dispatch handled by the **compiled firmware's own** `network.cpp::handleParsedMessage`. So any change to the firmware's API handling reflects automatically; there is no Python mirror to drift.
 
 ```bash
 python facehugger.py serve --host 0.0.0.0 --gui
@@ -43,11 +43,11 @@ python facehugger.py serve --host 0.0.0.0 --gui
 
 Two clients can drive it:
 
-- **`tools/robot_control_panel.html`** — a single-file, no-build panel. Set the target to `ws://localhost:8081`, then use one button per command (list/play clips, set gait, move, invert, calibrate). Direction buttons auto-repeat while held (to beat the deadman), and a sticky rail shows all-leg telemetry.
-- **The real mobile app** (`code/remote-control-app/MyApp`) — set `webSocketPort = 8081` and `webSocketIP` to the dev machine's LAN IP in `config/config.ts`, run `serve --host 0.0.0.0`, and the app drives the sim exactly as it drives the robot. Revert the port to `81` to target hardware again.
+- **`tools/robot_control_panel.html`**: a single-file, no-build panel. Set the target to `ws://localhost:8081`, then use one button per command (list/play clips, set gait, move, invert, calibrate). Direction buttons auto-repeat while held (to beat the deadman), and a sticky rail shows all-leg telemetry.
+- **The real mobile app** (`code/remote-control-app/MyApp`): set `webSocketPort = 8081` and `webSocketIP` to the dev machine's LAN IP in `config/config.ts`, run `serve --host 0.0.0.0`, and the app drives the sim exactly as it drives the robot. Revert the port to `81` to target hardware again.
 
 !!! note "The deadman is real"
-    A single move command stops after ~500 ms (the firmware deadman), and a gait does nothing until a gait is *also* selected. This is faithful firmware behaviour, not a sim quirk — the panel/app must re-issue a held direction, and you must set a gait (`T:5`) before moving.
+    A single move command stops after ~500 ms (the firmware deadman), and a gait does nothing until a gait is *also* selected. This is faithful firmware behaviour, not a sim quirk. The panel/app must re-issue a held direction, and you must set a gait (`T:5`) before moving.
 
 ### Live telemetry (SSE :8082)
 
@@ -60,10 +60,10 @@ PyBullet reports the torque the position controller applied at each joint (`getJ
 | Band | Range | Meaning |
 |------|-------|---------|
 | **green** | < ~0.98 N·m (continuous) | safe to hold continuously |
-| **amber** | continuous … stall | burst-only — fine for brief transients, not sustained |
-| **red** | ≥ 2.94 N·m (stall) | saturated — the motor can't supply more / can't track its target |
+| **amber** | continuous … stall | burst-only, fine for brief transients, not sustained |
+| **red** | ≥ 2.94 N·m (stall) | saturated; the motor can't supply more / can't track its target |
 
-The continuous reference is ≈ ⅓ of stall (a rule of thumb for hobby metal-gear servos — the DSS-230MG datasheet lists stall only). So **standing is solidly green**; brief fast-clip frames read amber (honest "burst"); and red is reserved for true saturation at the effort cap. If a fast clip latches red, the sim is telling you that motion genuinely demands more than the servo can deliver at that speed — slowing the clip (or capping joint velocity) is the fix, not a threshold tweak.
+The continuous reference is ≈ ⅓ of stall (a rule of thumb for hobby metal-gear servos; the DSS-230MG datasheet lists stall only). So **standing is solidly green**; brief fast-clip frames read amber (honest "burst"); and red is reserved for true saturation at the effort cap. If a fast clip latches red, the sim is telling you that motion genuinely demands more than the servo can deliver at that speed. Slowing the clip (or capping joint velocity) is the fix, not a threshold tweak.
 
 - `--monitor` prints a periodic line: per-leg angles, peak torque, total estimated current (`[WARN >10A]` over budget), and `[CONT]` / `[STALL]` joint lists.
 - `--log` additionally records every step and, on exit, writes `sim_log.csv` + a `sim_log.png` plot.

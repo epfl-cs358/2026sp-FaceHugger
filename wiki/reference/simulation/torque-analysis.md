@@ -22,7 +22,7 @@ The shoulder joint \( s_{L1} \) rotates on the **yaw** axis (vertical, parallel 
 
 ## Static torque: pitch axes
 
-Angles \( \theta_\text{hip} \) and \( \theta_\text{knee} \) are measured from horizontal; 0° is worst case (fully extended). The hip and knee angles are **independent** - an earlier formulation incorrectly shared a single angle, which is only valid for collinear links.
+Angles \( \theta_\text{hip} \) and \( \theta_\text{knee} \) are measured from horizontal; 0° is worst case (fully extended). The hip and knee angles are **independent**. An earlier formulation incorrectly shared a single angle, which is only valid for collinear links.
 
 ### Knee motor \( s_{L3} \)
 

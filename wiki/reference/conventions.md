@@ -2,8 +2,6 @@
 
 Single reference for FaceHugger's coordinate systems, angle spaces, leg naming, and servo numbering. Authoritative for animation pipeline, firmware, and simulation work.
 
----
-
 ## Body Coordinate Frame
 
 The body frame origin is the geometric center of the chassis (`base_link` in URDF), anchored to a named construction point in Fusion 360. The axes follow the Fusion 360 / Blender Z-up convention: **+X** points right, **+Y** points forward, **+Z** points up. Units are metres in simulation and millimetres in Blender scene and clip storage.
@@ -25,8 +23,6 @@ This frame governs URDF joint placement and Blender rig alignment. It is an auth
     body center (base_link origin)
 ```
 
----
-
 ## Leg Naming and IDs
 
 Naming is context-dependent. Use `fl/fr/bl/br` everywhere except inside firmware. The firmware boundary translates to `FR/FL/RR/RL` internally. Never propagate firmware leg names into Python or Blender code; translation happens only at the boundary (e.g., `spinal_cord.cpp` `NEUTRAL[]` array indexing).
@@ -39,8 +35,6 @@ Naming is context-dependent. Use `fl/fr/bl/br` everywhere except inside firmware
 | Back-right  | `br` | `LEG_RR` = 2 | `rr` (rear-right) |
 
 Each leg has three joints, in order: **shoulder** (`_link1_joint`, yaw about Z, connects body to leg), **thigh** (`_link2_joint`, pitch about Y, upper leg), and **knee** (`_link3_joint`, pitch about Y, lower leg). Firmware servo arrays index them as `[shoulder=0, thigh=1, knee=2]` per leg.
-
----
 
 ## Angle Spaces
 
@@ -74,10 +68,10 @@ This is the default standing posture, defined in math-space and indexed by firmw
 | 2 | RR/BR | back-right | -45 | -50 | -50 | leg splayed right-back, knee bent |
 | 3 | RL/BL | back-left | -135 | -60 | -35 | leg splayed left-back, knee bent |
 
-Each leg's NEUTRAL shoulder equals that leg's **outward (flat-spread) direction** on the yaw circle: **FR +45°, FL +135°, BR −45°, BL −135°**. Since change B regularized FL (75° → 135°), *servo 90 now means "outward" for all four legs* — every leg's standing shoulder math-angle maps to servo 90, and the all-servos-90 pose is the symmetric outward "X" (the flat calibration pose). The thigh/knee values are per-leg physical-calibration choices, tuned on hardware.
+Each leg's NEUTRAL shoulder equals that leg's **outward (flat-spread) direction** on the yaw circle: **FR +45°, FL +135°, BR −45°, BL −135°**. Since change B regularized FL (75° → 135°), *servo 90 now means "outward" for all four legs*. Every leg's standing shoulder math-angle maps to servo 90, and the all-servos-90 pose is the symmetric outward "X" (the flat calibration pose). The thigh/knee values are per-leg physical-calibration choices, tuned on hardware.
 
 !!! warning "Change B hardware step pending"
-    FL's 75° → 135° move is committed in code, but its **hardware step — re-mounting the FL shoulder horn so servo 90 points outward — is not yet done**, and the FL clips have not been re-exported. Until both happen, the *running* robot still expects the old servo-75 FL standing pose, so the symmetric "X" holds in code only. FR/BR/BL are unaffected.
+    FL's 75° → 135° move is committed in code, but its **hardware step (re-mounting the FL shoulder horn so servo 90 points outward) is not yet done**, and the FL clips have not been re-exported. Until both happen, the *running* robot still expects the old servo-75 FL standing pose, so the symmetric "X" holds in code only. FR/BR/BL are unaffected.
 
 Leg positions at NEUTRAL (top view, front at top):
 
@@ -88,8 +82,6 @@ Leg positions at NEUTRAL (top view, front at top):
         /               \\
    -135 deg (BL)      -45 deg (BR)
 ```
-
----
 
 ## The Math-to-Servo Transform: `translateToServo()`
 
@@ -107,7 +99,7 @@ Output: servo-space angles for hip, thigh, and knee servos.
 | RR/BR (LegId=2) | `90 + (sh + 45)` | `90 + th` | `90 - kn` |
 | RL/BL (LegId=3) | `90 + (sh + 135)` | `90 - th` | `90 + kn` |
 
-The shoulder offsets (−45, −135, +45, +135) just *centre* each leg's outward direction on servo 90 — note all four are `90 + (sh ± offset)` with a **+1 slope**: a positive `sh` (CCW yaw) drives every shoulder servo up. (FL's historic `hip = sh` special case is gone — change B; and BR's old `90 − (sh + 45)` mirror was removed when its shoulder was un-mirrored, 2026-05-25, since all four shoulder shafts share one vertical axis.) The **thigh/knee** signs, by contrast, *do* mirror on the {FL,BR} ↔ {FR,BL} diagonal because those servo horns face opposite ways:
+The shoulder offsets (−45, −135, +45, +135) just *centre* each leg's outward direction on servo 90. All four are `90 + (sh ± offset)` with a **+1 slope**: a positive `sh` (CCW yaw) drives every shoulder servo up. FL's historic `hip = sh` special case is gone (change B), and BR's old `90 − (sh + 45)` mirror was removed when its shoulder was un-mirrored, 2026-05-25, since all four shoulder shafts share one vertical axis. The **thigh/knee** signs, by contrast, *do* mirror on the {FL,BR} ↔ {FR,BL} diagonal because those servo horns face opposite ways:
 
 | leg | shoulder | thigh | knee |
 |-----|:--------:|:-----:|:----:|
@@ -121,8 +113,6 @@ All transformations are deterministic and invertible.
 Example (FR at NEUTRAL): math `sh=45, th=-60, kn=-37` -> servo `hip=90+(45-45)=90, thigh=90-(-60)=150, knee=90+(-37)=53`.
 Example (FL at NEUTRAL, post-B): math `sh=135, th=-60, kn=-40` -> servo `hip=90+(135-135)=90, thigh=90+(-60)=30, knee=90-(-40)=130`.
 
----
-
 ## Joint Axes and URDF Conventions
 
 Joint origins are placed at the physical rotation axis (servo shaft), following ROS convention.
@@ -130,8 +120,6 @@ Joint origins are placed at the physical rotation axis (servo shaft), following 
 The **shoulder (yaw) joint** uses `+Z` (vertical up) as its axis uniformly across all four legs (Convention A). At rest (theta=0 in URDF), each leg's shoulder points in its mechanical zero direction. Positive rotation is CCW viewed from above (right-hand rule along +Z).
 
 The **thigh and knee (pitch) joints** use an axis along the leg's longitudinal direction at rest. L-side legs (FL, BL) use `+Y` in the body frame; R-side legs (FR, BR) use `-Y` (mirrored mounting). This axis flip means the same positive theta lifts the foot toward the chassis on every leg. URDF limits are expressed as signed bounds in radians relative to rest; R-side limits are negated and swapped to account for the axis flip.
-
----
 
 ## Servo Channels and Hardware
 
@@ -150,8 +138,6 @@ LEG_SERVO_CHANNEL[4][3] = {
 
 A proposed servo ID scheme (`animation/SERVO_ID_CONVENTION.md`) uses `servo_id = leg_idx * 3 + joint_idx` with legs in alphabetical order (`fl:0, fr:1, bl:2, br:3`). **STATUS: PROPOSAL** pending firmware sign-off. Until `SERVO_CONFIG[]` is finalized, the channel table above is authoritative, and the animation exporter's `servo_mapping.yaml` must match it exactly.
 
----
-
 ## SCALE Factor
 
 The SCALE factor (2/3 = 0.6667) is applied to clip amplitudes at bake time in the Blender exporter when `clips_all.h` is generated. Firmware never re-scales clip data; the scale is already baked into stored keyframe values.
@@ -162,15 +148,11 @@ scaled_value = NEUTRAL + (raw_value - NEUTRAL) * SCALE
 
 SCALE applies to clips only. Gait engine parameters (`step_length_deg`, `step_height_deg`, offsets) are firmware-side live parameters and are unaffected. The purpose is to preserve hardware headroom (avoid torque spikes) and produce natural movement on the leg mechanism.
 
----
-
 ## Clip and Gait Terminology
 
 A **clip** is a canned, one-shot authored gesture (e.g., "wiggle", "bow", "jump"). It runs once on its own timeline via `tickClip()` on `STATE_ACTION`, then returns to NEUTRAL over 500 ms before transitioning to `STATE_IDLE`. Clips are stored in `clips_all.h` as flat arrays of 12 pre-scaled math-space angles per frame, generated by the Blender exporter. Do not call clips "actions" (overloaded with FSM terminology) or "animations" (ambiguous).
 
 A **gait** is a looping locomotion pattern (walk, trot, crab, crawl). It runs continuously via `tickGait()` on `STATE_WALK` and is parameterized by step_length, step_height, period, duty cycle, and phase offsets. Gaits are firmware-driven live engines in `spinal_cord.cpp`, not pre-baked data.
-
----
 
 ## When Conventions Change
 
@@ -183,14 +165,12 @@ The following coordinate contracts invalidate all stored clips if changed:
 
 When any of these must change, regenerate `clips_all.h` from source `.blend` files with the updated URDF, then rebuild and reflash firmware. Changes that are safe without re-baking include visual mesh origins, collision geometry, inertial values, and joint limits (old clips within the old range remain reachable).
 
----
-
 ## Related Documents
 
-- `code/firmware/src/nervous_system/motion_math.cpp` - `translateToServo()` source
-- `code/firmware/src/nervous_system/spinal_cord.cpp` - `NEUTRAL[]` array
-- `code/firmware/src/shared/config.h` - PCA9685 channel assignments and pulse range
-- `code/simulation/docs/MERGE_AND_CONVENTION.md` - Convention A rationale and per-leg shoulder derivation
-- `doc/animation-pipeline/urdf-conventions.md` - joint origins, axis vectors, axis flip rationale
-- `animation/SERVO_ID_CONVENTION.md` - servo ID proposal
-- `code/API_SPEC.md` - WebSocket protocol (gait selection, clip playback, body pose)
+- `code/firmware/src/nervous_system/motion_math.cpp`: `translateToServo()` source
+- `code/firmware/src/nervous_system/spinal_cord.cpp`: `NEUTRAL[]` array
+- `code/firmware/src/shared/config.h`: PCA9685 channel assignments and pulse range
+- `code/simulation/docs/MERGE_AND_CONVENTION.md`: Convention A rationale and per-leg shoulder derivation
+- `doc/animation-pipeline/urdf-conventions.md`: joint origins, axis vectors, axis flip rationale
+- `animation/SERVO_ID_CONVENTION.md`: servo ID proposal
+- `code/API_SPEC.md`: WebSocket protocol (gait selection, clip playback, body pose)

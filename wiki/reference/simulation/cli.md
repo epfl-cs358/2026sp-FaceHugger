@@ -19,9 +19,9 @@ python facehugger.py <subcommand> [options]
 | `serve`  | Run the firmware-backed WebSocket robot API (drive from the app / control panel) |
 | `all`    | `urdf` → `sim` in one go (smoke run) |
 
-## `urdf` — regenerate the URDF
+## `urdf`: regenerate the URDF
 
-Rebuilds `generated/facehugger.urdf` from `generated/fusion_export.json` (the CAD tree + mesh manifest) and `facehugger_config.yaml`. Everything downstream — the sim, the Blender rig, the IK reference cases — is derived from this URDF, so regenerate it whenever the CAD export or the config changes.
+Rebuilds `generated/facehugger.urdf` from `generated/fusion_export.json` (the CAD tree + mesh manifest) and `facehugger_config.yaml`. Everything downstream (the sim, the Blender rig, the IK reference cases) is derived from this URDF, so regenerate it whenever the CAD export or the config changes.
 
 | Flag | Meaning |
 |------|---------|
@@ -33,7 +33,7 @@ Rebuilds `generated/facehugger.urdf` from `generated/fusion_export.json` (the CA
 python facehugger.py urdf
 ```
 
-## `sim` — run the simulator
+## `sim`: run the simulator
 
 With no mode flag, the robot just stands. Add one mode and any number of instrumentation flags. **By default, clips and gaits are driven by the exact compiled firmware** (see [Controlling the simulation](pybullet-control.md)); `--python` switches to the Python re-port.
 
@@ -42,11 +42,11 @@ With no mode flag, the robot just stands. Add one mode and any number of instrum
 | `--walk` / `--trot` | run that gait (the exact firmware `tickGait`/`tickTrot`) |
 | `--clip NAME` | play a baked animation clip by name (from `clips_all.h`) |
 | `--loop` | replay the clip continuously (GUI only) to watch cumulative behaviour |
-| `--float` | no gravity/floor, body pinned — inspect pure joint geometry without falling/slipping |
+| `--float` | no gravity/floor, body pinned; inspect pure joint geometry without falling/slipping |
 | `--monitor` | print a periodic torque + estimated-current status line (peak τ, total A, `[CONT]`/`[STALL]` joints) |
 | `--log` | record per-step torque/current → summary + `sim_log.csv` + `sim_log.png` (additive to `--monitor`) |
 | `--python` | drive clips **and** gaits with the Python re-port instead of the firmware (no C++ toolchain needed) |
-| `--headless` | no GUI window — CI smoke check |
+| `--headless` | no GUI window; CI smoke check |
 | `--settle SECONDS` | hold the stance this long before the main loop (lets gravity resolve initial overlap) |
 
 ```bash
@@ -57,9 +57,9 @@ python facehugger.py sim --trot --float        # joint geometry only, no balance
 python facehugger.py sim --clip "wave" --headless --log   # CI + torque capture
 ```
 
-## `blender` — open the URDF in Blender
+## `blender`: open the URDF in Blender
 
-Two modes: a **placement-only** scene (the default, via `visualize_urdf.py`) for cross-checking the URDF rest pose against PyBullet, and a **rigged** scene (`--rigged`) with a posable armature, IK, and foot-target Empties for animation. Requires Blender 5.0+.
+Two modes are available. A **placement-only** scene (the default, via `visualize_urdf.py`) cross-checks the URDF rest pose against PyBullet, and a **rigged** scene (`--rigged`) gives a posable armature, IK, and foot-target Empties for animation. Requires Blender 5.0+.
 
 | Flag | Meaning |
 |------|---------|
@@ -77,7 +77,7 @@ python facehugger.py blender --headless --save /tmp/scene.blend
 
 See [URDF → Blender rig](../animation/blender-rig.md) for what the rig is and how it is built.
 
-## `serve` — firmware-backed WebSocket API
+## `serve`: firmware-backed WebSocket API
 
 Runs the [WebSocket robot API](../remote-control/websocket-api.md) on a PyBullet robot, with the command dispatch handled by the **compiled firmware itself**. The mobile app or `tools/robot_control_panel.html` can then drive the sim exactly as they drive the real robot.
 
@@ -92,9 +92,9 @@ python facehugger.py serve --gui                       # ws://localhost:8081
 python facehugger.py serve --host 0.0.0.0 --gui        # reachable from a phone
 ```
 
-It also streams a live per-joint telemetry frame over Server-Sent Events on **:8082** — see [Controlling the simulation](pybullet-control.md#serve-drive-the-sim-like-the-robot).
+It also streams a live per-joint telemetry frame over Server-Sent Events on **:8082**. See [Controlling the simulation](pybullet-control.md#serve-drive-the-sim-like-the-robot).
 
-## `all` — urdf → sim
+## `all`: urdf → sim
 
 Convenience: regenerate the URDF then immediately run the sim, sharing the `sim` flags above. Useful as a one-shot smoke check after a CAD or config change.
 

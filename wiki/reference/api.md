@@ -39,7 +39,7 @@ Once the connection is open, the robot begins sending `T:10` telemetry every ~50
 
 All commands carry a `T` field identifying the message type. The robot silently ignores unknown types.
 
-### T:1 - CMD_MOVE (Manual Movement)
+### T:1 CMD_MOVE (Manual Movement)
 
 Payload: `{"T": 1, "dir": "<direction_string>"}`
 
@@ -59,7 +59,7 @@ The field is `dir` (string), not `d` (integer). The `api-types.tsx` `DirectionVe
 
 The direction string is consumed by the gait engine while the robot is in `STATE_WALK`, using whichever gait was selected by `T:5`. Directions sent outside `STATE_WALK` are ignored. Sending `"STOP"`, or not sending any `T:1` for more than 500 ms, triggers an automatic revert to `STATE_IDLE`. The next `T:10` includes an updated `pc` field (movement progress, 0.0-1.0).
 
-### T:2 - CMD_FSM_STATE (Finite State Machine Transition)
+### T:2 CMD_FSM_STATE (Finite State Machine Transition)
 
 Payload: `{"T": 2, "s": <state_id>}`
 
@@ -72,7 +72,7 @@ Payload: `{"T": 2, "s": <state_id>}`
 
 `IDLE` is the default safe state. `WALK` activates the gait engine; direction vectors via `T:1` then control movement. `ACTION` is required before clip playback or invert maneuvers. The next `T:10` includes an updated `s` field.
 
-### T:3 - CMD_POSE (Body Pose / Static IK)
+### T:3 CMD_POSE (Body Pose / Static IK)
 
 Payload: `{"T": 3, "h": <height_mm>, "p": <pitch_deg>, "r": <roll_deg>}`
 
@@ -84,7 +84,7 @@ Payload: `{"T": 3, "h": <height_mm>, "p": <pitch_deg>, "r": <roll_deg>}`
 
 This command adjusts chassis orientation while all feet stay planted. It runs only in `STATE_ACTION`. The robot holds the new pose until a subsequent command arrives. The next `T:10` includes an error if the requested pose is out of reach.
 
-### T:4 - CMD_CALIBRATE (Servo Calibration)
+### T:4 CMD_CALIBRATE (Servo Calibration)
 
 Payload: `{"T": 4, "id": <leg_id>, "servo_id": <servo_id>, "a": <angle_0_180>}`
 
@@ -115,7 +115,7 @@ Example: `{"T": 4, "id": 2, "servo_id": 2, "a": 90}` moves the back-right knee t
 
 This command directly drives a single servo to a specific angle via PCA9685, bypassing IK and the gait engine. It is accepted in any FSM state but is typically used in `STATE_IDLE` or `STATE_ACTION`. The servo holds the commanded angle until a new command arrives. The next `T:10` includes an error if the angle is out of bounds.
 
-### T:5 - CMD_GAIT_MODE (Gait Selection)
+### T:5 CMD_GAIT_MODE (Gait Selection)
 
 Payload: `{"T": 5, "g": <gait_id>}`
 
@@ -132,7 +132,7 @@ The frontend app exposes only TROT (g=2) and CRAB (g=3) as user-facing options.
 
 Selecting a gait does not start walking; the robot must be transitioned to `STATE_WALK` with `T:2` to activate the gait engine. Gait changes can be sent mid-walk without stopping. The next `T:10` includes an updated `g` field.
 
-### T:6 - CMD_ACTION_SELECTION (Invert Robot / Wall Flip)
+### T:6 CMD_ACTION_SELECTION (Invert Robot / Wall Flip)
 
 Payload: `{"T": 6, "a": <action_id>}`
 
@@ -142,7 +142,7 @@ Payload: `{"T": 6, "a": <action_id>}`
 
 This command triggers a specialized authored maneuver and runs only in `STATE_ACTION`. After the maneuver completes, the robot returns to `STATE_IDLE`. Note that `T:6` is a high-level action selector (maneuver), not the clip player. Clips are played via `T:7`.
 
-### T:7 - CMD_PLAY_CLIP (Play Animation Clip)
+### T:7 CMD_PLAY_CLIP (Play Animation Clip)
 
 Payload: `{"T": 7, "c": <clip_id>}`
 
@@ -166,7 +166,7 @@ This command plays a one-shot authored animation clip and runs only in `STATE_AC
 
 ## Telemetry (Robot to Client)
 
-### T:10 - System Status
+### T:10 System Status
 
 The robot emits a `T:10` packet every ~500 ms as a heartbeat and connection keep-alive.
 

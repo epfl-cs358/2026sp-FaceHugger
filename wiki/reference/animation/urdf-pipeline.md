@@ -1,142 +1,52 @@
-# URDF pipeline
+# 3D model to URDF
 
-`facehugger.urdf` is the kinematic source of truth. It is generated, not
-hand-authored; every downstream consumer (PyBullet, the Blender rig builder,
-the firmware IK generator) is expected to agree with it.
+This is the first stage of the pipeline: a Fusion 360 assembly becomes a single `facehugger.urdf` that PyBullet and Blender both consume. It is a two-program pipeline joined by one JSON intermediate, plus a small declarative config. The URDF is the kinematic source of truth, and everything downstream (the sim, the Blender rig, the IK reference cases) is derived from it.
 
-## Fusion 360 export
-
-The `ExportBodiesToURDF` Fusion add-in produces two artefacts:
-
-- `code/simulation/generated/fusion_export.json` - the structured export:
-  occurrence tree with world transforms, a `joints[]` array of normalized
-  revolute-joint data (axis direction, axis origin, limits), and a
-  `mesh_files` manifest that records per-mesh `origin_shift_mm` landmarks.
-- `code/simulation/generated/exported_meshes/*.stl` - eight re-origined STLs.
-
-The `EXPORT_RULES` list inside the add-in controls which Fusion bodies are
-exported and under which filenames. Edits to the chassis "combined parts"
-belong here, not downstream.
-
-### Mesh re-origining
-
-Rather than computing per-visual `<origin xyz>` offsets in the URDF, the
-exporter pre-shifts every STL's vertices so that mesh-local `(0, 0, 0)`
-coincides with a meaningful CAD construction point, typically the joint
-pivot that attaches the next link. The URDF generator can therefore emit
-identity origins on every visual:
-
-```xml
-<visual>
-  <origin xyz="0 0 0" rpy="0 0 0"/>
-  <geometry><mesh filename="exported_meshes/leg_upper.stl"/></geometry>
-</visual>
+```mermaid
+flowchart TD
+    CAD["Fusion 360 assembly"] -->|ExportBodiesToURDF add-in| J["fusion_export.json<br/>(occurrence tree + joints[] + mesh manifest)"]
+    CAD -->|re-origined STLs| M["generated/exported_meshes/*.stl"]
+    J --> G["generate_urdf.py"]
+    CFG["facehugger_config.yaml"] --> G
+    M --> G
+    G --> U["generated/facehugger.urdf"]
 ```
 
-The construction point used for each mesh is recorded as `origin_shift_mm` in
-`fusion_export.json`'s `mesh_files` array. The same construction point serves
-a dual role: it is the mesh placement anchor and the joint origin that the URDF
-generator reads for the corresponding `<joint><origin xyz>`.
+## Who owns what
 
-### Leg-assembly normalization
+**The Fusion add-in** (`cad/scripts/ExportBodiesToURDF/`) owns everything that needs the live CAD model. It runs inside Fusion and writes three artifacts to `code/simulation/generated/`:
 
-`FaceHuggerLegAssembly:1` is placed in Fusion with a 90-degree Z rotation,
-so joint axis directions and origins that Fusion reports in the owner
-component's local frame are 90 degrees off from world. The exporter's
-`collect_joints()` function absorbs this rotation (`R_la`) before writing to
-JSON, so the values in `fusion_export.json` are already in world-aligned
-coordinates. `generate_urdf.py` uses them verbatim.
+- `fusion_export.json`: the complete, unpruned occurrence tree (every screw, PCB, servo) plus four name-driven whitelists (the mesh manifest, construction points, construction axes, and a `joints[]` array with each revolute joint's axis, origin, and limits). The tree is kept complete on purpose so downstream tools can resolve any occurrence path for a world transform; pruning it would break path resolution.
+- `fusion_export.txt`: a human-readable version for sanity checking.
+- `exported_meshes/*.stl`: the meshes, selected by an `EXPORT_RULES` whitelist.
 
-## generate_urdf.py and facehugger_config.yaml
+Crucially, the add-in owns which CAD bodies become which STL (`EXPORT_RULES`), the re-origin geometry (moving each mesh's local origin onto its URDF joint landmark), and the joint axis/origin/limit capture. Mesh visibility in Fusion has no effect; capture is entirely whitelist-driven.
 
-`generate_urdf.py` reads `fusion_export.json` together with
-`facehugger_config.yaml` (per-leg placement: `mount_point`, `side` L/R,
-`rpy_z_deg`, and shoulder limits override) and writes
-`code/simulation/generated/facehugger.urdf`.
+**`generate_urdf.py`** (`code/simulation/urdf_gen/`) owns the kinematic assembly. It reads the JSON and the config and emits the URDF XML: the CAD-name to URDF-name joint topology, the per-leg world placement, the Convention A shoulder-rest derivation, the right-side axis and limit flips, and the inertial-origin correction. It contains zero hardcoded coordinates; all geometry comes from the JSON.
 
-Run it via the entry point:
+**`facehugger_config.yaml`** owns only what the CAD genuinely does not know: robot and mesh names, the four leg instances (id, mount point, and L/R side for diagonal mesh sharing), and servo physical fallbacks (`mass_kg`, `effort_nm`, `velocity_rad_s`). After Convention A landed, the per-leg yaw, shoulder limits, and shoulder neutral were removed from the config because they are now derived.
 
-```bash
-python facehugger.py urdf
-```
+## The key transforms (and why they exist)
 
-The URDF is regenerated in roughly one second. The generator preserves any
-user edits to `mesh_files._servo_role_assignment` in the JSON across reruns.
+- **Leg-assembly normalization.** The leg assembly is placed in CAD with a non-identity world rotation (around 90 degrees about Z). The add-in extracts that rotation and pre-applies it to each leg-internal joint's axis and origin so the JSON lands in a world-aligned frame.
+- **STL re-origin.** Each mesh is exported with its vertices in the occurrence's world frame, then the joint-landmark world position is subtracted so the mesh's local origin sits exactly on its URDF joint (`BodyToLink1Point`, `Link1ToLink2Point`, and so on). The amount subtracted is recorded as `origin_shift_mm` in the manifest. This is why the URDF emits `<origin xyz="0 0 0"/>` on every visual: the geometry is already placed.
+- **Inertial CoM correction.** Because the visual origin is zeroed but Fusion reported the center of mass in the pre-shift frame, `generate_urdf` subtracts the same `origin_shift_mm` from the CoM so the inertial frame still tracks the geometry. A small placeholder mass and inertia are used when Fusion physics are missing.
+- **Convention A shoulder rest.** Joint zero equals the Fusion mechanical rest. The FL shoulder rest defines zero; FR/BL/BR rests are derived by mirror and rotate, and right-side legs get their axis negated and limits negate-swapped so that the same joint angle produces the same physical motion on every leg. See [Conventions](../conventions.md) for the math-space and per-leg servo mapping that this feeds.
 
-## Joint zero and limits
+## Non-obvious decisions worth knowing
 
-Joint angle theta=0 corresponds to the Fusion rest pose, the configuration
-the joint is in when the CAD assembly is at its definition state. Limits are
-read from the Fusion revolute joint definitions via `collect_joints()` and
-written into each `<limit lower="..." upper="..."/>` element.
+- **The URDF is the source of truth, and everything is derived from it.** PyBullet, the Blender rig, and the IK reference cases are all expected to agree with the URDF, not the other way around. `generate_urdf` even bakes a machine-parseable leg-metadata comment into the URDF so the simulator need not re-open the JSON.
+- **The mirror plane is the leg-assembly XZ plane.** The right-side link and mount bodies are XZ mirrors of the left, and `BodyToLink1Point` lies on the plane (Y = 0), so the re-origin math is identical for both sides.
+- **Two distinct "flips" must not be confused.** The geometric back-of-pair flip (0 or 180 degrees, derived from leg id, which positions meshes) is separate from the kinematic shoulder rest (Convention A, which goes into the joint origin rpy).
+- **Re-exports preserve the servo-role assignment.** The manifest block recording which servo occurrence is shoulder, hip, or knee is read from the prior JSON and carried forward, with stale paths repaired after a CAD rename.
 
-For the shoulder joint, Convention A applies: `generate_urdf.py`'s
-`_shoulder_rest_for` function derives each leg's shoulder `<origin rpy>` yaw
-from `fl_rest_rad = -pi/4` (-45 degrees), so that `theta_shoulder = 0` always
-means the leg is at its mechanical zero. The derivation is:
+## Gotchas for a builder or extender
 
-- FL: `fl_rest_rad`
-- FR: `-fl_rest_rad`
-- BL: `wrap_pi(fl_rest_rad + pi)`
-- BR: `-wrap_pi(fl_rest_rad + pi)`
+1. **Never hand-edit anything in `generated/`** (`facehugger.urdf`, `fusion_export.json`, the STLs). They are all regenerated.
+2. **`EXPORT_RULES` and the whitelists live in the add-in, not downstream.** To change which bodies make up the chassis or a link, edit `EXPORT_RULES` (and the point/joint whitelists) in the add-in, then re-export. `generate_urdf` only reads the resulting manifest.
+3. **The CoM frame trap.** Fusion reports a center of mass in the immediate parent frame, not the occurrence's own frame, so it must be lifted with the parent-to-world transform or it double-transforms.
+4. **The foot tip is currently inferred** from the max +Y vertex cluster of `leg_lower.stl` until a real foot-tip construction point exists in CAD.
+5. **Servo numbering is still a proposal.** `servo_mapping.yaml` is pending firmware `SERVO_CONFIG[]` confirmation; flag the gap before baking clips.
+6. **Leg naming.** URDF and Python use `fl/fr/bl/br`. Do not propagate the firmware's `fr/fl/rr/rl` names here.
 
-Do not add per-leg rest values to `facehugger_config.yaml`; the per-leg
-derivation from FL is the intended pattern.
-
-## Mirror plane and diagonal pairs
-
-Only one leg is modelled in CAD (the FL leg). The four placements are reached
-via two symmetries.
-
-**Mirror plane for R mesh.** `Link1R` and `MotorMountR` are mirrored through
-the XZ plane of the `FaceHuggerLegAssembly` origin. `BodyToLink1Point` lies
-on this plane (Y=0 in assembly-local coordinates), so re-origining R-side
-vertices to that point works cleanly without an additional offset.
-
-**Diagonal pairs.**
-
-| Leg | Mesh side | rpy_z_deg |
-|-----|-----------|-----------|
-| FL  | L         | 0         |
-| BR  | L         | 180       |
-| FR  | R         | 0         |
-| BL  | R         | 180       |
-
-FL and BR share the L mesh; FR and BL share the R mesh. The 180-degree
-back-of-pair rotation is encoded as `shoulder_joint.rpy = (0, 0, pi)` at the
-mount point; the kinematic chain propagates it through all child links
-automatically.
-
-Link2 and Link3 are shared across all four legs. For the R pair, `generate_urdf.py`'s
-`link_mesh_rpy` dict applies `mesh_rpy = (0, pi, 0)` on link2 and link3 so
-that the shared mesh extends in the correct chassis-outward direction. The
-inertial CoM rotates with the mesh.
-
-**R-pair joint axis and limit corrections.** Mirroring the bracket flips the
-chirality of the hip and knee servo mounting. Without correction, the same
-joint angle would produce opposite physical motion on L-side and R-side legs.
-`generate_urdf.py` restores uniform semantics for every R-side hip and knee
-joint:
-
-```python
-if side == "R":
-    axis_dir = [-a for a in axis_dir]
-    lim_lo, lim_hi = -lim_hi, -lim_lo
-```
-
-After this correction, positive theta lifts the foot on every leg regardless
-of side. See [`../conventions.md`](../conventions.md) for the full
-angle-space canon and `translateToServo` mapping.
-
-## File summary
-
-| File | Role |
-|------|------|
-| `cad/scripts/ExportBodiesToURDF/` | Fusion add-in: `EXPORT_RULES`, `collect_joints`, `R_la` normalization, JSON+STL output |
-| `code/simulation/generated/fusion_export.json` | Structured export - authoritative for downstream tools |
-| `code/simulation/generated/exported_meshes/*.stl` | Eight re-origined meshes |
-| `code/simulation/facehugger_config.yaml` | Per-leg placement: mount point, side, rpy_z_deg, shoulder limits override |
-| `code/simulation/generate_urdf.py` | Reads JSON + yaml, writes URDF; all per-leg math lives here |
-| `code/simulation/generated/facehugger.urdf` | Generated kinematic source of truth |
-| `code/simulation/simulate.py` | PyBullet sim with stance/IK/gait |
-| `code/simulation/docs/PIPELINE_SPEC.md` | CAD-side decisions and conventions |
+For the CAD-side authoring steps see the [Fusion export how-to](../../guide/toolchain/fusion-export.md). The next stages are [URDF to Blender rig](blender-rig.md) and [Blender to robot clips](clip-panel.md).

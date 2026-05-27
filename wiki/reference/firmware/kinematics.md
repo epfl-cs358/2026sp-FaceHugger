@@ -1,6 +1,6 @@
 # Kinematics
 
-!!! todo "Stub - to be written"
+!!! todo "Stub, to be written"
     Full kinematics reference. Adapt from `_context/sim-pipeline.md` and
     `_context/merge-and-convention.md`. Keep firmware C++ and sim Python in
     lockstep (URDF-derived geometry is the source of truth).

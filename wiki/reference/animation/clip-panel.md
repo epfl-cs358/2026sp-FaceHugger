@@ -1,86 +1,87 @@
-# Blender clip panel (FH Clip Panel)
+# Blender animation to robot: the clip panel and export pipeline
 
-The **FH Clip Panel** add-on (Blender 5.x) is the animator-facing tool for authoring and exporting FaceHugger Clips, the one-shot canned gestures played once via `CMD_PLAY_CLIP`. It adds a "FaceHugger" tab to the 3D viewport sidebar (press `N`) and manages clip bundles, pose snapshots, selection presets, and exports to multiple formats. The add-on lives in `animation/scripts/fh_clip_panel.py` and targets the rigged scene at `animation/fh_rigged_latest.blend`.
+This is the last stage of the pipeline: an animator keyframes a gesture on the Blender rig, and it ends up as a clip the robot can replay on its own. The **FH Clip Panel** add-on (`animation/addons/fh_clip_panel.py`, Blender 5.x) is the tool that authors those gestures and, crucially, does the math-to-servo conversion on the host at export time. The robot only ever replays baked frames; it never re-runs the conversion.
 
-For a step-by-step authoring walkthrough see [Blender clips how-to](../../guide/toolchain/blender-clips.md). The Phase-2 on-board clip player design is covered in the [roadmap](../roadmap.md).
+If you are extending this, the one idea to hold onto is the responsibility split:
 
----
+- **The plugin is the authoring and conversion brain.** It stores clips, reads the IK-solved rig pose, and converts to servo angles.
+- **The export artifacts are inert pre-computed data.** A `.js` for browser/app preview, a `.h` for reference, and the bundled `clips_all.h` for the on-board player.
+- **The firmware just replays.** `clipPoseAt` (`motion_math.cpp`) linearly interpolates the stored 12-angle frames between keyframes. It applies no clip-specific scaling or per-leg conversion at playback.
 
-## Prerequisites
+For a step-by-step authoring walkthrough see the [Blender clips how-to](../../guide/toolchain/blender-clips.md). The on-board player design is in the [roadmap](../roadmap.md), and the angle spaces it all rests on are in [Conventions](../conventions.md).
 
-Blender 5.0 or later is required (not 3.3 LTS) because the add-on uses the layered Action API introduced in Blender 4.4 and 5.x frame-change handlers. The rig file `animation/fh_rigged_latest.blend` (git-lfs tracked, built by `urdf_to_blender_rigged.py`) must be open, with the five control objects present in the scene: `body_ctrl` (cube Empty) and `foot_target_fl/fr/bl/br` (sphere Empties); the armature `FaceHuggerRig` is hidden by default. Two JSON files must be committed: `animation/convention.json` (neutral joint angles, scale 2/3, servo channels) and `animation/poses.json` (pose library; auto-created if missing). For headless exports, set `BLENDER_BIN` to your Blender executable and pass `--factory-startup` to avoid user add-on conflicts.
+## The data flow
 
----
+```mermaid
+flowchart TD
+    A["Animator keyframes the rig<br/>(body_ctrl + 4 foot targets)"] --> B["5-Action clip bundle<br/>(layered Action API)"]
+    B --> C["bake_clip: sample every frame"]
+    C --> D["_read_bone_angles<br/>(recover IK-solved joint angle)"]
+    D --> E["_link1_delta_to_absolute<br/>(shoulder delta to absolute)"]
+    E --> F1["_frame_to_servo<br/>scale + translateToServo + clamp"]
+    E --> F2["_scale_from_neutral<br/>scale only (no translate)"]
+    F1 --> G1[".js browser/app preview<br/>(servo degrees)"]
+    F1 --> G2[".h per clip (reference)"]
+    F2 --> H["clips_all.h bundle<br/>(pre-scaled math-space)"]
+    H -. hand-copy .-> FW["firmware clips_all.h<br/>on-board clip player"]
+```
 
-## Features
+Why two output representations? The `.js` ships **finished servo degrees** because the firmware's calibrate path (`T:4`) writes whatever number it receives straight to a PCA channel without converting. The `clips_all.h` bundle instead stays in **pre-scaled math-space**, because the on-board player runs `translateToServo` at playback time, so converting at export would double-apply it.
 
-### Clip management
+## Key functions and why they exist
 
-Clips are organized as named 5-Action bundles, one Action per control object (`body_ctrl` plus the four foot targets). A clip is a one-shot gesture, not a loop: after the final frame the robot linearly interpolates back to NEUTRAL over 500 ms, then goes IDLE. The panel lets you create, overwrite, rename, and duplicate clips. The `.blend` file must be saved for clips to persist, because the panel rescans on every viewport redraw.
+- **`_read_bone_angles`** recovers each joint angle from the *evaluated* pose. IK joints store the solved result only in the bone's evaluated matrix, not in `rotation_euler`, so the function inverts the pose composition and reads bone-local Z. Reading `rotation_euler` naively was the original "all-zero export" bug.
+- **`_link1_delta_to_absolute`** fixes the shoulder. The rig's analytic yaw driver outputs a *delta from rest* (zero at the standing pose), but everything downstream expects *absolute* math-space angles where standing equals `NEUTRAL`. This converts `absolute = NEUTRAL + sign * delta` per leg, once, so both export paths inherit it.
+- **`_frame_to_servo`** is the host twin of the firmware `translateToServo`. Three steps: scale toward `NEUTRAL` by 2/3, apply the per-leg servo branch (`FL: 90 + (sh - 135)`, `FR: 90 + (sh - 45)`, `BL: 90 + (sh + 135)`, `BR: 90 + (sh + 45)`, with thigh/knee mirrored per side), then clamp to 0-180 and round. It feeds the `.js`.
+- **`_scale_from_neutral`** does only the 2/3 scale, no per-leg conversion. It feeds `clips_all.h`.
+- **`to_js` / `to_c_header` / `to_clips_header`** emit the three artifacts. `to_js` bakes a configurable ESP IP into a self-contained WebSocket player; `to_clips_header` bundles every clip plus a `clips_manifest.json`, enforcing strictly increasing frame times and `uint16` limits.
 
-### Pose library
+## Conventions baked at export
 
-`animation/poses.json` stores named position snapshots of the five control objects (`body_ctrl` loc+rot, foot targets loc only). Poses are clip-independent: applying a pose is a pure viewport transform with no keyframes or Action side effects. Two default poses ship: `flat` (URDF rest, splayed) and `standing` (raised, tucked); `neutral` is seeded on first use. The **Key into Clip** button commits the currently applied pose into the active clip's Actions at the chosen frame. The panel shows a yellow warning whenever a pose is applied but not yet keyed.
+- **The 2/3 scale** (`convention.json`, `scale = 0.6667`) is applied toward `NEUTRAL`, in both export paths, at bake time. The firmware never re-scales clip data. This is a clips-only scale and is unrelated to the per-gait SCALE inside the firmware gaits.
+- **`_frame_to_servo` is byte-identical to the firmware `translateToServo`**, kept honest by `animation/scripts/test_servo_parity.py`, which copies the firmware switch verbatim as independent ground truth. Divergence means a wrong joint or wrong direction on hardware.
+- **Servo 90 is each leg's outward direction for all four legs** after change B, including FL at `90 + (sh - 135)`. `animation/scripts/check_export_consistency.py` asserts this against `convention.json`, which stays the single source of truth.
 
-### Selection sets
+See [Conventions](../conventions.md) for the angle spaces and the full per-leg `translateToServo` table.
 
-One-click selection of rig control groups for efficient keyframing: **All, Body, Legs, Front, Back, FL, FR, BL, BR**. Selection is a pure viewport operation; no transforms, keyframes, or Actions are modified.
+## The clip panel features
 
-### Export formats
+The add-on adds a "FaceHugger" tab to the 3D viewport sidebar (press `N`). It manages clips, poses, selections, and exports against the rigged scene `animation/fh_rigged_latest.blend`.
 
-The **Export** sub-panel bakes the active clip (or a user-selected subset) and writes:
+**Clip management.** A clip is a named 5-Action bundle, one Action per control object (`body_ctrl` plus the four `foot_target_*`), wired with Blender 4.4+'s layered Action API. A clip is a one-shot gesture, not a loop: after the final frame the robot eases back to `NEUTRAL` over 500 ms, then goes idle. Save the `.blend` for clips to persist, since the panel rescans on every viewport redraw.
 
-- **CSV per clip** (`<clip>.csv`) - frame, time_ms, 12 joint angles in math-space degrees.
-- **C header per clip** (`<clip>.h`) - same data as a C struct array.
-- **Browser JavaScript per clip** (`<clip>.js`) - Phase-1 live playback script; applies full hardware conversion (scale + `translateToServo`) and sends frames over WebSocket.
-- **Bundled `clips_all.h` + `clips_manifest.json`** - all clips in one pre-scaled math-space header for the Phase-2 on-board clip player.
+**Pose library.** `animation/poses.json` stores named snapshots of the five control objects. Applying a pose is a pure viewport transform with no keyframes; **Key into Clip** commits the applied pose into the active clip at the chosen frame. A yellow warning shows whenever a pose is applied but not yet keyed.
 
-Output lands under `animation/exported_clips/`. `animation/convention.json` must exist and contain `neutral_joint_deg`, `scale`, and `channels`.
+**Selection sets.** One-click selection of control groups (All, Body, Legs, Front, Back, and per-leg) for faster keyframing. Pure viewport selection, no transforms touched.
 
-### Activity heatmap
+**Export.** The Export sub-panel bakes the active clip (or a subset) and writes, under `animation/exported_clips/`:
 
-Colours the 8 servo meshes (shoulder and knee; hip/link2 meshes are absent from the CAD) from green (quiet) through orange to red (jerky/high torque) based on frame-to-frame angle delta. Toggling the heatmap on switches the viewport to Object shading; toggling it off restores the prior shading mode. Use this to spot mechanical shock risks before export.
+| Artifact | Contents | Consumer |
+|---|---|---|
+| `<clip>.csv` | frame, time, 12 math-space angles | inspection (legacy) |
+| `<clip>.h` | the same as a C array | reference (legacy) |
+| `<clip>.js` | finished servo degrees + a WebSocket player | browser/app live preview |
+| `clips_all.h` + `clips_manifest.json` | all clips, pre-scaled math-space | the on-board clip player |
 
-### Bezier/Linear preview toggle
+**Activity heatmap.** Colours the servo meshes from green (quiet) to red (jerky) by frame-to-frame angle delta, so you can spot mechanical shock before export. Only 8 of 12 servos are coloured because the hip servo was merged into the body CAD.
 
-Switches the active clip's F-curves between **BEZIER** (smooth authoring) and **LINEAR** (exact robot playback, no inter-frame easing). The toggle is non-destructive: Bezier handles are preserved and restored when switching back.
+**Bezier/Linear toggle.** Switches the active clip's F-curves between Bezier (smooth authoring) and Linear (exact robot playback). Non-destructive: Bezier handles are restored on switch back.
 
-### Authoring-time warnings
+**Authoring warnings.** A frame-delta warning (around 20 degrees between consecutive frames), a simultaneous-servo hint, and an FPS nudge toward 12 fps or lower (fewer packets for the same motion).
 
-Three console warnings guard against export errors and mechanical shock:
-
-1. **Frame-delta warning** (~20 deg threshold): fires if any joint moves more than 20 deg between consecutive baked frames.
-2. **Simultaneous-servo warning** (5 deg per frame): hints in the export UI when many servos move at once.
-3. **FPS warning**: nudges the user to lower the scene fps to 12 or below (fewer WebSocket packets for the same motion).
-
-### Headless export
-
-`animation/scripts/export_all_clips.py` re-exports all clips in a `.blend` file without the GUI, running the bake -> Layer-2 converter pipeline and producing CSV/`.h`/`.js` per clip plus the bundled `clips_all.h` and `clips_manifest.json`.
+**Headless export.** `animation/addons/export_all_clips.py` re-exports every clip in a `.blend` without the GUI:
 
 ```bash
 BLENDER_BIN=/Applications/Blender-5.1.app/Contents/MacOS/Blender
 "$BLENDER_BIN" --background --factory-startup \
   animation/fh_rigged_latest.blend \
-  --python animation/scripts/export_all_clips.py
+  --python animation/addons/export_all_clips.py
 ```
 
----
+## Gotchas for a builder or extender
 
-## Terminology
-
-- **Clip**: one-shot canned gesture (not "action", not "animation"). Plays once via `CMD_PLAY_CLIP`.
-- **Gait**: looping locomotion pattern (not a clip). Selected by `T:5`.
-- **Math-space angle**: joint angle in the rig's convention (symmetric per URDF). Stored in CSV/`.h` exports.
-- **Servo-space angle**: physical 0-180 deg PWM angle written to hardware. Applied only in `.js` via per-leg `translateToServo`.
-- **SCALE**: 2/3 (0.6667) shrink from NEUTRAL. Applied at bake time; firmware never re-scales clip data.
-- **Leg naming**: Blender/URDF uses `fl/fr/bl/br`; firmware LegId uses `FR/FL/RR/RL`. The add-on uses Blender names exclusively.
-
----
-
-## Limitations & known issues
-
-1. **Link2 (hip) servo meshes absent** - the heatmap colours only 8 of 12 servos (shoulder + knee). Hip servos are not visualized because the servo was merged into the body CAD.
-2. **IK chain stability** - foot targets use `chain_count=2` (shoulder FK, hip+knee IK); `chain_count=3` is unstable because the foot target is parented to `link1`.
-3. **URDF limit vs neutral** - the hardware-neutral pose in `convention.json` may exceed `LIMIT_ROTATION` on some joints (e.g., hips); `Set N Pose` clamps with best-effort and reports deviations.
-4. **`.blend` mtime** - clips are rescanned on every viewport redraw but do not persist until the `.blend` is saved.
-5. **Phase-1 only (`.js`)** - the browser `.js` exporter is a temporary Phase-1 solution. Phase-2 uses the bundled `clips_all.h` and the on-board `playClip(id)` player.
+1. **There are two `clips_all.h`, hand-synced.** The exporter writes `animation/exported_clips/clips_all.h`; the firmware compiles `code/firmware/src/nervous_system/clips_all.h`. There is no automated copy, so after every re-export you must hand-copy the bundle into the firmware tree (this is step 3 of the [flash workflow](../../guide/toolchain/flashing.md)). Forgetting it ships stale motion. A third `clips_all.h` under `code/firmware/test/fixtures/` is an unrelated test fixture.
+2. **The shoulder fix lives in the exporter, not the rig.** Clips used to collapse on playback because the rig's yaw driver emits a delta (zero at rest), under-anchoring the shoulders. The fix is `_link1_delta_to_absolute` in the exporter, which keeps `convention.json` as the single source of truth and stays unit-testable. Do not "fix" it by rebuilding the rig. See [the clip shoulder convention](../conventions.md) for the full reasoning.
+3. **Change B has a hardware dependency.** FL's `90 + (sh - 135)` regularization needs a physical FL horn remount *and* a clip re-export. Clips baked under the old FL convention are stale until re-baked.
+4. **`SCALE` applies to clips only.** Do not conflate it with the per-gait SCALE inside the firmware gait engine.
+5. **The per-clip `.h` is not the firmware feed.** The firmware reads the bundled `clips_all.h`. The per-clip `.h` and `.css` are reference/legacy formats.

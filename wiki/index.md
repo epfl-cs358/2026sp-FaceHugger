@@ -1,36 +1,13 @@
-# FaceHugger - Quadruped Robot
+# FaceHugger, a quadruped robot
 
-!!! warning "Work in progress"
-    This wiki is being actively developed. Some pages are incomplete or may change.
+FaceHugger is a four-legged walking robot designed, built, and programmed from scratch by six Computer Science students for EPFL's *Making Intelligent Things* course (2026 spring). We took it from an empty Fusion 360 file to a walking, animatable robot in eight weeks, working in weekly SCRUM sprints across CAD, 3D printing, electronics, firmware, a control app, and a full simulation and animation pipeline.
 
-!!! todo "Stub - to be written"
-    Quick-start landing page. One-paragraph "what is FaceHugger", a hero
-    photo of the assembled robot, "what you'll need" at a glance, and a
-    one-paragraph "how it works". Source: repo root `README.md` + new copy.
+This wiki is two things at once: a **build guide** if you want to reproduce or assemble the robot, and a **technical reference** if you want to understand how it works or build on it. You do not need to read it in order. Jump straight to whatever you came for.
 
-FaceHugger is a quadruped robot built for EPFL's *Making Intelligent Things*
-course (2026sp). This wiki is a build guide: start at the top and work down
-to go from parts to a walking robot. It is backed by a technical reference for the
-firmware, animation pipeline, and simulation.
+!!! tip "Where to start"
+    New here? Read [Design](guide/design.md) for the concept, then follow the build guide top to bottom. Looking for how a specific part works? Go straight to the [Reference](reference/conventions.md). Want to know who built it? See the [Team](team.md).
 
-## What is FaceHugger
-
-!!! todo
-    Short, accessible intro. Who it's for, what it does.
-
-## What you'll need
-
-!!! todo
-    Pointer to [Parts & Materials](guide/parts.md): printed parts,
-    servos, ESP32, battery, fasteners, tools.
-
-## How it works (in a nutshell)
-
-!!! todo
-    One-paragraph overview: ESP32 brain -> servos -> legs, driven by inverse
-    kinematics. Link to [Software](guide/software.md#how-it-works).
-
-## Explore
+## Build the robot
 
 <div class="grid cards" markdown>
 
@@ -38,7 +15,7 @@ firmware, animation pipeline, and simulation.
 
     ---
 
-    The quadruped concept, how a leg moves, and why it's sized this way.
+    The quadruped concept, how a leg moves, and why it is sized this way.
 
     [:octicons-arrow-right-24: Design](guide/design.md)
 
@@ -54,7 +31,7 @@ firmware, animation pipeline, and simulation.
 
     ---
 
-    What to print, settings, and orientation for each part.
+    What to print, slicer settings, and orientation for each part.
 
     [:octicons-arrow-right-24: Printing](guide/printing.md)
 
@@ -74,20 +51,56 @@ firmware, animation pipeline, and simulation.
 
     [:octicons-arrow-right-24: Assembly](guide/assembly.md)
 
--   :material-cpu-64-bit:{ .lg .middle } __Software__
+-   :material-cpu-64-bit:{ .lg .middle } __Software & Calibration__
 
     ---
 
-    Firmware overview, how the algorithms work, setup, and running it.
+    Flash the firmware, calibrate the servos, and drive the robot.
 
     [:octicons-arrow-right-24: Software](guide/software.md)
 
--   :material-book-open-variant:{ .lg .middle } __Technical reference__
+</div>
+
+## Understand how it works
+
+<div class="grid cards" markdown>
+
+-   :material-axis-arrow:{ .lg .middle } __Conventions__
 
     ---
 
-    Firmware internals, animation pipeline, and simulation analysis.
+    The coordinate frames, angle spaces, leg naming, and the math-to-servo transform everything else depends on.
 
-    [:octicons-arrow-right-24: Reference](reference/firmware/index.md)
+    [:octicons-arrow-right-24: Conventions](reference/conventions.md)
+
+-   :material-chip:{ .lg .middle } __Firmware__
+
+    ---
+
+    The ESP32 motion engine: gaits, the clip player, the state machine, and kinematics.
+
+    [:octicons-arrow-right-24: Firmware](reference/firmware/index.md)
+
+-   :material-movie-open:{ .lg .middle } __Animation pipeline__
+
+    ---
+
+    CAD to URDF, the Blender rig, and how authored clips become motion on the robot.
+
+    [:octicons-arrow-right-24: Animation](reference/animation/index.md)
+
+-   :material-robot-industrial:{ .lg .middle } __Simulation__
+
+    ---
+
+    The PyBullet simulator, the CLI, and how it runs the exact firmware in the loop.
+
+    [:octicons-arrow-right-24: Simulation](reference/simulation/index.md)
 
 </div>
+
+## The robot at a glance
+
+FaceHugger is driven by an ESP32 that talks to twelve servos (three per leg) through a PCA9685 driver. A mobile app and a browser panel send high-level commands over WebSocket, and the firmware turns them into leg motion using phase-based gait schedules and baked animation clips, with no runtime inverse kinematics in the locomotion path. The same robot model drives a PyBullet simulation that runs the *exact* firmware code, so motion can be designed and validated before it ever reaches hardware.
+
+Built by six students over eight weeks. See the [Team](team.md) for who did what.
