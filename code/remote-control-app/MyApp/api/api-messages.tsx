@@ -1,5 +1,4 @@
-import { webSocketIP } from "../config/config";
-import { connect, sendCommand, ws } from "../services/socket";
+import { sendCommand } from "../services/socket";
 import { ActionPacket, ActionTypes, DirectionVector, GaitIntegration, GaitMode, ManualMovement, ServoCalibration } from "./api-types";
 
 //Movement packets

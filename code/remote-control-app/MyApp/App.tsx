@@ -10,12 +10,12 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import SimpleLineIcons from '@expo/vector-icons/SimpleLineIcons';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import { Actions } from './screens/Actions';
+import { Settings } from './screens/Settings';
 import { FSMStatus } from './api/api-types';
 import { useRobotConnection } from './hooks/useRobotConnection';
-import { webSocketIP } from './config/config';
 
 export default function App() {
-  useRobotConnection(webSocketIP);
+  useRobotConnection();
   const remoteControlPage = {
     pageName: 'Remote control',
     pageIcon: <Ionicons name="game-controller-outline" size={40} color="white" />,
@@ -40,7 +40,15 @@ export default function App() {
     fsmState: FSMStatus.STATE_ACTION,
   } as PageInfo;
 
-  const pages = [remoteControlPage, actionsPage, individualControlPage]
+  const settingsPage = {
+    pageName: 'Settings',
+    pageIcon: <Ionicons name="settings-outline" size={40} color="white" />,
+    pageIconPressed: <Ionicons name="settings" size={40} color={orangeColor} />,
+    pageComponent: <Settings/>,
+    // No fsmState: opening Settings must not change the robot's state.
+  } as PageInfo;
+
+  const pages = [remoteControlPage, actionsPage, individualControlPage, settingsPage]
 
   const pagerProps = {
     defaultPage: remoteControlPage,

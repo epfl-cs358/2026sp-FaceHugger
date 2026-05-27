@@ -1,4 +1,4 @@
-import { DEBUGGING, webSocketPort } from '../config/config';
+import { DEBUGGING } from '../config/config';
 
 export let ws: WebSocket | null = null;
 
@@ -24,8 +24,9 @@ const flushPending = () => {
   }
 };
 
-export const connect = (ip: string, port: number = webSocketPort) => {
+export const connect = (ip: string, port: number) => {
   if (ws === null || ws === undefined) {
+    if (DEBUGGING) console.log('[WS] connecting', `ws://${ip}:${port}`);
     ws = new WebSocket(`ws://${ip}:${port}`);
     ws.onopen = () => {
       if (DEBUGGING) console.log('[WS] open');
@@ -39,6 +40,18 @@ export const connect = (ip: string, port: number = webSocketPort) => {
       if (DEBUGGING) console.log('[WS] error', e);
     };
   }
+};
+
+// Tear down the current socket so a new target can be connected. Used when the
+// user changes IP/port in Settings; clears any queued packets so stale commands
+// don't replay onto the next connection.
+export const disconnect = () => {
+  if (ws) {
+    ws.onclose = null; // drop the handler so it can't fire after we null ws
+    try { ws.close(); } catch { /* already closing */ }
+    ws = null;
+  }
+  pendingQueue.length = 0;
 };
 
 export const isConnected = () => ws?.readyState === WebSocket.OPEN;

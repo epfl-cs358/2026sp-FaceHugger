@@ -1,7 +1,11 @@
 import {create} from 'zustand'
 import { ClipInfo, FSMStatus, GaitMode } from '../api/api-types';
+import { DEFAULT_IP, DEFAULT_PORT } from '../config/config';
 
 type RobotStore = {
+    connIP: string,            // active WebSocket target IP
+    connPort: number,          // active WebSocket target port
+    setConnection: (ip: string, port: number) => void,
     fsmState: FSMStatus,
     setFsmState: (state: FSMStatus) => void,
     chosenFsmState: FSMStatus,
@@ -26,6 +30,9 @@ type RobotStore = {
 };
 
 export const useRobotStore = create<RobotStore>((set) => ({
+    connIP: DEFAULT_IP,
+    connPort: DEFAULT_PORT,
+    setConnection: (ip, port) => set({ connIP: ip, connPort: port }),
     fsmState: FSMStatus.STATE_IDLE,
     setFsmState: (fsmState) => set({fsmState}),
     chosenFsmState: FSMStatus.STATE_IDLE,

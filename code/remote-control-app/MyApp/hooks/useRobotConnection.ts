@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react';
-import { connect, sendCommand, onMessage } from '../services/socket';
+import { connect, disconnect, sendCommand, onMessage } from '../services/socket';
 import { useRobotStore } from '../store/robotStore';
 import { ClipListResponse, FSMStateModification, FSMStatus, GaitIntegration, GaitMode, SystemStatus } from '../api/api-types';
 import { requestClipList } from '../api/api-messages';
 import { useSocketStatus } from './useSocketStatus';
 
 
-export const useRobotConnection = (ip: string) => {
+export const useRobotConnection = () => {
+  const ip = useRobotStore((s) => s.connIP);
+  const port = useRobotStore((s) => s.connPort);
   const setFsmState = useRobotStore((s) => s.setFsmState);
   const setTofDistances = useRobotStore((s) => s.setTofDistances);
   const setAMU = useRobotStore((s) => s.setAMU);
@@ -28,7 +30,7 @@ export const useRobotConnection = (ip: string) => {
 
 
   useEffect(() => {
-    connect(ip);
+    connect(ip, port);
 
     onMessage((data) => {
       if (data.T) {
@@ -55,8 +57,10 @@ export const useRobotConnection = (ip: string) => {
       }
     });
 
-    return () => { /* cleanup / disconnect */ };
-  }, [ip]);
+    // Tear down on unmount and whenever the target changes, so the next
+    // connect() opens a fresh socket to the new ip/port.
+    return () => { disconnect(); };
+  }, [ip, port]);
 
   // On reconnect, immediately push all chosen state to the robot
   useEffect(() => {
