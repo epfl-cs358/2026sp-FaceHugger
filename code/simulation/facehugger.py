@@ -194,7 +194,27 @@ def cmd_sim(args):
     return _run(cli, cwd=None)
 
 
+def _urdf_stale():
+    """True if generated/facehugger.urdf is missing or older than its inputs."""
+    urdf = HERE / "generated" / "facehugger.urdf"
+    if not urdf.exists():
+        return True
+    inputs = [
+        HERE / "generated" / "fusion_export.json",
+        HERE / "facehugger_config.yaml",
+    ]
+    u = urdf.stat().st_mtime
+    return any(p.exists() and p.stat().st_mtime > u for p in inputs)
+
+
 def cmd_blender(args):
+    # Refresh a stale URDF first so the rig is never built against an old one.
+    if not getattr(args, "skip_urdf_check", False) and _urdf_stale():
+        print("URDF is missing or older than its inputs; regenerating it first.")
+        rc = _run([sys.executable, *GENERATE_URDF])
+        if rc != 0:
+            return rc
+
     blender = _resolve_blender_bin(args.blender_version)
 
     # `fh_rigged_latest.blend` is the animation LIBRARY — it holds the
@@ -216,8 +236,16 @@ def cmd_blender(args):
 
     cli = [blender]
     # Only reopen the existing library in rigged mode, where stash/restore
-    # protects the clips. Placement-only always starts from a blank scene.
-    if args.rigged and not args.reset and save_path is not None and save_path.exists():
+    # protects the clips. Placement-only always starts from a blank scene, and
+    # --rebuild-rig forces a from-scratch rig build (no reopen, so clips are lost).
+    reopen = (
+        args.rigged
+        and not args.reset
+        and not getattr(args, "rebuild_rig", False)
+        and save_path is not None
+        and save_path.exists()
+    )
+    if reopen:
         cli.append(str(save_path))
     if args.headless:
         cli.append("--background")
@@ -415,6 +443,19 @@ def main():
         "--reset",
         action="store_true",
         help="start from a blank scene, discarding any existing animations",
+    )
+    pb.add_argument(
+        "--rebuild-rig",
+        dest="rebuild_rig",
+        action="store_true",
+        help="rebuild the rig from the URDF even if fh_rigged_latest.blend exists "
+        "(does not reopen it, so its clips are discarded)",
+    )
+    pb.add_argument(
+        "--skip-urdf-check",
+        dest="skip_urdf_check",
+        action="store_true",
+        help="do not regenerate a stale URDF before opening Blender",
     )
     pb.set_defaults(func=cmd_blender)
 
