@@ -20,8 +20,9 @@ from .helpers import (
 # Physics realism (applied in _connect_and_setup)
 # --------------------------------------------------------------------------- #
 BODY_MASS_KG = 0.8  # body link total incl. electronics (ESP32, PCA9685, battery)
-FOOT_LATERAL_FRICTION = 1.2  # feet grip the floor during planted-feet moves
-FOOT_SPINNING_FRICTION = 0.05  # resist the foot pivoting in place
+FOOT_LATERAL_FRICTION = 2.5  # high grip — models the rubber/elastic bands on the
+# real feet (PyBullet multiplies foot × plane, so this is the grippy end)
+FOOT_SPINNING_FRICTION = 0.3  # rubber tips resist the foot pivoting in place
 SOLVER_ITERATIONS = 150  # stiffer, less-jittery contact resolution
 
 
