@@ -45,7 +45,7 @@ cmake --build build
 
 Produces `build/fh_sim.<ext>.so`. It is **not committed** (rebuilt locally / in
 CI). Contributors without a C++ toolchain skip this and use the Python re-port
-(`firmware_port/`); `test_sil_poc.py` skips automatically when `fh_sim` is absent.
+(`firmware_port/`); `tests/test_sil_poc.py` skips automatically when `fh_sim` is absent.
 
 ### Auto-rebuild (no stale firmware)
 
@@ -77,14 +77,14 @@ unaffected, so a toolchain-less machine can still run those.
 
 ```bash
 cd code/simulation
-conda run -n facehugger python -m pytest test_sil_poc.py test_sil_clip_suite.py -v
+conda run -n facehugger python -m pytest tests/ -v
 ```
 
-- `test_sil_poc.py` — the firmware plays a clip with all angles in `[0,180]`; SIL
+- `tests/test_sil_poc.py` — the firmware plays a clip with all angles in `[0,180]`; SIL
   matches the Python re-port at frame 0 within the firmware's whole-degree
   truncation (≤ 1°); the bridge drives PyBullet headless; the default clip path
   (no flag) runs end-to-end through the firmware.
-- `test_sil_clip_suite.py` — replays **every** clip through the firmware and asserts
+- `tests/test_sil_clip_suite.py` — replays **every** clip through the firmware and asserts
   an **exact** match to its committed golden trace (`golden/*.json`). A firmware or
   clip-export change that shifts any servo angle fails here.
 

@@ -16,7 +16,7 @@ import pytest
 
 pytest.importorskip("pybullet")
 
-SIM_DIR = Path(__file__).resolve().parent
+SIM_DIR = Path(__file__).resolve().parent.parent  # tests/ -> code/simulation/
 GOLDEN_DIR = SIM_DIR / "firmware_sil" / "golden"
 GOLDEN_FILES = sorted(p for p in GOLDEN_DIR.glob("*.json") if p.name != "index.json")
 

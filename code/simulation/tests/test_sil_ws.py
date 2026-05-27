@@ -52,13 +52,15 @@ def test_ws_clip_discovery_and_commands():
                     await ws.send(json.dumps({"T": 8}))
                     resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
                     assert "clips" in resp
-                    names = [c["name"] for c in resp["clips"]]
-                    assert "wave" in names and len(resp["clips"]) == 6
+                    # Don't pin a clip count or specific name: clips are authored
+                    # content that comes and goes. Just check the discovery reply is
+                    # a non-empty, well-formed list.
+                    assert len(resp["clips"]) >= 1
                     assert all({"id", "name", "ms"} <= c.keys() for c in resp["clips"])
 
                     # A command with no reply (T:7 play clip) must not stall the
-                    # socket: a following T:8 still answers.
-                    await ws.send(json.dumps({"T": 7, "c": names.index("wave")}))
+                    # socket: a following T:8 still answers. Play whatever clip 0 is.
+                    await ws.send(json.dumps({"T": 7, "c": resp["clips"][0]["id"]}))
                     await ws.send(json.dumps({"T": 8}))
                     resp2 = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
                     assert "clips" in resp2

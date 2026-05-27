@@ -21,7 +21,7 @@ import pytest
 
 pytest.importorskip("pybullet")
 
-SIM_DIR = Path(__file__).resolve().parent
+SIM_DIR = Path(__file__).resolve().parent.parent  # tests/ -> code/simulation/
 FW_CLIPS = SIM_DIR / ".." / "firmware" / "src" / "nervous_system" / "clips_all.h"
 FACEHUGGER = SIM_DIR / "facehugger.py"
 CLIP = "wave"
@@ -72,7 +72,17 @@ def test_sil_matches_python_report_at_frame0():
     cid = fc.clip_id_by_name(CLIP)
     fc.set_clock_ms(0)
     fc.play_clip(cid)
-    fc.tick(0)
+    # playClip eases the live pose into frame 0 over the pre-roll (firmware
+    # CLIP_PREROLL_MS = 200 ms); the true frame-0 pose lands once playback starts,
+    # so tick past the pre-roll before sampling.
+    PREROLL_MS = 200
+    step = 0
+    while True:
+        t_ms = int(step * 1000.0 / 240)
+        fc.tick(t_ms)
+        if t_ms >= PREROLL_MS:
+            break
+        step += 1
     sil = list(fc.servo_angles())
 
     a = get_clip_by_name(load_clips_all_h(FW_CLIPS), CLIP).frames[0].a
