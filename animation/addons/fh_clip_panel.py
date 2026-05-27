@@ -2551,19 +2551,24 @@ def _bake_and_write(clip, context, convention):
     return written, len(rows), max_seen, warning_count
 
 
-def _regenerate_clips_all(context, convention):
-    """(Re)write the bundled firmware header clips_all.h + clips_manifest.json
-    from EVERY clip — not just the exported subset.
+def _regenerate_clips_all(context, convention, names=None):
+    """(Re)write the bundled firmware header clips_all.h + clips_manifest.json.
 
-    clips_all.h is the firmware's source of truth and must contain all
-    FH_CLIP_COUNT clips, so "Export Active/Selected" (a subset) would otherwise
-    leave the bundle stale. Bakes each clip and calls to_clips_header — the same
-    path export_all_clips.py uses. A clip that fails to bake is skipped so the
-    bundle still regenerates from the rest. Returns (bundled_names, skipped_msg).
+    `names` is the set of clips to bundle; None means every clip. clips_all.h is
+    the firmware's source of truth, and the ticked export selection is what ends
+    up on the robot, so the export operators pass that selection here. Clips are
+    always emitted in list_clips() order (filtered to `names`) so clip ids stay
+    stable regardless of selection order. Bakes each clip and calls
+    to_clips_header — the same path export_all_clips.py uses. A clip that fails
+    to bake is skipped so the bundle still regenerates from the rest. Returns
+    (bundled_names, skipped_msg).
     """
+    wanted = set(names) if names is not None else None
     baked = {}
     skipped = []
     for clip in list_clips():
+        if wanted is not None and clip not in wanted:
+            continue
         try:
             rows = bake_clip(clip, context)
         except ValueError as e:
@@ -2623,18 +2628,28 @@ class FH_OT_export_clip(bpy.types.Operator):
             f"warnings: {warning_count}]"
         )
 
-        # The firmware bundle clips_all.h spans ALL clips — regenerate it so a
-        # single-clip export never leaves it stale (only when .h is enabled).
+        # clips_all.h is the firmware set = the ticked export selection (the same
+        # set Export Selected bundles). Regenerate from it so an active-clip
+        # export keeps the bundle in sync without silently pulling in unticked
+        # WIP clips. With nothing ticked, leave the bundle alone rather than
+        # wiping it.
         bundle_note = ""
         if scene.fh_export_header:
-            try:
-                names, skipped = _regenerate_clips_all(context, convention)
-                bundle_note = f" + clips_all.h ({len(names)} clips)"
-                print(f"Regenerated clips_all.h from {len(names)} clip(s)")
-                if skipped:
-                    self.report({"WARNING"}, f"clips_all.h skipped: {skipped}")
-            except ValueError as e:
-                self.report({"WARNING"}, f"clips_all.h NOT regenerated: {e}")
+            chosen = _export_selected_set()
+            if not chosen:
+                self.report(
+                    {"WARNING"},
+                    "clips_all.h NOT regenerated: no clips ticked for the firmware bundle",
+                )
+            else:
+                try:
+                    names, skipped = _regenerate_clips_all(context, convention, chosen)
+                    bundle_note = f" + clips_all.h ({len(names)} clips)"
+                    print(f"Regenerated clips_all.h from {len(names)} ticked clip(s)")
+                    if skipped:
+                        self.report({"WARNING"}, f"clips_all.h skipped: {skipped}")
+                except ValueError as e:
+                    self.report({"WARNING"}, f"clips_all.h NOT regenerated: {e}")
 
         self.report({"INFO"}, f"Exported to {rel}/ ({', '.join(written)}){bundle_note}")
         return {"FINISHED"}
@@ -2693,14 +2708,15 @@ class FH_OT_export_selected(bpy.types.Operator):
             self.report({"ERROR"}, f"Exported nothing — {'; '.join(failed)}")
             return {"CANCELLED"}
 
-        # Regenerate the firmware bundle clips_all.h from ALL clips (not just the
-        # ticked subset) so the firmware output stays complete after any export.
+        # The firmware bundle clips_all.h is exactly the ticked selection, so the
+        # robot gets the curated set. Regenerate it from `chosen` (not every
+        # clip), which replaces the previous bundle.
         bundle_note = ""
         if scene.fh_export_header:
             try:
-                names, skipped = _regenerate_clips_all(context, convention)
+                names, skipped = _regenerate_clips_all(context, convention, chosen)
                 bundle_note = f" + clips_all.h ({len(names)} clips)"
-                print(f"Regenerated clips_all.h from {len(names)} clip(s)")
+                print(f"Regenerated clips_all.h from {len(names)} ticked clip(s)")
                 if skipped:
                     self.report({"WARNING"}, f"clips_all.h skipped: {skipped}")
             except ValueError as e:
