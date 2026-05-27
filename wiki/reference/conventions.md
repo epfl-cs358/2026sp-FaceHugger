@@ -115,9 +115,9 @@ Example (FL at NEUTRAL, post-B): math `sh=135, th=-60, kn=-40` -> servo `hip=90+
 
 ## Joint Axes and URDF Conventions
 
-Joint origins are placed at the physical rotation axis (servo shaft), following ROS convention.
+Joint origins are placed at the physical rotation axis (servo shaft), following the URDF convention (each joint frame sits on its rotation axis, with the child link defined relative to it). URDF is used purely as a file format here, for PyBullet and Blender; the project does not run ROS.
 
-The **shoulder (yaw) joint** uses `+Z` (vertical up) as its axis uniformly across all four legs (Convention A). At rest (theta=0 in URDF), each leg's shoulder points in its mechanical zero direction. Positive rotation is CCW viewed from above (right-hand rule along +Z).
+The **shoulder (yaw) joint** uses `+Z` (vertical up) as its axis uniformly across all four legs. At rest (theta=0 in URDF), each leg's shoulder points in its mechanical zero direction. Positive rotation is CCW viewed from above (right-hand rule along +Z).
 
 The **thigh and knee (pitch) joints** use an axis along the leg's longitudinal direction at rest. L-side legs (FL, BL) use `+Y` in the body frame; R-side legs (FR, BR) use `-Y` (mirrored mounting). This axis flip means the same positive theta lifts the foot toward the chassis on every leg. URDF limits are expressed as signed bounds in radians relative to rest; R-side limits are negated and swapped to account for the axis flip.
 
@@ -170,7 +170,7 @@ When any of these must change, regenerate `clips_all.h` from source `.blend` fil
 - `code/firmware/src/nervous_system/motion_math.cpp`: `translateToServo()` source
 - `code/firmware/src/nervous_system/spinal_cord.cpp`: `NEUTRAL[]` array
 - `code/firmware/src/shared/config.h`: PCA9685 channel assignments and pulse range
-- `code/simulation/docs/MERGE_AND_CONVENTION.md`: Convention A rationale and per-leg shoulder derivation
+- `code/simulation/docs/MERGE_AND_CONVENTION.md`: the rest-pose definition and per-leg shoulder derivation
 - `doc/animation-pipeline/urdf-conventions.md`: joint origins, axis vectors, axis flip rationale
 - `animation/SERVO_ID_CONVENTION.md`: servo ID proposal
 - `code/API_SPEC.md`: WebSocket protocol (gait selection, clip playback, body pose)

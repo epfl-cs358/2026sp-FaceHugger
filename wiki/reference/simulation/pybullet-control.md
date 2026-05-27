@@ -2,6 +2,8 @@
 
 This page explains how the simulator actually *drives* the robot: where the joint angles come from, how clips and gaits differ, how the real app can drive the sim, and the torque/telemetry instrumentation. For the command surface and flags, see the [CLI](cli.md).
 
+The simulation is built from two halves. Its **geometry** (the links, joints, masses, and limits) comes from the generated URDF, the same file the [3D model to URDF](../animation/urdf-pipeline.md) stage produces, so the robot you simulate is the robot the CAD describes. Its **control** (what angle each joint should hold) comes from the compiled firmware. This page is about the control half; the URDF page covers the geometry half.
+
 ## The control model: firmware in the loop
 
 Every motion mode follows the same per-step loop at 240 Hz. The novel part is *where the target angles come from*: by default, **the exact firmware C++ computes them**, compiled to the host as a Python module (`fh_sim`) via pybind11. This is software-in-the-loop (SIL).

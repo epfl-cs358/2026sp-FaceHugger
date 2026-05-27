@@ -22,22 +22,28 @@ flowchart TD
 
 Crucially, the add-in owns which CAD bodies become which STL (`EXPORT_RULES`), the re-origin geometry (moving each mesh's local origin onto its URDF joint landmark), and the joint axis/origin/limit capture. Mesh visibility in Fusion has no effect; capture is entirely whitelist-driven.
 
-**`generate_urdf.py`** (`code/simulation/urdf_gen/`) owns the kinematic assembly. It reads the JSON and the config and emits the URDF XML: the CAD-name to URDF-name joint topology, the per-leg world placement, the Convention A shoulder-rest derivation, the right-side axis and limit flips, and the inertial-origin correction. It contains zero hardcoded coordinates; all geometry comes from the JSON.
+**`generate_urdf.py`** (`code/simulation/urdf_gen/`) owns the kinematic assembly. It reads the JSON and the config and emits the URDF XML: the CAD-name to URDF-name joint topology, the per-leg world placement, the shoulder-rest derivation, the right-side axis and limit flips, and the inertial-origin correction. It contains zero hardcoded coordinates; all geometry comes from the JSON.
 
-**`facehugger_config.yaml`** owns only what the CAD genuinely does not know: robot and mesh names, the four leg instances (id, mount point, and L/R side for diagonal mesh sharing), and servo physical fallbacks (`mass_kg`, `effort_nm`, `velocity_rad_s`). After Convention A landed, the per-leg yaw, shoulder limits, and shoulder neutral were removed from the config because they are now derived.
+**`facehugger_config.yaml`** owns only what the CAD genuinely does not know: robot and mesh names, the four leg instances (id, mount point, and L/R side for diagonal mesh sharing), and servo physical fallbacks (`mass_kg`, `effort_nm`, `velocity_rad_s`). The per-leg yaw, shoulder limits, and shoulder neutral that used to live in the config were removed once they became derived from the rest pose and the URDF.
+
+## Which files the simulation uses, and the separate build route
+
+The simulation and the URDF consume the **generated** artifacts, not the CAD source. `generate_urdf.py` reads `generated/fusion_export.json` and the meshes in `generated/exported_meshes/` (the chassis included) and produces `generated/facehugger.urdf`. That URDF and those meshes are what PyBullet loads and what the Blender rig is built from. The `exported_meshes/` STLs are committed for convenience, but they are export artifacts: do not hand-edit them, and treat the Fusion model as their source.
+
+Physically building the robot is a separate route with separate files. The print-ready parts live in the repository's top-level `cad/` folder (the `.3mf` plates and the print STLs) and are documented in the [3D printing guide](../../guide/printing.md). Those come from a different Fusion add-in that exports print-ready STLs with a per-body up-axis orientation, which has nothing to do with the URDF pipeline. In short: `generated/` is for the simulation and URDF, and `cad/` is for printing and assembly. Someone who wants to build the robot follows the printing guide into `cad/`; someone who wants to simulate or extend it uses `generated/`.
 
 ## The key transforms (and why they exist)
 
 - **Leg-assembly normalization.** The leg assembly is placed in CAD with a non-identity world rotation (around 90 degrees about Z). The add-in extracts that rotation and pre-applies it to each leg-internal joint's axis and origin so the JSON lands in a world-aligned frame.
 - **STL re-origin.** Each mesh is exported with its vertices in the occurrence's world frame, then the joint-landmark world position is subtracted so the mesh's local origin sits exactly on its URDF joint (`BodyToLink1Point`, `Link1ToLink2Point`, and so on). The amount subtracted is recorded as `origin_shift_mm` in the manifest. This is why the URDF emits `<origin xyz="0 0 0"/>` on every visual: the geometry is already placed.
 - **Inertial CoM correction.** Because the visual origin is zeroed but Fusion reported the center of mass in the pre-shift frame, `generate_urdf` subtracts the same `origin_shift_mm` from the CoM so the inertial frame still tracks the geometry. A small placeholder mass and inertia are used when Fusion physics are missing.
-- **Convention A shoulder rest.** Joint zero equals the Fusion mechanical rest. The FL shoulder rest defines zero; FR/BL/BR rests are derived by mirror and rotate, and right-side legs get their axis negated and limits negate-swapped so that the same joint angle produces the same physical motion on every leg. See [Conventions](../conventions.md) for the math-space and per-leg servo mapping that this feeds.
+- **Shoulder rest.** Joint zero equals the Fusion mechanical rest. The FL shoulder rest defines zero; FR/BL/BR rests are derived by mirror and rotate, and right-side legs get their axis negated and limits negate-swapped so that the same joint angle produces the same physical motion on every leg. See [Conventions](../conventions.md) for the math-space and per-leg servo mapping that this feeds.
 
 ## Non-obvious decisions worth knowing
 
 - **The URDF is the source of truth, and everything is derived from it.** PyBullet, the Blender rig, and the IK reference cases are all expected to agree with the URDF, not the other way around. `generate_urdf` even bakes a machine-parseable leg-metadata comment into the URDF so the simulator need not re-open the JSON.
 - **The mirror plane is the leg-assembly XZ plane.** The right-side link and mount bodies are XZ mirrors of the left, and `BodyToLink1Point` lies on the plane (Y = 0), so the re-origin math is identical for both sides.
-- **Two distinct "flips" must not be confused.** The geometric back-of-pair flip (0 or 180 degrees, derived from leg id, which positions meshes) is separate from the kinematic shoulder rest (Convention A, which goes into the joint origin rpy).
+- **Two distinct "flips" must not be confused.** The geometric back-of-pair flip (0 or 180 degrees, derived from leg id, which positions meshes) is separate from the kinematic shoulder rest (which goes into the joint origin rpy).
 - **Re-exports preserve the servo-role assignment.** The manifest block recording which servo occurrence is shoulder, hip, or knee is read from the prior JSON and carried forward, with stale paths repaired after a CAD rename.
 
 ## Gotchas for a builder or extender
@@ -49,4 +55,4 @@ Crucially, the add-in owns which CAD bodies become which STL (`EXPORT_RULES`), t
 5. **Servo numbering is still a proposal.** `servo_mapping.yaml` is pending firmware `SERVO_CONFIG[]` confirmation; flag the gap before baking clips.
 6. **Leg naming.** URDF and Python use `fl/fr/bl/br`. Do not propagate the firmware's `fr/fl/rr/rl` names here.
 
-For the CAD-side authoring steps see the [Fusion export how-to](../../guide/toolchain/fusion-export.md). The next stages are [URDF to Blender rig](blender-rig.md) and [Blender to robot clips](clip-panel.md).
+For the CAD-side authoring steps see the [Fusion export how-to](../../guide/toolchain/fusion-export.md). The next stages are [URDF to Blender rig](blender-rig.md) and [Blender to robot clips](clip-panel.md). The [PyBullet simulation](../simulation/pybullet-control.md) loads this same URDF for its geometry, so the robot you simulate is the robot this stage describes.

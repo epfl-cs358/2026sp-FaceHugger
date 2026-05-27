@@ -67,7 +67,7 @@ IK-solved hip and knee angles live only in the evaluated pose, so the export ste
 
 ## Zero-pose baseline check
 
-At `rotation_euler = (0, 0, 0)` on all bones, the rigged scene must match the `visualize_urdf.py` placement baseline within **0.5 mm** at every joint landmark. The per-leg shoulder rest orientations are encoded in the URDF `<joint><origin rpy>` per Convention A (derived from the FL rest), so they do not appear as non-zero Blender rotations. If the rigged scene drifts beyond 0.5 mm, the rig is composing transforms incorrectly (typically a bone-roll/projection error, a bad parent-inverse, or a stale URDF) and must be regenerated. This single deterministic check catches the whole class of "rig looks right but kinematics are subtly off" bugs.
+At `rotation_euler = (0, 0, 0)` on all bones, the rigged scene must match the `visualize_urdf.py` placement baseline within **0.5 mm** at every joint landmark. The per-leg shoulder rest orientations are encoded in the URDF `<joint><origin rpy>` (derived from the FL rest), so they do not appear as non-zero Blender rotations. If the rigged scene drifts beyond 0.5 mm, the rig is composing transforms incorrectly (typically a bone-roll/projection error, a bad parent-inverse, or a stale URDF) and must be regenerated. This single deterministic check catches the whole class of "rig looks right but kinematics are subtly off" bugs.
 
 ## Object name contract
 
