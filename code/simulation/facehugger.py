@@ -3,25 +3,25 @@ facehugger — single-entry CLI wrapping the simulation pipeline.
 
 Subcommands:
   urdf      regenerate generated/facehugger.urdf from generated/fusion_export.json
-  sim       run simulate.py (default: stand; --walk / --trot for gaits;
-            --list-clips to print the available clips and exit)
+  sim       run the robot in software (firmware-in-loop PyBullet). Default: stand.
+            Drive it from the CLI (--walk / --trot / --clip NAME), or from an
+            external client over the T: WebSocket API (--serve; --app also launches
+            the web app). --list-clips prints the available clips and exits.
   blender   import the URDF into Blender (placement-only, no rig by default;
-            --rigged builds an armature with IK + foot-target Empties for
-            animation work)
-  serve     run the firmware-backed WebSocket robot API (drive from the app)
+            --rigged builds an armature with IK + foot-target Empties)
   app       serve the remote-control app on the web (Expo)
-  all       urdf → sim (smoke shortcut)
+  flash     build and upload the firmware (PlatformIO)
+  serve     deprecated alias for `sim --serve`
 
 Examples:
   python facehugger.py urdf
   python facehugger.py sim --walk
+  python facehugger.py sim --app                              # sim + WebSocket API + app
   python facehugger.py sim --list-clips
+  python facehugger.py flash                                  # build + upload firmware
   python facehugger.py app --port 8080
-  python facehugger.py blender                                # default 5.1, placement-only
   python facehugger.py blender --rigged                       # armature + IK rig
-  python facehugger.py blender --blender-version 5.2          # specific version
   python facehugger.py blender --headless --save /tmp/scene.blend
-  python facehugger.py all --headless
 
 Env:
   BLENDER_BIN  full path to a Blender executable. Wins over --blender-version
@@ -159,6 +159,16 @@ def cmd_sim(args):
     if getattr(args, "list_clips", False):
         _list_clips()
         return 0
+    if getattr(args, "serve", False) or getattr(args, "app", False):
+        # Drive the sim from an external client (app / panel) over the T: WebSocket
+        # API instead of from CLI flags. GUI on by default; --headless turns it off.
+        return _serve_session(
+            host=args.host,
+            port=args.port,
+            gui=not args.headless,
+            app=args.app,
+            app_port=args.app_port,
+        )
     cli = [sys.executable, *SIMULATE]
     if args.clip:
         cli += ["--clip", args.clip]
@@ -218,27 +228,62 @@ def cmd_blender(args):
     return _run(cli)
 
 
-def cmd_all(args):
-    rc = cmd_urdf(args)
-    if rc != 0:
-        return rc
-    return cmd_sim(args)
-
-
-def cmd_serve(args):
+def _serve_session(*, host, port, gui, app, app_port):
+    """Run the firmware-backed WebSocket API (ws_sim), optionally launching the web
+    app alongside it. Backs `sim --serve` / `sim --app` and the legacy `serve`."""
+    app_proc = None
+    if app:
+        app_dir = REPO_ROOT / "code" / "remote-control-app" / "MyApp"
+        if not app_dir.is_dir():
+            sys.exit(f"app dir not found: {app_dir}")
+        print(
+            f"Web app:   http://localhost:{app_port}  (choose 'Simulator' in Settings)"
+        )
+        app_proc = subprocess.Popen(
+            ["npx", "expo", "start", "--web", "--port", str(app_port)],
+            cwd=str(app_dir),
+        )
+    print(f"WebSocket: ws://{host}:{port}   (telemetry SSE on :8082)")
     cli = [
         sys.executable,
         "-m",
         "firmware_sil.ws_sim",
         "--host",
-        args.host,
+        host,
         "--port",
-        str(args.port),
+        str(port),
     ]
-    if args.gui:
+    if gui:
         cli.append("--gui")
     # cwd=None: run in the user's dir (HERE on PYTHONPATH) so firmware_sil imports.
-    return _run(cli, cwd=None)
+    try:
+        return _run(cli, cwd=None)
+    finally:
+        if app_proc is not None:
+            app_proc.terminate()
+            try:
+                app_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                app_proc.kill()
+
+
+def cmd_serve(args):
+    # Deprecated alias: the WebSocket API is now `sim --serve` (and `sim --app`).
+    print("note: `serve` is now `sim --serve` / `sim --app`; this alias still works.")
+    return _serve_session(
+        host=args.host, port=args.port, gui=args.gui, app=False, app_port=8080
+    )
+
+
+def cmd_flash(args):
+    fw_dir = REPO_ROOT / "code" / "firmware"
+    if not fw_dir.is_dir():
+        sys.exit(f"firmware dir not found: {fw_dir}")
+    target = [] if args.build_only else ["-t", "upload"]
+    rc = _run(["pio", "run", "-e", args.env, *target], cwd=fw_dir)
+    if rc != 0 or not args.monitor:
+        return rc
+    return _run(["pio", "device", "monitor", "-e", args.env], cwd=fw_dir)
 
 
 def cmd_app(args):
@@ -310,6 +355,36 @@ def main():
         help="list the available clip names and ids (from clips_all.h) and exit, "
         "instead of running the simulator",
     )
+    # Interface: drive the sim from an external client instead of CLI flags.
+    ps.add_argument(
+        "--serve",
+        action="store_true",
+        help="expose the T: WebSocket API (drive from the app / panel) instead of "
+        "driving from the CLI",
+    )
+    ps.add_argument(
+        "--app",
+        action="store_true",
+        help="imply --serve and also launch the web app (full interactive session)",
+    )
+    ps.add_argument(
+        "--host",
+        default="localhost",
+        help="WebSocket bind host for --serve (use 0.0.0.0 to reach it from a phone)",
+    )
+    ps.add_argument(
+        "--port",
+        type=int,
+        default=8081,
+        help="WebSocket port for --serve (default 8081; the robot uses 81)",
+    )
+    ps.add_argument(
+        "--app-port",
+        type=int,
+        default=8080,
+        dest="app_port",
+        help="web host port for --app (default 8080)",
+    )
     ps.set_defaults(func=cmd_sim)
 
     pb = sub.add_parser("blender", help="open the URDF in Blender")
@@ -343,37 +418,28 @@ def main():
     )
     pb.set_defaults(func=cmd_blender)
 
-    pa = sub.add_parser("all", help="urdf → sim (smoke run)")
-    pa.add_argument("--export")
-    pa.add_argument("--config")
-    pa.add_argument("--out")
-    pa.add_argument("--clip", metavar="NAME", help="play a named animation clip")
-    pa.add_argument(
-        "--loop",
+    pflash = sub.add_parser("flash", help="build and upload the firmware (PlatformIO)")
+    pflash.add_argument(
+        "--build-only",
+        dest="build_only",
         action="store_true",
-        help="replay the clip continuously (GUI only) to observe over time",
+        help="compile only; do not upload to the board",
     )
-    pa.add_argument(
-        "--float",
-        dest="float_mode",
-        action="store_true",
-        help="no gravity/floor, body pinned — watch joint geometry only",
-    )
-    pa.add_argument(
+    pflash.add_argument(
         "--monitor",
         action="store_true",
-        help="print torque + estimated-current status (peak τ, total A, stalls)",
+        help="open the serial monitor after a successful upload",
     )
-    pa.add_argument("--walk", action="store_true")
-    pa.add_argument("--trot", action="store_true")
-    pa.add_argument("--headless", action="store_true")
-    pa.add_argument("--settle", type=float, default=None)
-    pa.set_defaults(func=cmd_all)
+    pflash.add_argument(
+        "--env",
+        default="upesy_wroom",
+        help="PlatformIO environment (default upesy_wroom)",
+    )
+    pflash.set_defaults(func=cmd_flash)
 
     pserve = sub.add_parser(
         "serve",
-        help="run the firmware-backed WebSocket robot API (drive from the app / "
-        "tools/robot_control_panel.html)",
+        help="deprecated alias for `sim --serve` (firmware-backed WebSocket API)",
     )
     pserve.add_argument("--host", default="localhost")
     pserve.add_argument(
