@@ -5,6 +5,8 @@ FaceHugger has a PyBullet simulation that runs the robot from the **same URDF th
 Everything lives in `code/simulation/` and is driven through one entry point, `facehugger.py`. There are three ways to read this section:
 
 - **[FaceHugger CLI](cli.md)**: every `facehugger.py` subcommand (`urdf`, `sim`, `blender`, `serve`, `all`) and flag, and how to run them.
+- **[Other command-line tools](scripts-cli.md)**: the standalone tools the CLI does not wrap, the URDF generator, the export verifiers, the firmware-build check, the WebSocket server, and the Blender scripts.
+- **[Trying it out](trying-it-out.md)**: a hands-on tour of what to run and what success looks like, from a smoke check to driving the sim from the app.
 - **[Controlling the simulation](pybullet-control.md)**: how the simulator actually drives the robot. Covers the firmware software-in-the-loop (SIL) path vs the Python re-port, clips vs gaits vs stand, the WebSocket server that lets the real app drive the sim, and the torque/telemetry instrumentation.
 - **[Torque analysis](torque-analysis.md)** / **[Torque heatmap](torque-heatmap.md)**: the static torque budget and the per-joint load study.
 

@@ -2,6 +2,8 @@ title: Simulation
 nav:
   - index.md
   - cli.md
+  - scripts-cli.md
+  - trying-it-out.md
   - pybullet-control.md
   - torque-analysis.md
   - torque-heatmap.md
