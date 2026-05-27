@@ -30,6 +30,12 @@ Before printing this file, copy it once, then mirror it twice along the back. Yo
 
 ![The hip mounts in Prusa-slicer](../assets/img/printing/HipMountsPrint.png)
 
+`Shell.stl` :
+
+Do not forget to add supports on every surface facing the printing board, including the little surfaces above the hooks.
+
+![The shell in Prusa-slicer](../assets/img/printing/ShellPrint.jpg)
+
 ## Leg parts
 
 !!! todo
