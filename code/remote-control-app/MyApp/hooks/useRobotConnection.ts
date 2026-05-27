@@ -16,9 +16,7 @@ export const useRobotConnection = (ip: string) => {
   const setClips = useRobotStore((s) => s.setClips);
   const setClipPlaying = useRobotStore((s) => s.setClipPlaying);
 
-  const fsmState = useRobotStore((s) => s.fsmState);
   const chosenFsmState = useRobotStore((s) => s.chosenFsmState);
-  const gaitMode = useRobotStore((s) => s.gaitMode);
   const chosenGaitMode = useRobotStore((s) => s.chosenGaitMode);
 
   const isConnected = useSocketStatus();
@@ -70,25 +68,22 @@ export const useRobotConnection = (ip: string) => {
     prevIsConnectedRef.current = isConnected;
   }, [isConnected]);
 
+  // Push the chosen state/gait ONCE whenever it changes (and on connect). We do not
+  // loop on it: the firmware sends no telemetry, so fsmState/gaitMode never catch up,
+  // and the old 1s interval re-sent {T:2,s:...} forever — re-arming STATE_WALK every
+  // second and fighting the gait's graceful-stop, which made the robot twitch on its
+  // own with no input. Re-send on reconnect is handled by the effect above.
   useEffect(() => {
-    if (chosenFsmState === fsmState) return;
-    const interval = setInterval(() => {
-      if(isConnected){
-        sendCommand(JSON.stringify({ T: 2, s: chosenFsmState } as FSMStateModification));
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [chosenFsmState, fsmState, isConnected]);
+    if (isConnected) {
+      sendCommand(JSON.stringify({ T: 2, s: chosenFsmState } as FSMStateModification));
+    }
+  }, [chosenFsmState, isConnected]);
 
   useEffect(() => {
-    if (chosenGaitMode === gaitMode) return;
-    const interval = setInterval(() => {
-      if(isConnected){
-        sendCommand(JSON.stringify({ T: 5, g: chosenGaitMode } as GaitIntegration));
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [chosenGaitMode, gaitMode, isConnected]);
+    if (isConnected) {
+      sendCommand(JSON.stringify({ T: 5, g: chosenGaitMode } as GaitIntegration));
+    }
+  }, [chosenGaitMode, isConnected]);
 
   return { sendCommand };
 };
