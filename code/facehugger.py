@@ -31,8 +31,10 @@ Env:
 import argparse
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # This file lives at code/facehugger.py. The simulation packages it shells into
@@ -312,10 +314,56 @@ def cmd_blender(args):
     return _run(cli)
 
 
+def _signal_group(proc, sig):
+    """Send `sig` to the child's whole process group, so child trees die too
+    (e.g. Expo's Metro/node, not just the `npx` launcher). Children are started
+    with start_new_session=True, putting each in its own group. Falls back to
+    signalling the single process on non-POSIX or if the group is already gone."""
+    if proc.poll() is not None:
+        return
+    if os.name == "posix":
+        try:
+            os.killpg(os.getpgid(proc.pid), sig)
+            return
+        except (ProcessLookupError, PermissionError):
+            return
+    try:
+        proc.kill() if sig == signal.SIGKILL else proc.terminate()
+    except ProcessLookupError:
+        pass
+
+
+def _shutdown_children(procs):
+    """Tear down every (label, Popen) still running: SIGINT the whole group for a
+    graceful stop, wait up to 5s total, then SIGKILL any survivor. Used so one
+    Ctrl-C on `sim --app`/`--serve`/`--panel` takes the sim AND the app down."""
+    alive = [(label, p) for label, p in procs if p.poll() is None]
+    for label, p in alive:
+        print(f"  stopping {label}…")
+        _signal_group(p, signal.SIGINT)
+    deadline = time.time() + 5
+    for _label, p in alive:
+        try:
+            p.wait(timeout=max(0.0, deadline - time.time()))
+        except subprocess.TimeoutExpired:
+            pass
+    for label, p in alive:
+        if p.poll() is None:
+            print(f"  force-killing {label}…")
+            _signal_group(p, signal.SIGKILL)
+
+
 def _serve_session(*, host, port, gui, app, app_port, panel=False):
     """Run the firmware-backed WebSocket API (ws_sim), optionally launching the web
     app alongside it and hosting the browser control panel. Backs `sim --serve` /
-    `sim --app` / `sim --panel` and the legacy `serve`."""
+    `sim --app` / `sim --panel` and the legacy `serve`.
+
+    Both children run in their own process groups (start_new_session=True) so the
+    terminal's Ctrl-C doesn't race them directly; the parent catches it once and
+    tears both down via _shutdown_children, killing whole trees (Expo's Metro/node
+    included)."""
+    procs = []  # (label, Popen) — torn down newest-first on exit
+
     app_proc = None
     if app:
         app_dir = REPO_ROOT / "code" / "remote-control-app" / "MyApp"
@@ -339,7 +387,9 @@ def _serve_session(*, host, port, gui, app, app_port, panel=False):
             ["npx", "expo", "start", "--web", "--port", str(app_port)],
             cwd=str(app_dir),
             env=app_env,
+            start_new_session=True,
         )
+        procs.append(("web app", app_proc))
     print(f"WebSocket: ws://{host}:{port}   (telemetry SSE on :8082)")
     if panel:
         print(f"Panel:     http://{host}:8082/panel")
@@ -356,16 +406,26 @@ def _serve_session(*, host, port, gui, app, app_port, panel=False):
         cli.append("--gui")
     if panel:
         cli.append("--panel")
-    # cwd=None: run in the user's dir (SIM_DIR on PYTHONPATH) so firmware_sil imports.
+    # ws_sim imports the firmware_sil package, so run with SIM_DIR on PYTHONPATH
+    # (mirrors _run(cwd=None)) but in the user's working dir.
+    sim_env = {**os.environ}
+    sim_env["PYTHONPATH"] = os.pathsep.join(
+        [str(SIM_DIR), sim_env.get("PYTHONPATH", "")]
+    ).rstrip(os.pathsep)
+    print(f"$ {' '.join(str(c) for c in cli)}")
+    sim_proc = subprocess.Popen(
+        [str(c) for c in cli], env=sim_env, start_new_session=True
+    )
+    procs.append(("sim", sim_proc))
+
+    rc = 0
     try:
-        return _run(cli, cwd=None)
+        rc = sim_proc.wait()
+    except KeyboardInterrupt:
+        print("\nShutting down (Ctrl-C)…")
     finally:
-        if app_proc is not None:
-            app_proc.terminate()
-            try:
-                app_proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                app_proc.kill()
+        _shutdown_children(procs)
+    return rc
 
 
 def cmd_serve(args):
@@ -405,10 +465,22 @@ def cmd_app(args):
     print(f"Serving the remote-control app (Expo web) at {url}")
     print("Point it at the robot or the sim from the app's Settings screen.")
     print("(Ctrl-C to stop.)\n")
-    # cwd in MyApp so expo finds package.json; works from any caller cwd.
-    return _run(
-        ["npx", "expo", "start", "--web", "--port", str(args.port)], cwd=app_dir
+    # Own process group + managed teardown so Ctrl-C takes the whole Expo tree
+    # (Metro/node), not just the npx launcher — same as `sim --app`.
+    print(f"$ npx expo start --web --port {args.port}")
+    proc = subprocess.Popen(
+        ["npx", "expo", "start", "--web", "--port", str(args.port)],
+        cwd=str(app_dir),
+        start_new_session=True,
     )
+    try:
+        rc = proc.wait()
+    except KeyboardInterrupt:
+        print("\nShutting down (Ctrl-C)…")
+        rc = 0
+    finally:
+        _shutdown_children([("web app", proc)])
+    return rc
 
 
 def main():
