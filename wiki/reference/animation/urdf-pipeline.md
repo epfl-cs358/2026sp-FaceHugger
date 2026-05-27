@@ -26,6 +26,21 @@ Crucially, the add-in owns which CAD bodies become which STL (`EXPORT_RULES`), t
 
 **`facehugger_config.yaml`** owns only what the CAD genuinely does not know: robot and mesh names, the four leg instances (id, mount point, and L/R side for diagonal mesh sharing), and servo physical fallbacks (`mass_kg`, `effort_nm`, `velocity_rad_s`). The per-leg yaw, shoulder limits, and shoulder neutral that used to live in the config were removed once they became derived from the rest pose and the URDF.
 
+## Construction points: the CAD-side design contract
+
+The export does not guess geometry. It reads **named construction points** that are placed deliberately in the Fusion model, and the world coordinates of those points become the numbers the URDF needs. This is the heart of the design: the model is authored so that the values the pipeline wants already exist as datums, and the code just looks them up by name.
+
+A few points carry the whole leg chain:
+
+- `BodyToLink1Point`, `Link1ToLink2Point`, `Link2ToLink3Point`: the three joint pivots. Each sits exactly on its rotation axis, so its world position is both the URDF joint origin and the landmark the mesh is re-origined onto.
+- `LegMountFixedPoint`: where a leg bracket mates to the chassis, so each leg can be placed on the body without hardcoding a corner offset.
+- `ServoMountPoint`: one per servo enclosure. Because the shared `servo.stl` is re-origined to this datum, dropping the servo visual at this point's world position places it correctly, for every servo on every leg.
+
+Two design ideas make this robust. First, points are placed **on the feature that matters** (the rotation axis, the mating face, the servo datum) rather than near it, so the extracted coordinate is exact and needs no fudge factor. Second, the lookup is **purely name-driven**: the code resolves an occurrence path plus a point name. That keeps `generate_urdf.py` free of hardcoded coordinates, but it also means the names are a contract. If a construction point, or the occurrence that holds it, is renamed in CAD, the lookup silently returns nothing and that piece quietly disappears from the URDF. (This is exactly how the right-side shoulder servos once went missing: the mirrored servo occurrence had a different name than the lookup expected.) When you add or rename parts, keep the datum names stable, or update the matching path in the exporter and `generate_urdf.py`.
+
+!!! todo "Design tips for construction-point placement"
+    Notes on how to place and name construction points and axes when designing or extending the model, gathered from building FaceHugger. To be written.
+
 ## Which files the simulation uses, and the separate build route
 
 The simulation and the URDF consume the **generated** artifacts, not the CAD source. `generate_urdf.py` reads `generated/fusion_export.json` and the meshes in `generated/exported_meshes/` (the chassis included) and produces `generated/facehugger.urdf`. That URDF and those meshes are what PyBullet loads and what the Blender rig is built from. The `exported_meshes/` STLs are committed for convenience, but they are export artifacts: do not hand-edit them, and treat the Fusion model as their source.
