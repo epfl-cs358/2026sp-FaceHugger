@@ -156,9 +156,10 @@ shoulder/hip/knee, where every joint carries **both** spaces:
 - `pre_clamp_deg` — the firmware's pre-clamp `[OOR]` request for that servo this tick, else null.
 
 `tools/robot_control_panel.html` renders this in its "Sim telemetry" table (Δ red
-when |Δ|>5°, τ green/amber/red at 30/70 % of stall, a Clamp column from `pre_clamp_deg`,
-and a stale banner when frames stop). With `--gui`, the PyBullet links are also
-torque-tinted every 12th step. The `pre_clamp_deg` value comes from a real firmware
+when |Δ|>5°, τ coloured by `sim_monitor.band()` — green = safe continuous
+(<~0.98 N·m), amber = burst (under stall), red = saturated (≥2.94 N·m stall) — a
+Clamp column from `pre_clamp_deg`, and a stale banner when frames stop). With
+`--gui`, the PyBullet links are torque-tinted the same way every 12th step. The `pre_clamp_deg` value comes from a real firmware
 feature: `Leg::setJointAngles` / `Servo::setServoAngle` print `[OOR] servo <ch>
 requested <deg>` before clamping to [0,180] (visible on the bench serial monitor),
 which the SIL's Serial mock captures.

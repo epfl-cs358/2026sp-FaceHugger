@@ -180,7 +180,7 @@
     </table>
     <div class="hint">All 12 joints (4 legs × sh/hip/knee). Cmd servo° = what the real servos
       receive (0–180, 90 = neutral); Cmd joint° = same in URDF space (0 = neutral), comparable to Actual; Δ is
-      tracking error (red if |Δ|&gt;5°). τ green/amber/red at 30/70% of stall (2.94 N·m). Clamp = firmware
+      tracking error (red if |Δ|&gt;5°). τ green = safe continuous (&lt;0.98 N·m), amber = burst, red = saturated (≥2.94 N·m stall). Clamp = firmware
       pre-clamp request when driven out of [0,180]. Sim-only (<code>facehugger.py serve</code>).</div>
   </div>
 </aside>
@@ -291,7 +291,9 @@
   });
 
   // --- Sim telemetry (SSE) — separate from the WS robot API; local debug only ---
-  const STALL_NM = 2.94;  // QYRC DSS-230MG stall; matches sim_monitor.STALL_TORQUE_NM
+  // Torque bands mirror sim_monitor.band(): green < continuous, yellow continuous..stall
+  // (burst-only), red >= stall (saturated). CONT ≈ stall/3 for hobby metal-gear servos.
+  const STALL_NM = 2.94, CONT_NM = 0.98;  // DSS-230MG: 30 kg·cm stall; ~1/3 continuous
   let es = null, staleTimer = null;
 
   function setBanner(live, msg){
@@ -303,7 +305,7 @@
     clearTimeout(staleTimer);
     staleTimer = setTimeout(() => setBanner(false, 'stale — no frames for 1.5 s'), 1500);
   }
-  function tauClass(t){ const f = Math.abs(t) / STALL_NM; return f < 0.30 ? 'tg' : (f <= 0.70 ? 'ty' : 'tr'); }
+  function tauClass(t){ const a = Math.abs(t); return a < CONT_NM ? 'tg' : (a < STALL_NM ? 'ty' : 'tr'); }
   const fmt = (v, d=1) => (v === null || v === undefined) ? '—' : v.toFixed(d);
 
   function renderTelem(f){

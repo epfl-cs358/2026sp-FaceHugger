@@ -17,8 +17,29 @@ STALL_TORQUE_NM = 2.94  # QYRC DSS-230MG 30 kg·cm stall (== servo.effort_nm)
 STALL_CURRENT_A = 2.0  # QYRC DSS-230MG — ~2 A max draw at stall
 CURRENT_LIMIT_A = 10.0  # supply / multiplexer budget (12 servos × ~0.8 A realistic avg)
 STALL_WARN_NM = 2.5  # ~85% of stall — flag a joint whose applied torque exceeds this
+# Continuous-torque reference. The DSS-230MG datasheet lists STALL only; hobby
+# metal-gear servos sustain only ~1/3 of stall continuously, so this is a rule of
+# thumb (~0.98 N·m) — refine once measured. Separates a safe sustained hold from
+# burst-only torque in the coloring/monitor (stall = the locked-rotor burst max).
+CONT_TORQUE_NM = round(STALL_TORQUE_NM / 3.0, 2)
 
 _LEGS = ("fr", "fl", "br", "bl")
+
+
+def band(torque_nm: float) -> str:
+    """Severity band for an applied joint torque, vs the servo's continuous (CONT)
+    and stall (STALL) torque. Single source of truth for both the monitor flags and
+    the PyBullet link coloring:
+      "green"  |t| < CONT          safe to hold continuously
+      "yellow" CONT <= |t| < STALL burst-only — fine briefly, not sustained
+      "red"    |t| >= STALL        saturated — motor can't supply more / can't track
+    """
+    t = abs(torque_nm)
+    if t < CONT_TORQUE_NM:
+        return "green"
+    if t < STALL_TORQUE_NM:
+        return "yellow"
+    return "red"
 
 
 def estimate_current_a(torque_nm: float) -> float:
@@ -47,7 +68,8 @@ def format_status(elapsed_s: float, joint_torques: dict, joint_pos_deg=None) -> 
     peak_name, peak_tau = max(
         joint_torques.items(), key=lambda kv: abs(kv[1]), default=("-", 0.0)
     )
-    stalls = [n for n, t in joint_torques.items() if abs(t) > STALL_WARN_NM]
+    over_cont = [n for n, t in joint_torques.items() if band(t) == "yellow"]
+    saturated = [n for n, t in joint_torques.items() if band(t) == "red"]
 
     parts = [f"t={elapsed_s:5.1f}s"]
     if joint_pos_deg:
@@ -60,8 +82,10 @@ def format_status(elapsed_s: float, joint_torques: dict, joint_pos_deg=None) -> 
     parts.append(f"peak_τ={abs(peak_tau):.2f}N·m({peak_name})")
     warn = " [WARN >10A]" if total_i > CURRENT_LIMIT_A else ""
     parts.append(f"est_I={total_i:.1f}A{warn}")
-    if stalls:
-        parts.append("[STALL] " + ",".join(stalls))
+    if over_cont:
+        parts.append("[CONT] " + ",".join(over_cont))  # burst-only, over continuous
+    if saturated:
+        parts.append("[STALL] " + ",".join(saturated))  # at/over stall — saturated
     return " | ".join(parts)
 
 

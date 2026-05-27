@@ -198,16 +198,21 @@ def channel_to_joint(fc):
 
 
 # ── torque-based link coloring (PyBullet visual feedback) ─────────────────────
+_BAND_RGBA = {
+    "green": (0.2, 0.8, 0.2, 1.0),  # safe continuous hold
+    "yellow": (0.9, 0.7, 0.1, 1.0),  # burst-only: over continuous, under stall
+    "red": (0.9, 0.2, 0.1, 1.0),  # saturated: at/over stall, can't track
+}
+
+
 def torque_color(torque_nm):
-    """rgba by |torque| vs the servo stall torque: green<30%, yellow 30-70%, red>70%."""
+    """rgba for a joint's applied torque, via the shared sim_monitor.band() — so the
+    link colors mean the same thing as the --monitor [CONT]/[STALL] flags. Brief
+    fast-clip spikes show yellow (honest burst); red is reserved for true saturation
+    at the effort cap, not merely 'fast'."""
     from pybullet_sim import sim_monitor
 
-    frac = abs(torque_nm) / sim_monitor.STALL_TORQUE_NM
-    if frac < 0.30:
-        return (0.2, 0.8, 0.2, 1.0)
-    if frac <= 0.70:
-        return (0.9, 0.7, 0.1, 1.0)
-    return (0.9, 0.2, 0.1, 1.0)
+    return _BAND_RGBA[sim_monitor.band(torque_nm)]
 
 
 def apply_torque_colors(p, robot_id, joint_map):

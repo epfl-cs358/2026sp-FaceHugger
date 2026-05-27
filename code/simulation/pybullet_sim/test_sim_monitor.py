@@ -35,6 +35,28 @@ def test_format_status_quiet_when_within_limits():
     assert "[STALL]" not in line
 
 
+def test_band_boundaries():
+    assert m.CONT_TORQUE_NM < m.STALL_TORQUE_NM
+    assert m.band(0.0) == "green"
+    assert m.band(m.CONT_TORQUE_NM - 0.01) == "green"
+    assert m.band(m.CONT_TORQUE_NM) == "yellow"  # at continuous -> burst band
+    assert m.band(m.STALL_TORQUE_NM - 0.01) == "yellow"
+    assert m.band(m.STALL_TORQUE_NM) == "red"  # at stall -> saturated
+    assert m.band(-m.STALL_TORQUE_NM) == "red"  # uses |torque|
+
+
+def test_format_status_distinguishes_cont_and_stall():
+    torques = {
+        "burst": (m.CONT_TORQUE_NM + m.STALL_TORQUE_NM) / 2,  # yellow
+        "sat": m.STALL_TORQUE_NM,  # red
+        "ok": 0.1,  # green
+    }
+    line = m.format_status(1.0, torques)
+    assert "[CONT] burst" in line  # burst joint flagged over continuous, not stall
+    assert "[STALL] sat" in line  # saturated joint flagged at/over stall
+    assert "burst" not in line.split("[STALL]")[1]  # burst is not in the stall list
+
+
 def test_format_status_includes_per_leg_angles_when_given():
     torques = {"fr_link2_joint": 1.0}
     pos = {
