@@ -159,15 +159,62 @@ def _list_clips():
         print(f"  {i:2d}  {name}  ({frames} frames, {dur} ms)")
 
 
+# Where to point people when a dependency is missing. Descriptive, not a URL:
+# the wiki is hosted but its address is not pinned yet.
+TOOLCHAIN_DOCS = "the toolchain setup guide (wiki: guide/toolchain/)"
+SIM_INSTALL = (
+    "cd code/simulation && conda env create -f environment.yml "
+    "&& conda activate facehugger"
+)
+
+
+def _missing(mod):
+    import importlib.util
+
+    return importlib.util.find_spec(mod) is None
+
+
+def _die_missing(what, intro, fix, extra=None):
+    """Exit with a clear 'X not found. <fix>. Docs: ...' message."""
+    lines = [
+        "",
+        f"✗ {what} not found. {intro}",
+        f"  {fix}",
+        f"  Docs: {TOOLCHAIN_DOCS}",
+    ]
+    if extra:
+        lines.append(f"  {extra}")
+    sys.exit("\n".join(lines))
+
+
+def _require_sim_deps(need_build):
+    """Exit with an actionable message if the sim's Python deps are missing.
+    `need_build` is True when the firmware SIL is compiled (needs pybind11)."""
+    missing = ["pybullet"] if _missing("pybullet") else []
+    if need_build and _missing("pybind11"):
+        missing.append("pybind11")
+    if not missing:
+        return
+    extra = None
+    if "pybind11" in missing and "pybullet" not in missing:
+        extra = "Or skip the C++ toolchain: rerun with --python"
+    _die_missing(
+        ", ".join(missing), "Install the sim dependencies:", SIM_INSTALL, extra
+    )
+
+
 def cmd_sim(args):
     if getattr(args, "list_clips", False):
         _list_clips()
         return 0
-    if (
+    serving = bool(
         getattr(args, "serve", False)
         or getattr(args, "app", False)
         or getattr(args, "panel", False)
-    ):
+    )
+    # Default path (non --python) and any serve build the firmware SIL.
+    _require_sim_deps(need_build=serving or not getattr(args, "python_port", False))
+    if serving:
         # Drive the sim from an external client (app / panel) over the T: WebSocket
         # API instead of from CLI flags. GUI on by default; --headless turns it off.
         return _serve_session(
@@ -274,6 +321,10 @@ def _serve_session(*, host, port, gui, app, app_port, panel=False):
         app_dir = REPO_ROOT / "code" / "remote-control-app" / "MyApp"
         if not app_dir.is_dir():
             sys.exit(f"app dir not found: {app_dir}")
+        if shutil.which("npx") is None:
+            _die_missing(
+                "Node / npx", "Install Node.js 18+ (the app uses Expo):", "nodejs.org"
+            )
         print(f"Web app:   http://localhost:{app_port}  (auto-connects to the sim)")
         # Point the launched web app at the sim by default (config.ts reads these
         # EXPO_PUBLIC_ vars as its startup target). The Settings screen can still
@@ -329,6 +380,12 @@ def cmd_flash(args):
     fw_dir = REPO_ROOT / "code" / "firmware"
     if not fw_dir.is_dir():
         sys.exit(f"firmware dir not found: {fw_dir}")
+    if shutil.which("pio") is None:
+        _die_missing(
+            "PlatformIO (pio)",
+            "Install it:",
+            "pip install platformio  (or the VS Code PlatformIO extension)",
+        )
     target = [] if args.build_only else ["-t", "upload"]
     rc = _run(["pio", "run", "-e", args.env, *target], cwd=fw_dir)
     if rc != 0 or not args.monitor:
@@ -340,6 +397,10 @@ def cmd_app(args):
     app_dir = REPO_ROOT / "code" / "remote-control-app" / "MyApp"
     if not app_dir.is_dir():
         sys.exit(f"app dir not found: {app_dir}")
+    if shutil.which("npx") is None:
+        _die_missing(
+            "Node / npx", "Install Node.js 18+ (the app uses Expo):", "nodejs.org"
+        )
     url = f"http://localhost:{args.port}"
     print(f"Serving the remote-control app (Expo web) at {url}")
     print("Point it at the robot or the sim from the app's Settings screen.")
