@@ -47,8 +47,10 @@ export const useRobotConnection = () => {
             const { T, ...rest } = data;
             const status = rest as SystemStatus;
             setFsmState(status.s as FSMStatus);
-            setTofDistances(status.d);
-            setAMU(status.a);
+            // The sim has no ToF/AMU sensors, so it sends d/a as null. Guard the
+            // arrays so the status handler (setAMU destructures it) can't crash.
+            setTofDistances(Array.isArray(status.d) ? status.d : []);
+            setAMU(Array.isArray(status.a) ? status.a : [0, 0, 0, 0]);
             setGaitMode(status.g as GaitMode);
             setMovementProgress(status.pc);
             setErrorMessage(status.e ?? null);
