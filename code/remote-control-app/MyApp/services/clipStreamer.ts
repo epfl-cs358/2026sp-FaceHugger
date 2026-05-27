@@ -26,9 +26,14 @@ export const stopStream = () => {
   }
 };
 
-// Stream a bundled clip once, then call onDone. Cancels any clip already
-// streaming first. onDone also fires if streaming was already idle.
-export const streamClip = (clip: StreamClip, onDone: () => void) => {
+// Stream a bundled clip. By default plays once then calls onDone; with loop=true
+// it replays from frame 0 at each end and onDone never fires (stop with
+// stopStream). Cancels any clip already streaming first.
+export const streamClip = (
+  clip: StreamClip,
+  onDone: () => void,
+  loop: boolean = false,
+) => {
   stopStream();
   const frames = clip.frames;
   const last: Record<string, number> = {}; // delta cache: only resend changed channels
@@ -36,9 +41,13 @@ export const streamClip = (clip: StreamClip, onDone: () => void) => {
 
   const tick = () => {
     if (i >= frames.length) {
-      stopStream();
-      onDone();
-      return;
+      if (loop) {
+        i = 0; // replay from the top; keep streaming
+      } else {
+        stopStream();
+        onDone();
+        return;
+      }
     }
     const frame = frames[i++];
     // T:4 carries absolute servo angles, so the firmware invert flag can't act

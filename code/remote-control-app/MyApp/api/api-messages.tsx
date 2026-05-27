@@ -22,8 +22,17 @@ export const InvertRobotPacket = {T: 6, a: ActionTypes.INVERT_ROBOT} as ActionPa
 export const requestClipList = () =>
     sendCommand(JSON.stringify({ T: 8 }));
 
-export const playClip = (id: number) =>
-    sendCommand(JSON.stringify({ T: 7, c: id }));
+export const playClip = (id: number, loop: boolean = false) =>
+    sendCommand(JSON.stringify(loop ? { T: 7, c: id, loop: true } : { T: 7, c: id }));
+
+// Stop a (looping) firmware clip by preempting STATE_ACTION with an IDLE state.
+// The robot holds its last commanded pose; follow with Neutral stance to reset.
+export const stopClipPlayback = () =>
+    sendCommand(JSON.stringify({ T: 2, s: 0 }));
+
+// Runtime clip-playback smoothing (T:11): a in [0, 0.95]. Low = snappy.
+export const setClipSmoothing = (alpha: number) =>
+    sendCommand(JSON.stringify({ T: 11, a: alpha }));
 
 //Calibration packets
 export const calibrationPacket = (leg: number, servo: number, angle: number) =>
