@@ -616,6 +616,43 @@ def _exported_clips_dir(clip_name):
     return out
 
 
+def _exported_clips_root():
+    """animation/exported_clips/ (where the bundle clips_all.h lands)."""
+    return os.path.join(_animation_dir(), "exported_clips")
+
+
+def _repo_root():
+    """Repo root = the parent of animation/. The add-on assumes it runs from
+    a checkout (the .blend lives in animation/), which is the normal case."""
+    return os.path.dirname(_animation_dir())
+
+
+def _firmware_clips_dir():
+    """The firmware dir that holds clips_all.h (the on-board source of truth)."""
+    return os.path.join(_repo_root(), "code", "firmware", "src", "nervous_system")
+
+
+def _copy_bundle_to_firmware():
+    """Copy the freshly written exported_clips/clips_all.h over the firmware
+    copy. The firmware header is the same self-contained bundle format the
+    exporter writes, so this is a plain file copy. Returns the destination
+    path on success; raises ValueError (no bundle, or not a repo checkout) so
+    the caller can warn without failing the export."""
+    import shutil
+
+    src = os.path.join(_exported_clips_root(), "clips_all.h")
+    if not os.path.exists(src):
+        raise ValueError(f"no bundle to copy at {src}")
+    dest_dir = _firmware_clips_dir()
+    if not os.path.isdir(dest_dir):
+        raise ValueError(
+            f"firmware dir not found ({dest_dir}); not in a repo checkout?"
+        )
+    dest = os.path.join(dest_dir, "clips_all.h")
+    shutil.copyfile(src, dest)
+    return dest
+
+
 # ---------------------------------------------------------------------------
 # Pose Library — animation/poses.json (committed, like convention.json)
 # ---------------------------------------------------------------------------
@@ -2648,6 +2685,16 @@ class FH_OT_export_clip(bpy.types.Operator):
                     print(f"Regenerated clips_all.h from {len(names)} ticked clip(s)")
                     if skipped:
                         self.report({"WARNING"}, f"clips_all.h skipped: {skipped}")
+                    if scene.fh_copy_to_firmware:
+                        try:
+                            dest = _copy_bundle_to_firmware()
+                            bundle_note += " (copied to firmware)"
+                            self.report({"INFO"}, f"clips_all.h copied to {dest}")
+                            print(f"Copied clips_all.h to firmware: {dest}")
+                        except ValueError as e:
+                            self.report(
+                                {"WARNING"}, f"clips_all.h NOT copied to firmware: {e}"
+                            )
                 except ValueError as e:
                     self.report({"WARNING"}, f"clips_all.h NOT regenerated: {e}")
 
@@ -2719,6 +2766,16 @@ class FH_OT_export_selected(bpy.types.Operator):
                 print(f"Regenerated clips_all.h from {len(names)} ticked clip(s)")
                 if skipped:
                     self.report({"WARNING"}, f"clips_all.h skipped: {skipped}")
+                if scene.fh_copy_to_firmware:
+                    try:
+                        dest = _copy_bundle_to_firmware()
+                        bundle_note += " (copied to firmware)"
+                        self.report({"INFO"}, f"clips_all.h copied to {dest}")
+                        print(f"Copied clips_all.h to firmware: {dest}")
+                    except ValueError as e:
+                        self.report(
+                            {"WARNING"}, f"clips_all.h NOT copied to firmware: {e}"
+                        )
             except ValueError as e:
                 self.report({"WARNING"}, f"clips_all.h NOT regenerated: {e}")
 
@@ -2734,6 +2791,41 @@ class FH_OT_export_selected(bpy.types.Operator):
                 f"Exported {len(ok)} clip(s) ({', '.join(ok)}){bundle_note} → "
                 "animation/exported_clips/",
             )
+        return {"FINISHED"}
+
+
+class FH_OT_open_export_dir(bpy.types.Operator):
+    """Open animation/exported_clips/ in the OS file browser."""
+
+    bl_idname = "fh.open_export_dir"
+    bl_label = "Open Exports Folder"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        path = _exported_clips_root()
+        if not os.path.isdir(path):
+            self.report({"WARNING"}, f"Folder does not exist yet: {path}")
+            return {"CANCELLED"}
+        bpy.ops.wm.path_open(filepath=path)
+        return {"FINISHED"}
+
+
+class FH_OT_open_firmware_dir(bpy.types.Operator):
+    """Open the firmware clips folder (code/firmware/src/nervous_system/) in
+    the OS file browser, where the copied clips_all.h lands."""
+
+    bl_idname = "fh.open_firmware_dir"
+    bl_label = "Open Firmware Folder"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        path = _firmware_clips_dir()
+        if not os.path.isdir(path):
+            self.report(
+                {"WARNING"}, f"Firmware dir not found ({path}); not in a repo checkout?"
+            )
+            return {"CANCELLED"}
+        bpy.ops.wm.path_open(filepath=path)
         return {"FINISHED"}
 
 
@@ -2964,6 +3056,15 @@ class FH_PT_export(_FH_PT_child, bpy.types.Panel):
         col = layout.column(align=True)
         col.prop(context.scene, "fh_export_csv", text="CSV (raw angles)")
         col.prop(context.scene, "fh_export_header", text="C header (.h)")
+        if context.scene.fh_export_header:
+            sub = col.column(align=True)
+            crow = sub.row(align=True)
+            crow.separator()
+            crow.prop(
+                context.scene,
+                "fh_copy_to_firmware",
+                text="Copy clips_all.h to firmware",
+            )
         col.prop(context.scene, "fh_export_js", text="Browser JS (.js)")
         if context.scene.fh_export_js:
             sub = col.column(align=True)
@@ -2994,6 +3095,16 @@ class FH_PT_export(_FH_PT_child, bpy.types.Panel):
                 text=f"Export Selected Clips ({sel_count})",
                 icon="EXPORT",
             )
+
+        # Jump to the relevant folders in the OS file browser.
+        layout.separator()
+        frow = layout.row(align=True)
+        frow.operator(
+            FH_OT_open_export_dir.bl_idname, text="Exports", icon="FILE_FOLDER"
+        )
+        frow.operator(
+            FH_OT_open_firmware_dir.bl_idname, text="Firmware", icon="FILE_FOLDER"
+        )
 
 
 class FH_PT_display(_FH_PT_child, bpy.types.Panel):
@@ -3084,6 +3195,8 @@ CLASSES = (
     FH_OT_rename_clip,
     FH_OT_export_clip,
     FH_OT_export_selected,
+    FH_OT_open_export_dir,
+    FH_OT_open_firmware_dir,
     FH_OT_toggle_preview,
     FH_OT_sync_frame_range,
     # Panels: parent MUST be registered before its children so the
@@ -3140,6 +3253,16 @@ def register():
     bpy.types.Scene.fh_export_header = bpy.props.BoolProperty(
         name="Export C Header",
         description="Write the static C array (.h) of raw bone angles",
+        default=True,
+    )
+    bpy.types.Scene.fh_copy_to_firmware = bpy.props.BoolProperty(
+        name="Copy clips_all.h to firmware",
+        description=(
+            "After writing the bundle, copy clips_all.h straight into "
+            "code/firmware/src/nervous_system/ so the firmware picks it up "
+            "without a manual copy. Assumes the add-on runs from a repo "
+            "checkout; warns (does not fail) if the firmware dir is absent"
+        ),
         default=True,
     )
     bpy.types.Scene.fh_export_js = bpy.props.BoolProperty(
@@ -3246,6 +3369,7 @@ def unregister():
         "fh_max_simultaneous_servos",
         "fh_export_csv",
         "fh_export_header",
+        "fh_copy_to_firmware",
         "fh_export_js",
         "fh_export_js_loop",
         "fh_export_js_dryrun",
