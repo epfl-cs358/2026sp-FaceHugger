@@ -106,6 +106,33 @@ def test_trot_front_left_anchored_near_neutral():
     )
 
 
+# Servo index of each leg's thigh in the 12-angle vector (leg_id*3 + 1).
+_THIGH = {"FR": 1, "FL": 4, "BR": 7, "BL": 10}
+
+
+def test_trot_sideways_engages_the_thighs():
+    """A sideways trot command adds a lateral thigh sweep on top of the forward
+    motion, so the thighs sweep noticeably more than during a forward trot (where
+    the thigh only moves for foot lift). Confirms the activeX/crab path in tickTrot
+    is wired; with activeX==0 the forward trot is unchanged (see the mirror test).
+    """
+    from firmware_sil.sil_bridge import trace_gait
+
+    def max_thigh_range(direction):
+        fc = _fc_or_skip()
+        s = trace_gait(fc, "trot", direction=direction, steps=720, record_every=30)
+        return max(
+            max(x[1][i] for x in s) - min(x[1][i] for x in s) for i in _THIGH.values()
+        )
+
+    fwd = max_thigh_range("FW")
+    side = max_thigh_range("R")
+    assert side > fwd + 5, (
+        f"sideways thigh sweep ({side}) not greater than forward ({fwd}); "
+        f"lateral (activeX) path not engaging"
+    )
+
+
 def test_unknown_gait_name_rejected():
     from firmware_sil.sil_bridge import trace_gait
 

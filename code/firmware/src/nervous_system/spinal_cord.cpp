@@ -315,6 +315,7 @@ void SpinalCord::tickTrot() {
     constexpr float PERIOD_S    = 1.5f;
     constexpr float SCALE       = 0.80f;       // tunable: overall amplitude vs neutral (was 2/3)
     constexpr float YAW_GAIN    = 2.0f;
+    constexpr float LATERAL_STEP = 35.0f;      // tunable: sideways (crab) thigh-sweep amplitude
 
     // Phase offsets per leg index [FR, FL, RR, RL] — JS uses fr/bl=0.5, fl/br=0.0.
     static const float OFFSETS[LEG_COUNT] = { 0.5f, 0.0f, 0.0f, 0.5f };
@@ -328,16 +329,20 @@ void SpinalCord::tickTrot() {
     static const float HIP_IN[2]  = { 65.0f, 135.0f };
     static const float HIP_OUT[2] = { 25.0f, 170.0f };
 
-    // Magnitude of forward intent in [0, 1]; sign chooses direction.
+    // Magnitude of forward intent in [0, 1]; sign chooses direction. activeX is
+    // the sideways (crab) intent — sign chooses left/right. liftMag gates the foot
+    // lift on EITHER axis so a pure-sideways trot still picks the feet up.
     const float dirY = activeY;
     const float mag  = fminf(fabsf(dirY), 1.0f);
+    const float liftMag = fminf(1.0f, fmaxf(mag, fabsf(activeX)));
 
     const float t           = (millis() - gaitPhaseStartMs_) / 1000.0f;
     float globalPhase       = fmodf(t / PERIOD_S, 1.0f);
     if (dirY < 0.0f) globalPhase = 1.0f - globalPhase;  // backward = run cycle in reverse
 
     // Graceful stop on a clean phase boundary when the user released the stick.
-    if (!isMovingRequested && mag < 0.05f && fabsf(activeYaw) < 0.05f && globalPhase < 0.05f) {
+    if (!isMovingRequested && mag < 0.05f && fabsf(activeX) < 0.05f &&
+        fabsf(activeYaw) < 0.05f && globalPhase < 0.05f) {
         easeToNeutral(GAIT_STOP_EASE_MS);  // invert-aware glide to the standing pose
         robotState = STATE_STAND;          // actively hold the stand (no manual T:2 needed)
         return;
@@ -377,7 +382,7 @@ void SpinalCord::tickTrot() {
                 // arc, replacing the old rectangular lift block + mid-air hip snap.
                 const float swing = (legPhase - DUTY) / (1.0f - DUTY);
                 sh   = hipFront + (hipBack - hipFront) * swing;
-                lift = sinf(swing * (float)M_PI) * STEP_HEIGHT * mag;
+                lift = sinf(swing * (float)M_PI) * STEP_HEIGHT * liftMag;
             }
         } else {
             // Rear legs: continuous hip sweep scaled by forward magnitude only
@@ -389,7 +394,7 @@ void SpinalCord::tickTrot() {
             } else {
                 progress = (legPhase - DUTY) / (1.0f - DUTY);
                 sweep    = STEP_LENGTH * (-0.5f + progress) * mag;
-                lift     = sinf(progress * (float)M_PI) * STEP_HEIGHT * mag;
+                lift     = sinf(progress * (float)M_PI) * STEP_HEIGHT * liftMag;
             }
             // Per-leg sweep sign so the two rear shoulders mirror each other for a
             // straight trot (RR/BR +sweep, RL/BL -sweep). BR was un-mirrored
@@ -400,6 +405,18 @@ void SpinalCord::tickTrot() {
             if (i == LEG_RR) sh += sweep;
             else             sh -= sweep;  // RL/BL
         }
+
+        // Sideways (crab) thigh sweep — additive, so the joystick's X axis gives a
+        // sideways trot on top of the forward shoulder motion. Zero when activeX==0,
+        // so a straight forward trot is byte-identical. Same diagonal-pair phase as
+        // the trot; per-side sign matches tickGait's crab (FL/RL push one way, FR/RR
+        // the other). activeX's sign chooses left vs right.
+        float latTri;
+        if (legPhase < DUTY) latTri = 0.5f - (legPhase / DUTY);
+        else                 latTri = -0.5f + (legPhase - DUTY) / (1.0f - DUTY);
+        const float latSweep = LATERAL_STEP * latTri * activeX;
+        if (i == LEG_FL || i == LEG_RL) th -= latSweep;
+        else                            th += latSweep;
 
         // Lift applied to thigh (+) and knee (-), same convention as JS.
         th += lift;
