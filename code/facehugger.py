@@ -417,7 +417,10 @@ def main():
         description=__doc__.splitlines()[1],
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    sub = p.add_subparsers(dest="cmd", required=True)
+    # metavar omits the deprecated `serve` alias from the listing (it still works).
+    sub = p.add_subparsers(
+        dest="cmd", required=True, metavar="{urdf,sim,blender,flash,app}"
+    )
 
     pu = sub.add_parser("urdf", help="regenerate the URDF")
     pu.add_argument("--export", help="path to fusion_export.json")
@@ -425,7 +428,9 @@ def main():
     pu.add_argument("--out", help="output URDF path")
     pu.set_defaults(func=cmd_urdf)
 
-    ps = sub.add_parser("sim", help="run the PyBullet simulator")
+    ps = sub.add_parser(
+        "sim", help="run the robot in software (gaits/clips; --serve/--app to drive it)"
+    )
     ps.add_argument("--clip", metavar="NAME", help="play a named animation clip")
     ps.add_argument(
         "--loop",
@@ -455,10 +460,28 @@ def main():
         help="drive clips AND gaits with the Python re-port instead of the default "
         "exact compiled firmware (firmware_sil); use when you have no C++ toolchain",
     )
-    ps.add_argument("--walk", action="store_true")
-    ps.add_argument("--trot", action="store_true")
-    ps.add_argument("--headless", action="store_true")
-    ps.add_argument("--settle", type=float, default=None)
+    ps.add_argument(
+        "--walk",
+        action="store_true",
+        help="run the walk gait (firmware tickGait via the SIL)",
+    )
+    ps.add_argument(
+        "--trot",
+        action="store_true",
+        help="run the trot gait (firmware tickTrot via the SIL)",
+    )
+    ps.add_argument(
+        "--headless",
+        action="store_true",
+        help="no PyBullet GUI window (CI smoke check)",
+    )
+    ps.add_argument(
+        "--settle",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="seconds to hold the stance before the run starts (lets gravity settle)",
+    )
     ps.add_argument(
         "--list-clips",
         dest="list_clips",
@@ -567,10 +590,10 @@ def main():
     )
     pflash.set_defaults(func=cmd_flash)
 
-    pserve = sub.add_parser(
-        "serve",
-        help="deprecated alias for `sim --serve` (firmware-backed WebSocket API)",
-    )
+    # Deprecated alias for `sim --serve`. Omitting help= leaves it out of the
+    # listing (and the metavar above drops it from the choices line); it still
+    # works if typed.
+    pserve = sub.add_parser("serve")
     pserve.add_argument("--host", default="localhost")
     pserve.add_argument(
         "--port", type=int, default=8081, help="default 8081 (81 is privileged)"
@@ -585,7 +608,7 @@ def main():
         "--port",
         type=int,
         default=8080,
-        help="web host port (default 8080; the sim's serve uses 8081)",
+        help="web host port (default 8080; the sim's --serve uses 8081)",
     )
     papp.set_defaults(func=cmd_app)
 
