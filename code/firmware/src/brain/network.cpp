@@ -172,6 +172,14 @@ void handleParsedMessage(uint8_t num, uint8_t * payload) {
             webSocket.sendTXT(num, buf);
             break;
         }
+        case CMD_SET_SMOOTHING: {
+            // {T:11, a:<0..1>} — runtime clip-playback smoothing (EMA alpha).
+            // Higher = smoother but laggier; firmware clamps to a safe range.
+            if (doc["a"].is<float>()) {
+                spinalCord.setClipSmoothing(doc["a"].as<float>());
+            }
+            break;
+        }
         case CMD_TELEMETRY: { //this is the robot that sends it
             Serial.printf("FSM state: %d, Battery voltage: %lf, In stabilization mode: %s\n",
                 (int)doc["s"], (float)doc["b"], (int)doc["a"] ? "true": "false");

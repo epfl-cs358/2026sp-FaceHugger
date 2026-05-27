@@ -12,7 +12,8 @@ enum CommandType {
     CMD_PLAY_CLIP   = 7,
     CMD_LIST_CLIPS  = 8,
     CMD_SET_INVERT  = 9,
-    CMD_TELEMETRY   = 10
+    CMD_TELEMETRY   = 10,
+    CMD_SET_SMOOTHING = 11   // runtime clip-playback smoothing knob (EMA alpha)
 };
 
 // FSM States matching LaTeX documentation

@@ -26,6 +26,7 @@ class SpinalCord{
         GaitType currentGait() const;
         void processCommand(String dir);
         void playClip(uint8_t id, bool loop = false);
+        void setClipSmoothing(float alpha);   // T:11 runtime smoothing knob
         void setInverted(bool flag);
         Face& getFace() { return face; }
 
@@ -62,6 +63,8 @@ class SpinalCord{
                                             // until this time; real playback starts after
         bool clipLoop_ = false;             // when set, the clip replays from frame 0 at
                                             // its end instead of easing back to neutral
+        float clipEmaAlpha_ = 0.75f;        // clip-playback EMA smoothing; boot default,
+                                            // runtime-tunable via setClipSmoothing (T:11)
 
         // Vector timing and state
         float targetX;

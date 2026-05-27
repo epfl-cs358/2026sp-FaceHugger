@@ -14,8 +14,10 @@
 static const uint32_t CLIP_RETURN_MS = 500;  // ease to NEUTRAL at clip end
 
 // Per-channel EMA smoothing applied to clip-playback angles ONLY (inside tickClip).
-// smoothed = alpha*prev + (1-alpha)*target. Higher = smoother but laggier. Tunable.
-static const float CLIP_EMA_ALPHA = 0.75f;
+// smoothed = alpha*prev + (1-alpha)*target. Higher = smoother but laggier. The
+// live value lives in clipEmaAlpha_ (runtime-tunable via T:11; boot default in
+// spinal_cord.h). Clamped to [0, MAX] on set so playback can never fully stall.
+static const float CLIP_EMA_ALPHA_MAX = 0.95f;
 
 // T:6 (CMD_ACTION_SELECTION invert) is a stateless toggle; a duplicated/retried
 // packet would double-flip. Ignore a second invert within this window. The app
@@ -472,6 +474,16 @@ void SpinalCord::tickYawRotation() {
     }
 }
 
+void SpinalCord::setClipSmoothing(float alpha) {
+    // Runtime smoothing knob (T:11). Clamp to [0, MAX]: 0 = no smoothing
+    // (snappy, exact frames), higher = smoother but laggier. Capped below 1 so
+    // the EMA always converges and playback can't stall.
+    if (alpha < 0.0f) alpha = 0.0f;
+    if (alpha > CLIP_EMA_ALPHA_MAX) alpha = CLIP_EMA_ALPHA_MAX;
+    clipEmaAlpha_ = alpha;
+    Serial.printf("[clip] smoothing alpha = %.2f\n", clipEmaAlpha_);
+}
+
 void SpinalCord::playClip(uint8_t id, bool loop) {
     if (id >= FH_CLIP_COUNT) {
         Serial.printf("[clip] ignored: id %u >= %u\n", id, (unsigned)FH_CLIP_COUNT);
@@ -539,7 +551,7 @@ void SpinalCord::tickClip() {
             for (uint8_t i = 0; i < LEG_COUNT; ++i) {
                 for (uint8_t j = 0; j < 3; ++j)
                     clipSmoothed_[i][j] = emaStep(clipSmoothed_[i][j],
-                                                  a[i*3+j], CLIP_EMA_ALPHA);
+                                                  a[i*3+j], clipEmaAlpha_);
                 // EMA smooths the math-space angle; clampClipServos keeps the clip
                 // off each leg's mechanical stop (clip path only); invert (if any)
                 // applied last at the write point.
