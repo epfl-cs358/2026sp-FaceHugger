@@ -1,5 +1,8 @@
 title: Simulation
 nav:
+  - index.md
+  - cli.md
+  - pybullet-control.md
   - torque-analysis.md
   - torque-heatmap.md
   - torque_calculations.ipynb

@@ -65,31 +65,28 @@ FaceHugger uses two distinct angle spaces. Confusing them is the most common sou
 
 ### NEUTRAL Standing Pose
 
-This is the default standing posture, defined in math-space and indexed by firmware `LegId`. It is distinct from the calibration zero (math-space origin) described above: the values below are the math-space coordinates of the standing pose, not zeros. Source of truth: `code/firmware/src/nervous_system/spinal_cord.cpp`, `NEUTRAL[]` array (lines 17-22), physically tested on hardware.
+This is the default standing posture, defined in math-space and indexed by firmware `LegId`. It is distinct from the calibration zero (math-space origin) described above: the values below are the math-space coordinates of the standing pose, not zeros. Source of truth: `code/firmware/src/nervous_system/spinal_cord.cpp`, `NEUTRAL[]` array (lines 21-26).
 
 | Leg | LegId | Name | Shoulder (deg) | Thigh (deg) | Knee (deg) | Physical pose |
 |---|:---:|---|---|---|---|---|
 | 0 | FR | front-right | +45 | -60 | -37 | leg splayed right-forward, knee bent |
-| 1 | FL | front-left | +75 | -60 | -40 | leg splayed left-forward, knee bent |
+| 1 | FL | front-left | +135 | -60 | -40 | leg splayed left-forward, knee bent |
 | 2 | RR/BR | back-right | -45 | -50 | -50 | leg splayed right-back, knee bent |
 | 3 | RL/BL | back-left | -135 | -60 | -35 | leg splayed left-back, knee bent |
 
-Each leg's shoulder rest is derived from the FL value:
+Each leg's NEUTRAL shoulder equals that leg's **outward (flat-spread) direction** on the yaw circle: **FR +45°, FL +135°, BR −45°, BL −135°**. Since change B regularized FL (75° → 135°), *servo 90 now means "outward" for all four legs* — every leg's standing shoulder math-angle maps to servo 90, and the all-servos-90 pose is the symmetric outward "X" (the flat calibration pose). The thigh/knee values are per-leg physical-calibration choices, tuned on hardware.
+
+!!! warning "Change B hardware step pending"
+    FL's 75° → 135° move is committed in code, but its **hardware step — re-mounting the FL shoulder horn so servo 90 points outward — is not yet done**, and the FL clips have not been re-exported. Until both happen, the *running* robot still expects the old servo-75 FL standing pose, so the symmetric "X" holds in code only. FR/BR/BL are unaffected.
+
+Leg positions at NEUTRAL (top view, front at top):
 
 ```
-FR_shoulder = -FL_shoulder
-BL_shoulder = -wrap_pi(FL_shoulder + pi)
-BR_shoulder = +wrap_pi(FL_shoulder + pi)
-```
-
-Leg positions at NEUTRAL (top view):
-
-```
-    45 deg (FR)     75 deg (FL)
-      ->              <-
-        FaceHugger
-      <-              ->
-   -45 deg (BR)   -135 deg (BL)
+   +135 deg (FL)      +45 deg (FR)
+        \\               /
+            FaceHugger
+        /               \\
+   -135 deg (BL)      -45 deg (BR)
 ```
 
 ---
@@ -98,7 +95,7 @@ Leg positions at NEUTRAL (top view):
 
 `translateToServo()` converts math-space joint angles to servo-space 0-180 deg. It is not IK and not kinematics; it is purely a mounting remap that encodes which way each servo horn faces. The firmware runs this transform every tick in both gait and clip players.
 
-Source of truth: `code/firmware/src/nervous_system/motion_math.cpp`, lines 4-31.
+Source of truth: `code/firmware/src/nervous_system/motion_math.cpp`, `translateToServo()` (lines 22-50). The Blender exporter carries a byte-identical twin, `_frame_to_servo` (`fh_clip_panel.py`), kept in lockstep by `test_servo_parity.py`.
 
 Input: math-space angles `sh` (shoulder), `th` (thigh), `kn` (knee).
 Output: servo-space angles for hip, thigh, and knee servos.
@@ -106,13 +103,23 @@ Output: servo-space angles for hip, thigh, and knee servos.
 | Leg | hip_servo | thigh_servo | knee_servo |
 |-----|-----------|-------------|------------|
 | FR (LegId=0) | `90 + (sh - 45)` | `90 - th` | `90 + kn` |
-| FL (LegId=1) | `sh` | `90 + th` | `90 - kn` |
-| RR/BR (LegId=2) | `90 - (sh + 45)` | `90 + th` | `90 - kn` |
+| FL (LegId=1) | `90 + (sh - 135)` | `90 + th` | `90 - kn` |
+| RR/BR (LegId=2) | `90 + (sh + 45)` | `90 + th` | `90 - kn` |
 | RL/BL (LegId=3) | `90 + (sh + 135)` | `90 - th` | `90 + kn` |
 
-The shoulder offsets (+45, -45, etc.) encode each leg's mounting orientation. Hip and knee signs differ between L-side and R-side legs because servo horns face opposite directions. All transformations are deterministic and invertible.
+The shoulder offsets (−45, −135, +45, +135) just *centre* each leg's outward direction on servo 90 — note all four are `90 + (sh ± offset)` with a **+1 slope**: a positive `sh` (CCW yaw) drives every shoulder servo up. (FL's historic `hip = sh` special case is gone — change B; and BR's old `90 − (sh + 45)` mirror was removed when its shoulder was un-mirrored, 2026-05-25, since all four shoulder shafts share one vertical axis.) The **thigh/knee** signs, by contrast, *do* mirror on the {FL,BR} ↔ {FR,BL} diagonal because those servo horns face opposite ways:
+
+| leg | shoulder | thigh | knee |
+|-----|:--------:|:-----:|:----:|
+| FL  | +1 | +1 | −1 |
+| FR  | +1 | −1 | +1 |
+| BL  | +1 | −1 | +1 |
+| BR  | +1 | +1 | −1 |
+
+All transformations are deterministic and invertible.
 
 Example (FR at NEUTRAL): math `sh=45, th=-60, kn=-37` -> servo `hip=90+(45-45)=90, thigh=90-(-60)=150, knee=90+(-37)=53`.
+Example (FL at NEUTRAL, post-B): math `sh=135, th=-60, kn=-40` -> servo `hip=90+(135-135)=90, thigh=90+(-60)=30, knee=90-(-40)=130`.
 
 ---
 
