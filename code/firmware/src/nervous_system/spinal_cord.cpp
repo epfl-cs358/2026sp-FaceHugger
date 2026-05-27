@@ -472,7 +472,7 @@ void SpinalCord::tickYawRotation() {
     }
 }
 
-void SpinalCord::playClip(uint8_t id) {
+void SpinalCord::playClip(uint8_t id, bool loop) {
     if (id >= FH_CLIP_COUNT) {
         Serial.printf("[clip] ignored: id %u >= %u\n", id, (unsigned)FH_CLIP_COUNT);
         return;
@@ -481,6 +481,7 @@ void SpinalCord::playClip(uint8_t id) {
         Serial.printf("[clip] ignored: '%s' has 0 frames\n", FH_CLIPS[id].name);
         return;
     }
+    clipLoop_ = loop;
     uint32_t now = millis();
     clipState_.clipId      = id;
     // Real playback starts after the pre-roll ease, so the clip clock begins then.
@@ -508,8 +509,9 @@ void SpinalCord::playClip(uint8_t id) {
         legs[i]->setJointAnglesTimed(f0.hip, f0.thigh, f0.knee, CLIP_PREROLL_MS);
     }
     robotState = STATE_ACTION;   // pre-empts any running gait (single motion owner)
-    Serial.printf("[clip] play %s (%u frames)\n",
-                  FH_CLIPS[id].name, FH_CLIPS[id].frame_count);
+    Serial.printf("[clip] play %s (%u frames)%s\n",
+                  FH_CLIPS[id].name, FH_CLIPS[id].frame_count,
+                  loop ? " [loop]" : "");
 }
 
 void SpinalCord::tickClip() {
@@ -547,10 +549,21 @@ void SpinalCord::tickClip() {
                                      clipSmoothed_[i][2])));
             }
             if (step.action == CLIP_ACT_BEGIN_RETURN) {
-                // Final pose applied; start the non-blocking ease to the (invert-aware)
-                // neutral — so a clip that ends while inverted glides to the inverted
-                // neutral instead of snapping upright.
-                easeToNeutral(CLIP_RETURN_MS);
+                if (clipLoop_) {
+                    // Loop: the final pose was just applied; replay from frame 0
+                    // instead of returning to neutral. Reset the clip clock + cursor
+                    // and stay in PLAYING; the EMA carries over so the wrap is
+                    // smoothed. Stop by sending any other motion (gait / T:2 / a new
+                    // clip), which preempts STATE_ACTION.
+                    clipState_.clipStartMs = millis();
+                    clipState_.cursor      = 0;
+                    clipState_.phase       = CLIP_PLAYING;
+                } else {
+                    // Start the non-blocking ease to the (invert-aware) neutral — so a
+                    // clip that ends while inverted glides to the inverted neutral
+                    // instead of snapping upright.
+                    easeToNeutral(CLIP_RETURN_MS);
+                }
             }
             break;
         }

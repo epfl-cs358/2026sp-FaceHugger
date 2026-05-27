@@ -25,7 +25,7 @@ class SpinalCord{
         void setGait(GaitType g);
         GaitType currentGait() const;
         void processCommand(String dir);
-        void playClip(uint8_t id);
+        void playClip(uint8_t id, bool loop = false);
         void setInverted(bool flag);
         Face& getFace() { return face; }
 
@@ -60,6 +60,8 @@ class SpinalCord{
                                             // seeded from frame 0 on playClip()
         uint32_t clipPrerollUntilMs_ = 0;   // playClip eases the live pose into frame 0
                                             // until this time; real playback starts after
+        bool clipLoop_ = false;             // when set, the clip replays from frame 0 at
+                                            // its end instead of easing back to neutral
 
         // Vector timing and state
         float targetX;

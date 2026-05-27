@@ -157,8 +157,11 @@ void handleParsedMessage(uint8_t num, uint8_t * payload) {
         case CMD_PLAY_CLIP: {
             if (doc["c"].is<int>()) {
                 int c = doc["c"];
+                // Optional "loop": true replays the clip until another motion
+                // command preempts it (default false = play once).
+                bool loop = doc["loop"].is<bool>() && doc["loop"].as<bool>();
                 if (c >= 0 && c < 256) {
-                    spinalCord.playClip((uint8_t)c);
+                    spinalCord.playClip((uint8_t)c, loop);
                 }
             }
             break;
