@@ -28,11 +28,15 @@ def _safe(name):
 
 def main():
     fh = load_fh_sim()
-    fc = fh.FirmwareControl()
     GOLDEN_DIR.mkdir(exist_ok=True)
 
     index = {}
-    for name in fc.clip_names():
+    # A fresh FirmwareControl per clip so the clip pre-roll always eases from the
+    # same default pose (the clip suite also makes one per clip). Reusing one
+    # instance would start each pre-roll from the previous clip's leftover pose,
+    # making the trace order-dependent.
+    for name in fh.FirmwareControl().clip_names():
+        fc = fh.FirmwareControl()
         samples = trace_clip(fc, name, record_every=RECORD_EVERY)
         path = GOLDEN_DIR / f"{_safe(name)}.json"
         payload = {

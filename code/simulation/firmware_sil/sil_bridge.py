@@ -285,14 +285,17 @@ def build_telemetry_frame(fc, p, robot_id, joint_map, t_s, oor=None):
     return {"t": round(t_s, 4), "joints": joints}
 
 
-def trace_clip(fc, clip_name, record_every=24, step_hz=240):
+def trace_clip(fc, clip_name, record_every=24, step_hz=240, preroll_ms=200):
     """Deterministic servo-angle trace of a clip through the firmware.
 
-    Ticks the firmware at `step_hz` over the clip's duration (t_ms = step*1000/hz)
-    and records the 12 servo angles (whole degrees, as the robot receives them)
-    every `record_every` steps. Used by both the golden generator and the clip
-    suite, so they tick the *identical* sequence — the trace is a pure function of
-    the firmware code + the clip data, making any servo-angle change detectable.
+    Ticks the firmware at `step_hz` over the clip's duration plus `preroll_ms`
+    (t_ms = step*1000/hz) and records the 12 servo angles (whole degrees, as the
+    robot receives them) every `record_every` steps. The window includes the clip
+    pre-roll (the eased glide from the live pose into frame 0 that playClip starts
+    with), so the full motion is captured. Used by both the golden generator and
+    the clip suite, so they tick the *identical* sequence — the trace is a pure
+    function of the firmware code + the clip data, making any servo-angle change
+    detectable. `preroll_ms` must match the firmware CLIP_PREROLL_MS.
 
     Returns: list of [t_ms, [12 int degrees]].
     """
@@ -300,6 +303,7 @@ def trace_clip(fc, clip_name, record_every=24, step_hz=240):
     if cid < 0:
         raise KeyError(f"clip {clip_name!r} not found")
     duration_ms = fc.clip_duration_ms(cid)
+    end_ms = duration_ms + preroll_ms
     fc.set_clock_ms(0)
     fc.play_clip(cid)
     samples = []
@@ -309,7 +313,7 @@ def trace_clip(fc, clip_name, record_every=24, step_hz=240):
         fc.tick(t_ms)
         if step % record_every == 0:
             samples.append([t_ms, [int(round(a)) for a in fc.servo_angles()]])
-        if t_ms >= duration_ms:
+        if t_ms >= end_ms:
             break
         step += 1
     return samples

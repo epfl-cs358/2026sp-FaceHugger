@@ -28,6 +28,10 @@ static const uint32_t INVERT_EASE_MS = 300;
 // Glide time when a gait stops gracefully and settles to the standing pose.
 static const uint32_t GAIT_STOP_EASE_MS = 300;
 
+// Glide time when a clip starts: ease from the live pose into the clip's first
+// frame before real playback begins, so a clip never snaps from the current pose.
+static const uint32_t CLIP_PREROLL_MS = 200;
+
 // Gait parameters (step values are in degrees, pre-scaled to 2/3 of raw JS values).
 // Offsets order: [LEG_FR, LEG_FL, LEG_RR, LEG_RL]
 static const GaitParams GAITS[] = {
@@ -465,8 +469,11 @@ void SpinalCord::playClip(uint8_t id) {
         Serial.printf("[clip] ignored: '%s' has 0 frames\n", FH_CLIPS[id].name);
         return;
     }
+    uint32_t now = millis();
     clipState_.clipId      = id;
-    clipState_.clipStartMs = millis();
+    // Real playback starts after the pre-roll ease, so the clip clock begins then.
+    clipPrerollUntilMs_    = now + CLIP_PREROLL_MS;
+    clipState_.clipStartMs = clipPrerollUntilMs_;
     clipState_.returnStartMs = 0;
     clipState_.cursor      = 0;
     clipState_.phase       = CLIP_PLAYING;
@@ -475,6 +482,19 @@ void SpinalCord::playClip(uint8_t id) {
     for (uint8_t i = 0; i < LEG_COUNT; ++i)
         for (uint8_t j = 0; j < 3; ++j)
             clipSmoothed_[i][j] = FH_CLIPS[id].frames[0].a[i * 3 + j];
+    // Pre-roll: ease from whatever pose the robot is holding into frame 0's pose
+    // (same servo target the first playback tick would apply), so the clip glides
+    // in instead of snapping. Real playback begins once the ease completes.
+    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+    for (uint8_t i = 0; i < LEG_COUNT; ++i) {
+        ServoTriple f0 = applyInvert(
+            clampClipServos(translateToServo(i,
+                FH_CLIPS[id].frames[0].a[i * 3 + 0],
+                FH_CLIPS[id].frames[0].a[i * 3 + 1],
+                FH_CLIPS[id].frames[0].a[i * 3 + 2])),
+            isInverted);
+        legs[i]->setJointAnglesTimed(f0.hip, f0.thigh, f0.knee, CLIP_PREROLL_MS);
+    }
     robotState = STATE_ACTION;   // pre-empts any running gait (single motion owner)
     Serial.printf("[clip] play %s (%u frames)\n",
                   FH_CLIPS[id].name, FH_CLIPS[id].frame_count);
@@ -482,6 +502,14 @@ void SpinalCord::playClip(uint8_t id) {
 
 void SpinalCord::tickClip() {
     Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+
+    // Pre-roll: glide from the pose we were holding into frame 0 before playback.
+    // Just advance the eased move; do not run the clip clock yet.
+    if (millis() < clipPrerollUntilMs_) {
+        for (uint8_t i = 0; i < LEG_COUNT; ++i) legs[i]->tickEase();
+        return;
+    }
+
     const FhClip& clip = FH_CLIPS[clipState_.clipId];
 
     ClipStep step = clipPlayerStep(&clipState_, millis(),

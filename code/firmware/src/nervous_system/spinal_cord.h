@@ -58,6 +58,8 @@ class SpinalCord{
         ClipState clipState_;   // pure lifecycle state (see motion_math.h)
         float clipSmoothed_[LEG_COUNT][3];  // per-channel EMA state for clip playback;
                                             // seeded from frame 0 on playClip()
+        uint32_t clipPrerollUntilMs_ = 0;   // playClip eases the live pose into frame 0
+                                            // until this time; real playback starts after
 
         // Vector timing and state
         float targetX;
