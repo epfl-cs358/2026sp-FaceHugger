@@ -58,4 +58,4 @@ A sudden "forward" command therefore ramps the robot up over roughly 10 ticks (1
 | `leg.cpp/.h` | Per-leg pose application, `translateToServo()` remap, `constrain(0,180)` safety |
 | `servo.cpp/.h` | PCA9685 I2C driver, PWM pulse mapping |
 
-For the full motion pipeline (gait phases, clip interpolation, yaw rotation, and the wall-flip mechanic) see [motion-engine.md](motion-engine.md). For the FSM states, transition conditions, and signal pipelines, see [fsm-states.md](fsm-states.md).
+For the full motion pipeline (gait phases, clip interpolation, yaw rotation, and the invert pose-mirror) see [motion-engine.md](motion-engine.md). For the FSM states, transition conditions, and signal pipelines, see [fsm-states.md](fsm-states.md).

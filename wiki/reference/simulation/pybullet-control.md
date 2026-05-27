@@ -48,7 +48,7 @@ python facehugger.py serve --host 0.0.0.0 --gui
 Two clients can drive it:
 
 - **`tools/robot_control_panel.html`**: a single-file, no-build panel. Set the target to `ws://localhost:8081`, then use one button per command (list/play clips, set gait, move, invert, calibrate). Direction buttons auto-repeat while held (to beat the deadman), and a sticky rail shows all-leg telemetry.
-- **The real mobile app** (`code/remote-control-app/MyApp`): set `webSocketPort = 8081` and `webSocketIP` to the dev machine's LAN IP in `config/config.ts`, run `serve --host 0.0.0.0`, and the app drives the sim exactly as it drives the robot. Revert the port to `81` to target hardware again.
+- **The real mobile app** (`code/remote-control-app/MyApp`): run `serve --host 0.0.0.0`, then in the app's **Settings** screen tap the **Simulator** preset (or enter the dev machine's LAN IP and port `8081`) and the app drives the sim exactly as it drives the robot. Tap the **Robot** preset to target hardware again. The startup default lives in `config/config.ts` (`DEFAULT_IP` / `DEFAULT_PORT`).
 
 !!! note "The deadman is real"
     A single move command stops after ~500 ms (the firmware deadman), and a gait does nothing until a gait is *also* selected. This is faithful firmware behaviour, not a sim quirk. The panel/app must re-issue a held direction, and you must set a gait (`T:5`) before moving.

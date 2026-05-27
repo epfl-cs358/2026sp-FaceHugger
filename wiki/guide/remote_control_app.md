@@ -68,8 +68,8 @@ The ESP32 creates its own Wi-Fi access point, so your phone must join that netwo
     !!! example "Photo placeholder"
         *Add a screenshot here: app header showing the green "Connected" pill and live telemetry bar.*
 
-!!! tip "Fixed IP: no configuration needed"
-    The ESP32 AP is always at `192.168.4.1`. The app is pre-configured to connect there. You do not need to look up or type any IP address.
+!!! tip "Default needs no configuration"
+    The ESP32 AP is always at `192.168.4.1`, and the app's startup default points there, so connecting to the robot needs no setup. To target the simulator or a different address, use the **Settings** screen (see [Changing the connection target](#changing-the-connection-target-ip-and-port)).
 
 ## App overview
 
@@ -135,12 +135,12 @@ One-shot commands that put the robot into `STATE_ACTION`.
 
 | Button | What it does |
 |---|---|
-| **Invert robot** | Triggers the wall-flip / inversion maneuver. A confirmation prompt appears before the command is sent. |
+| **Invert robot** | Toggles the inverted (upside-down) flag and flips the current pose in place, mirroring the pitch joints and easing over ~300 ms. Press again to flip back. A confirmation prompt appears before the command is sent. |
 | **Rest pose** | Drives all 12 servos to 90°, a neutral reset useful before calibration. |
 | **Neutral stance** | Brings the robot to its standard standing pose using the default angles from the firmware. |
 
-!!! warning "Invert requires sufficient battery"
-    The firmware gates `STATE_ACTION` on battery voltage. If the Invert button does nothing, check the battery charge.
+!!! note "Invert mirrors the live pose, it is not a self-righting maneuver"
+    Invert flips whatever pose the robot is currently holding (pitch mirrored, shoulder unchanged); it does not run an authored get-up sequence. It is meant for driving while physically upside-down. There is no automatic orientation sensing yet, so flip it manually to match the robot's real orientation.
 
 ## Page 3: Individual Control
 
@@ -162,15 +162,13 @@ Each tap sends a single calibration packet to that servo. The input field rememb
 !!! tip "Use this page during servo calibration"
     After assembly, send each servo to 90° with the Rest pose button (Page 2), then use this page to fine-tune individual joints. See [Calibration](calibration.md) for the full procedure.
 
-## Changing the robot's IP address
+## Changing the connection target (IP and port)
 
-The target IP is set in `code/remote-control-app/MyApp/config/config.ts`:
+The app connects to one WebSocket target, and you can change it at runtime from the **Settings** screen (gear icon): tap the **Robot** preset (`192.168.4.1:81`, the ESP32 AP) or the **Simulator** preset (`localhost:8081`, the PyBullet `serve`), or type any IP and port and tap **Connect**. Switching reconnects immediately.
 
-```ts
-export const webSocketIP = "192.168.4.1"  // default ESP32 AP gateway
-```
+You only need to leave the Robot preset if the ESP32 is on a router in station mode (use the IP the router assigned, from the serial monitor) or if you are driving the [simulator](../reference/simulation/pybullet-control.md#serve-drive-the-sim-like-the-robot).
 
-You only need to change this if the robot is connected to a router in station mode rather than acting as its own AP. In that case, find the IP the router assigned to the ESP32 from the serial monitor and update this value.
+The startup default and the two presets are defined in `code/remote-control-app/MyApp/config/config.ts` (`DEFAULT_IP` / `DEFAULT_PORT`, `ROBOT_*`, `SIM_*`). When running the app as a web page, the host port is set by the `--port` flag in the `web` npm script (`expo start --web --port 8080`); edit that number, or run `npx expo start --web --port <p>`.
 
 ## Troubleshooting
 
@@ -179,7 +177,7 @@ You only need to change this if the robot is connected to a router in station mo
 | Header pill stays red | Phone is not on the robot's Wi-Fi network | Open Wi-Fi settings and join the FaceHugger AP |
 | App connects but robot doesn't respond to joystick | Robot is still in `STATE_IDLE` | Swipe to the Remote Control tab, which triggers `STATE_WALK` |
 | Robot stops moving after ~2 seconds of holding still | Firmware 2-second idle timeout (intentional) | Keep dragging the joystick to sustain movement |
-| Invert button does nothing | Battery voltage below the action gate threshold | Charge or replace the battery |
+| Invert button does nothing | A second press within 250 ms is debounced; or the robot was upright so the mirrored pose looked wrong | Wait a moment between presses; flip only when the robot is actually upside-down |
 | Telemetry bar stays hidden after connecting | `T:10` status packets not arriving | Check the serial monitor, as the firmware may have crashed; power-cycle the robot |
 | Expo Go can't load the app (version mismatch) | Expo Go is outdated | Update Expo Go from the App Store / Play Store, then re-run `npm run start` |
 | `npm install` fails with native module errors | Node version too old | Use Node 18+; run `node --version` to check |

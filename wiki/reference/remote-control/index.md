@@ -8,7 +8,7 @@ The app provides three control screens, each mapped to a robot FSM state. Switch
 
 - **GaitControl**: walk control with a joystick and TROT/CRAB selection (`STATE_WALK`; commands `T:1`, `T:5`).
 - **LegControl**: per-leg, per-servo calibration buttons (`STATE_IDLE`; command `T:4`).
-- **Actions**: one-shot maneuvers including the invert-robot flip with a confirmation dialog (`STATE_ACTION`; command `T:6`).
+- **Actions**: one-shot clips, plus the invert toggle that mirrors the robot's current pose (with a confirmation dialog). Invert is command `T:6`; it is a latching toggle, not an FSM state.
 
 ## Tech stack
 

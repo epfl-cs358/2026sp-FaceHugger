@@ -11,9 +11,9 @@ stateDiagram-v2
     IDLE --> WALK : CMD_FSM_STATE(T:2 s=1)\nor CMD_GAIT_MODE(T:5)
     WALK --> IDLE : graceful stop at\nphase boundary
 
-    IDLE --> ACTION : CMD_PLAY_CLIP(T:7)\nor CMD_ACTION_SELECTION(T:6)
+    IDLE --> ACTION : CMD_PLAY_CLIP(T:7)\nor CMD_FSM_STATE(T:2 s=2)
     WALK --> ACTION : CMD_PLAY_CLIP(T:7)\n(pre-empts gait)
-    ACTION --> IDLE : clip ends + return-to-stand\n(500 ms ease)\nor invert completes
+    ACTION --> IDLE : clip ends + return-to-stand\n(500 ms ease)
 
     IDLE --> REST : CMD_FSM_STATE(T:2 s=4)\nor relax()
     REST --> IDLE : CMD_FSM_STATE(T:2 s=0)
@@ -25,8 +25,8 @@ stateDiagram-v2
 
     note right of ACTION
         Entered via two triggers:
-        T:6 (invert-robot / wall-flip)
         T:7 (play animation clip)
+        T:2 s=2 (wallFlip, plays a clip)
     end note
 
     note right of FAILSAFE
@@ -51,21 +51,27 @@ WALK drives the looping locomotion cycle. The selected gait (WALK, TROT, or CRAB
 
 **Motion:** direction is set via `CMD_MOVE` (T:1). Input is smoothed at alpha = 0.1 per tick. The deadman switch zeros targets after 500 ms of silence. Graceful stop waits for the active vector to be near zero and `globalPhase < 0.05` before returning all legs to NEUTRAL and entering IDLE. If `|activeYaw| > 0.05`, `tickYawRotation()` overrides the selected gait and spins the robot in place.
 
-All gaits follow the same pipeline: sample joint angles in math-space from `NEUTRAL[]` plus deltas, apply the `isInverted` flip to thigh/knee if wall-flip is active, call `translateToServo(legId, sh, th, kn)`, then write servo angles via `leg[i]->setJointAngles()`.
+All gaits follow the same pipeline: sample joint angles in math-space from `NEUTRAL[]` plus deltas, apply the `isInverted` pitch flip to thigh/knee when the robot is inverted, call `translateToServo(legId, sh, th, kn)`, then write servo angles via `leg[i]->setJointAngles()`. Because every motion path runs through this same `applyServos` step, the robot can locomote while inverted.
 
 **Exit:** `CMD_PLAY_CLIP` (T:7) -> STATE_ACTION (clip pre-empts gait); movement released and clean phase boundary -> IDLE; `CMD_FSM_STATE` (T:2, s:0) -> IDLE; `CMD_FSM_STATE` (T:2, s:4) -> REST.
 
 ## ACTION
 
-ACTION plays a single-shot authored clip or applies the invert-robot wall-flip transformation. Clips pre-empt gaits from any state. On clip completion the robot automatically eases back to neutral standing over 500 ms, then the FSM returns to IDLE.
+ACTION plays a single-shot authored clip. Clips pre-empt gaits from any state. On clip completion the robot automatically eases back to neutral standing over 500 ms, then the FSM returns to IDLE.
 
-**Enter:** `CMD_PLAY_CLIP` (T:7, `{"c": <clip_id>}`) -> CLIP_PLAYING phase; `CMD_ACTION_SELECTION` (T:6, `{"a": 0}`) -> toggle `isInverted` and apply flip pose.
+**Enter:** `CMD_PLAY_CLIP` (T:7, `{"c": <clip_id>}`) -> CLIP_PLAYING phase; `CMD_FSM_STATE` (T:2, `{"s": 2}`) calls `wallFlip()`, which enters STATE_ACTION to play a clip. (Historically "wall flip" was a hard-coded animation; it is now just a clip played through STATE_ACTION.)
 
 **Clip playback:** the clip player runs a three-phase lifecycle. In CLIP_PLAYING, each tick calls `clipPlayerStep()` which queries elapsed time and calls `clipPoseAt()` to linearly interpolate 12 math-space angles from the baked frame data. When `elapsed >= duration_ms`, the final frame is applied and the player moves to CLIP_RETURNING. In CLIP_RETURNING, each leg independently eases to NEUTRAL over `CLIP_RETURN_MS` (500 ms) via non-blocking per-servo easing. When the ease completes, the phase advances to CLIP_DONE and the next tick transitions `robotState` to STATE_IDLE.
 
-**Invert-robot:** `invertRobot()` toggles `isInverted`. When toggling on, hard-coded servo-space angles are written directly (not eased): FR (90, 30, 127), FL (75, 150, 50), RR (90, 140, 40), RL (90, 30, 125). When toggling off, all legs call `returnToDefaultAngles()`. The gait phase timer is reset either way so subsequent gait starts fresh.
+**Exit:** clip end + return-to-stand complete -> IDLE (automatic); `CMD_FSM_STATE` (T:2, s:1) or `CMD_GAIT_MODE` (T:5) pre-empts and enters WALK.
 
-**Exit:** clip end + return-to-stand complete -> IDLE (automatic); `CMD_ACTION_SELECTION` (T:6) toggles and returns to standing pose; `CMD_FSM_STATE` (T:2, s:1) or `CMD_GAIT_MODE` (T:5) pre-empts and enters WALK.
+## Invert (not a state)
+
+Invert is an independent latching toggle, not an FSM state and not an ACTION maneuver. `CMD_ACTION_SELECTION` (T:6, `{"a": 0}`) calls `invertRobot()`, which flips the latching `isInverted` flag; `CMD_SET_INVERT` (T:9) calls `setInverted(bool)` to set the flag explicitly (a no-op if unchanged). Neither command changes `robotState`: the robot stays in whatever state it was already in.
+
+Toggling invert mirrors whatever pose the robot is currently holding, in place: it reads each servo's current angle and flips the pitch joints only (`180 - angle` on thigh and knee; shoulder and hip are left unchanged), easing to the mirrored pose over roughly 300 ms. There are no hard-coded inverted-pose angles, and toggling off mirrors the current pose the same way toggling on does (it does not call `returnToDefaultAngles()`). The gait phase timer is reset and the eye sprite is updated (confused while inverted, front otherwise). A duplicate T:6 within 250 ms is debounced.
+
+Because `isInverted` is latching and every motion path applies the same pitch mirror, the robot keeps the mirror through gaits, clips, and standing, so it can locomote upside-down.
 
 ## REST
 
@@ -73,7 +79,7 @@ REST holds all servos at 90° (mid-point of the 0-180° physical range). This is
 
 **Enter:** `CMD_FSM_STATE` (T:2, `{"s": 4}`); the `relax()` method called from a serial or BLE UI.
 
-**Exit:** `CMD_FSM_STATE` (T:2, s:0 or s:1) -> IDLE or WALK; `CMD_PLAY_CLIP` (T:7) -> STATE_ACTION; `CMD_ACTION_SELECTION` (T:6) -> STATE_ACTION.
+**Exit:** `CMD_FSM_STATE` (T:2, s:0 or s:1) -> IDLE or WALK; `CMD_PLAY_CLIP` (T:7) -> STATE_ACTION.
 
 ## FAILSAFE
 
@@ -115,7 +121,7 @@ flowchart TD
     E --> F["Input smoothing\nactiveX/Y/Yaw += (target - active) × 0.1\nα = 0.1"]
     F --> G["tickGait() or tickTrot()\nper gait type"]
     G --> H["Compute per-leg phase\nstance / swing\nmath-space angles (sh, th, kn)"]
-    H --> I["Apply isInverted flip\nif wall-walking active"]
+    H --> I["Apply isInverted pitch flip\nif inverted"]
     I --> J["translateToServo(i, sh, th, kn)\n-> servo-space angles"]
     J --> K["leg[i]->setJointAngles()\nwrite via PCA9685 -> servo"]
     K --> L{Deadman >\n500 ms AND\nphase < 5%?}

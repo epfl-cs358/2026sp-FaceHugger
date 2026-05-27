@@ -69,7 +69,7 @@ python facehugger.py serve --host 0.0.0.0 --gui  # reachable from a phone
 Two clients can drive it:
 
 - **The browser control panel** (`tools/robot_control_panel.html`) was a quick proof-of-concept for poking the sim: open it, point it at `ws://localhost:8081`, and use one button per command. Direction buttons auto-repeat while held.
-- **The mobile app** (`code/remote-control-app/MyApp`): set `webSocketPort = 8081` and `webSocketIP` to your dev machine's LAN IP in `config/config.ts`, run `serve --host 0.0.0.0`, and the app drives the sim exactly as it drives the robot. Set the port back to `81` to target hardware.
+- **The mobile app** (`code/remote-control-app/MyApp`): run `serve --host 0.0.0.0`, then in the app's **Settings** screen tap the **Simulator** preset (or type the dev machine's LAN IP and port `8081`); the app drives the sim exactly as it drives the robot. Tap the **Robot** preset to target hardware.
 
 Two faithful firmware behaviors to expect: a held direction stops after ~500 ms unless re-sent (the deadman), and moving does nothing until you select a gait (`T:5`). The panel and app handle the re-send for you. See [Controlling the simulation](pybullet-control.md#serve-drive-the-sim-like-the-robot).
 

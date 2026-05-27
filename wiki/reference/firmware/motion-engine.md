@@ -150,9 +150,11 @@ if (step.action == CLIP_ACT_BEGIN_RETURN) {
 
 Each servo independently eases to its NEUTRAL angle. The clip does not loop; playback completes and the FSM transitions to STATE_IDLE automatically.
 
-### invertRobot / wall-flip
+### invertRobot (invert toggle)
 
-`invertRobot()` toggles the `isInverted` flag and applies hard-coded servo-space angles to place the robot against a wall. When toggling on, specific per-leg angles are written directly (FR: 90/30/127, FL: 75/150/50, RR: 90/140/40, RL: 90/30/125). When toggling off, all legs return to `returnToDefaultAngles()`. The flip is instantaneous, not eased. While `isInverted` is active, the gait engine negates thigh and knee in math-space so the robot can locomote while upside-down.
+`invertRobot()` (`T:6`) toggles the `isInverted` flag and flips the pose the robot is currently holding, in place: it reads each servo's current angle, mirrors the pitch joints (`180 - angle` on thigh and knee, shoulder unchanged), and eases there over ~300 ms via `setJointAnglesTimed`. The earlier hard-coded inverted-pose table was dropped; the flip is now computed from the live pose and eased, not an instant snap to fixed angles. `setInverted()` (`T:9`) does the same but sets the flag explicitly instead of toggling. A duplicate `T:6` within 250 ms is debounced.
+
+While `isInverted` is active, every motion source routes through `applyServos`, which applies the same pitch mirror, so gaits, clips, and the standing pose are all mirrored and the robot can locomote upside-down. Because the eased flip uses a timed move, `update()` advances `tickEase()` outside the clip path each loop, and a direct servo write (a gait or stand tick) supersedes a pending ease, so an in-progress flip is overridden cleanly when motion resumes.
 
 ## Motion architecture summary
 

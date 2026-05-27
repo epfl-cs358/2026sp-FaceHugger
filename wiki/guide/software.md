@@ -28,7 +28,7 @@ The firmware lives under `code/firmware/src/`: four module folders plus the top-
 
 **`nervous_system/`**
 
-- `spinal_cord.cpp/h`: software abstraction for full limb coordination; implements the gaits, the baked-clip player, the invert maneuver, and the state machine
+- `spinal_cord.cpp/h`: software abstraction for full limb coordination; implements the gaits, the baked-clip player, invert (a pose mirror), and the state machine
 - `leg.cpp/h`: software abstraction for a single leg
 - `kinematics.cpp/h`: IK math, kept for reference and tested against the simulation. Locomotion does not use runtime IK: gaits are phase-based angle schedules and gestures are baked clips
 - `servo.cpp/h`: software abstraction for servo control (angles and PWM pulses)
@@ -84,7 +84,7 @@ The firmware lives under `code/firmware/src/`: four module folders plus the top-
 
 ### Host-side tooling
 
-**Remote control app**: built with React Native and Expo Go. Connects to the ESP32's hotspot and sends lightweight JSON packets over WebSockets to trigger gaits, individual limb control, and special actions (the invert maneuver, clip playback, etc.).
+**Remote control app**: built with React Native and Expo Go. Connects to the ESP32's hotspot and sends lightweight JSON packets over WebSockets to trigger gaits, individual limb control, and special actions (invert (a pose mirror), clip playback, etc.).
 
 **Simulation**: a PyBullet physics environment for testing gaits, clips, and weight distribution offline before deploying to hardware. It can run the exact compiled firmware in the loop (software-in-the-loop), so what you validate in the sim is the same C++ that runs on the robot. See the [simulation reference](../reference/simulation/index.md).
 
@@ -118,7 +118,7 @@ The physical posture and gait cycle are driven by an FSM inside `SpinalCord`. Th
 |---|---|---|
 | `STATE_IDLE` | 0 | Holding position, awaiting a command |
 | `STATE_WALK` | 1 | Executing a gait |
-| `STATE_ACTION` | 2 | Running a one-shot maneuver (invert / wall-flip) or a clip |
+| `STATE_ACTION` | 2 | Playing a one-shot clip (including the wall-flip, which is a clip) |
 | `STATE_FAILSAFE` | 3 | Hardware exception or flipped; motion suppressed |
 | `STATE_REST` | 4 | All servos at 90 degrees: the flat calibration pose, safe to power off |
 | `STATE_STAND` | 5 | Standing on the per-leg `NEUTRAL[]` pose; the launch reference for gaits |
@@ -134,8 +134,8 @@ stateDiagram-v2
     STATE_IDLE --> STATE_REST : Relax command (flat calibration)
     STATE_REST --> STATE_STAND : Stand command
 
-    STATE_IDLE --> STATE_ACTION : Play clip / invert
-    STATE_ACTION --> STATE_IDLE : Maneuver complete
+    STATE_IDLE --> STATE_ACTION : Play clip
+    STATE_ACTION --> STATE_IDLE : Clip complete
 
     STATE_WALK --> STATE_FAILSAFE : Hardware exception / flipped
     STATE_FAILSAFE --> STATE_IDLE : Reset

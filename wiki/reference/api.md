@@ -67,10 +67,10 @@ Payload: `{"T": 2, "s": <state_id>}`
 |----|----------|--------------------------------------------------|
 | 0  | IDLE     | Static hold / active balancing (default)         |
 | 1  | WALK     | Gait engine active; responds to `T:1` direction  |
-| 2  | ACTION   | Enables clips (`T:7`) and maneuvers (`T:6`)      |
+| 2  | ACTION   | Runs a clip (`T:7`) or the wall-flip maneuver    |
 | 3  | FAILSAFE | Emergency software interrupt; halts all motion   |
 
-`IDLE` is the default safe state. `WALK` activates the gait engine; direction vectors via `T:1` then control movement. `ACTION` is required before clip playback or invert maneuvers. The next `T:10` includes an updated `s` field.
+`IDLE` is the default safe state. `WALK` activates the gait engine; direction vectors via `T:1` then control movement. Playing a clip (`T:7`) puts the robot in `ACTION` automatically. The invert toggle (`T:6`) is independent of the FSM state: it just flips the `isInverted` flag and mirrors the current pose. The next `T:10` includes an updated `s` field.
 
 ### T:3 CMD_POSE (Body Pose / Static IK)
 
@@ -132,15 +132,15 @@ The frontend app exposes only TROT (g=2) and CRAB (g=3) as user-facing options.
 
 Selecting a gait does not start walking; the robot must be transitioned to `STATE_WALK` with `T:2` to activate the gait engine. Gait changes can be sent mid-walk without stopping. The next `T:10` includes an updated `g` field.
 
-### T:6 CMD_ACTION_SELECTION (Invert Robot / Wall Flip)
+### T:6 CMD_ACTION_SELECTION (Invert toggle)
 
 Payload: `{"T": 6, "a": <action_id>}`
 
-| ID | Name         | Effect                                         |
-|----|--------------|------------------------------------------------|
-| 0  | INVERT_ROBOT | Tip the robot over a wall, flip, and right it  |
+| ID | Name         | Effect                                                  |
+|----|--------------|---------------------------------------------------------|
+| 0  | INVERT_ROBOT | Toggle the inverted (upside-down) flag, flip pose in place |
 
-This command triggers a specialized authored maneuver and runs only in `STATE_ACTION`. After the maneuver completes, the robot returns to `STATE_IDLE`. Note that `T:6` is a high-level action selector (maneuver), not the clip player. Clips are played via `T:7`.
+`INVERT_ROBOT` toggles the latching `isInverted` flag. It is not an authored maneuver and does not change the FSM state: it immediately mirrors whatever pose the robot is currently holding, in place, by flipping the pitch joints (`180 - angle` on thigh and knee, shoulder unchanged) and easing there over ~300 ms. While inverted, every motion source (gaits, clips, stand) is mirrored through the same pitch flip, so the robot can locomote upside-down; send `T:6` again to flip back. Use `T:9` to set the flag explicitly rather than toggle. A duplicate `T:6` within 250 ms is debounced so a retried packet cannot double-flip.
 
 ### T:7 CMD_PLAY_CLIP (Play Animation Clip)
 
@@ -208,6 +208,6 @@ Example:
 
 **Clip end behavior:** When a clip finishes, the robot returns to neutral standing over ~500 ms using `setServoAngleTimed`, then transitions to `STATE_IDLE`. Clips do not hold at the end and do not loop.
 
-**T:6 vs. T:7:** `T:6` (`CMD_ACTION_SELECTION`) triggers the invert-robot wall-flip maneuver. `T:7` (`CMD_PLAY_CLIP`) plays a bundled animation clip. Both run in `STATE_ACTION` but serve different purposes.
+**T:6 vs. T:7:** `T:6` (`CMD_ACTION_SELECTION`) toggles the invert flag and mirrors the current pose in place; it does not change the FSM state. `T:7` (`CMD_PLAY_CLIP`) plays a bundled animation clip and runs in `STATE_ACTION`. Despite the command name, `T:6` is not a clip and not a state-gated maneuver.
 
 **Angle spaces:** Math-space angles are abstract joint angles centered on the calibration pose (all URDF joints at 0, all pitch servos at 90 degrees). `NEUTRAL[]` is not the origin of math-space; it is one particular standing pose expressed in math-space, where each shoulder points to its outward rest direction. Servo-space angles are physical 0-180 degree values written to the PCA9685, with per-leg sign conventions applied by `translateToServo`. The angle clamp `constrain(0, 180)` is an electrical backstop applied on every path: IK, pose, calibrate, and clip.
