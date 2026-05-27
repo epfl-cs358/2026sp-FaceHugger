@@ -29,12 +29,22 @@ export const playClip = (id: number) =>
 export const calibrationPacket = (leg: number, servo: number, angle: number) =>
     ({T: 4, id: leg, servo_id: servo, a: angle} as ServoCalibration);
 
+// Pitch-only mirror, matching firmware applyInvert: thigh (servo 1) and knee
+// (servo 2) become 180 - angle, hip (servo 0) unchanged. T:4 carries absolute
+// angles the firmware invert flag can't touch, so any app-sent pose must mirror
+// itself to stay consistent with a flipped robot (same reason the clip streamer
+// mirrors its frames).
+const mirrorPacket = (pkt: ServoCalibration, inverted: boolean): ServoCalibration =>
+    inverted && (pkt.servo_id === 1 || pkt.servo_id === 2)
+        ? { ...pkt, a: 180 - pkt.a }
+        : pkt;
+
 // One CMD_CALIBRATE per (leg 0-3, servo 0-2) at 90° — resets every servo.
-export const restAllServosPackets = (angle: number = 90) => {
+export const restAllServosPackets = (angle: number = 90, inverted: boolean = false) => {
     const packets: ServoCalibration[] = [];
     for (let leg = 0; leg < 4; leg++) {
         for (let servo = 0; servo < 3; servo++) {
-            packets.push(calibrationPacket(leg, servo, angle));
+            packets.push(mirrorPacket(calibrationPacket(leg, servo, angle), inverted));
         }
     }
     return packets;
@@ -51,11 +61,11 @@ const NEUTRAL_STANCE_ANGLES: number[][] = [
 ];
 
 // One CMD_CALIBRATE per joint to drive every servo to the neutral stance.
-export const neutralStancePackets = () => {
+export const neutralStancePackets = (inverted: boolean = false) => {
     const packets: ServoCalibration[] = [];
     NEUTRAL_STANCE_ANGLES.forEach((servos, leg) => {
         servos.forEach((angle, servo) => {
-            packets.push(calibrationPacket(leg, servo, angle));
+            packets.push(mirrorPacket(calibrationPacket(leg, servo, angle), inverted));
         });
     });
     return packets;

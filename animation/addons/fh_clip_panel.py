@@ -653,6 +653,32 @@ def _copy_bundle_to_firmware():
     return dest
 
 
+def _app_clips_dir():
+    """The remote-control app's asset dir, where clips_extra.json is bundled so
+    the app can stream clips that aren't flashed (see to_clips_extra_json)."""
+    return os.path.join(_repo_root(), "code", "remote-control-app", "MyApp", "assets")
+
+
+def _copy_extra_to_app():
+    """Copy the freshly written exported_clips/clips_extra.json into the app's
+    assets dir (the app bundles it at build time). Returns the destination path;
+    raises ValueError (no bundle, or not a repo checkout) so the caller can warn
+    without failing the export. Mirrors _copy_bundle_to_firmware for the app."""
+    import shutil
+
+    src = os.path.join(_exported_clips_root(), "clips_extra.json")
+    if not os.path.exists(src):
+        raise ValueError(f"no clips_extra.json to copy at {src}")
+    dest_dir = _app_clips_dir()
+    if not os.path.isdir(dest_dir):
+        raise ValueError(
+            f"app assets dir not found ({dest_dir}); not in a repo checkout?"
+        )
+    dest = os.path.join(dest_dir, "clips_extra.json")
+    shutil.copyfile(src, dest)
+    return dest
+
+
 # ---------------------------------------------------------------------------
 # Pose Library — animation/poses.json (committed, like convention.json)
 # ---------------------------------------------------------------------------
@@ -2178,6 +2204,20 @@ def _current_servo_angles(context):
         return None
 
 
+def _clip_frame_ms(frames):
+    """Playback wall-clock period for a baked clip: the median delta between
+    consecutive `time_ms` values = the authored scene's frame period (~42 ms at
+    24 fps). Falls back to 33 ms (~30 fps) for clips with fewer than 2 frames.
+    Shared by the .js player and the app bundle so both play at authored speed."""
+    if len(frames) >= 2:
+        deltas = sorted(
+            frames[i + 1]["time_ms"] - frames[i]["time_ms"]
+            for i in range(len(frames) - 1)
+        )
+        return deltas[len(deltas) // 2]
+    return 33
+
+
 def to_js(
     frames,
     clip_name,
@@ -2234,14 +2274,7 @@ def to_js(
     # source-frame period keeps playback wall-clock = authored
     # wall-clock. Falls back to 33 ms (~30 fps) if the clip has fewer
     # than 2 frames.
-    if len(frames) >= 2:
-        deltas = sorted(
-            frames[i + 1]["time_ms"] - frames[i]["time_ms"]
-            for i in range(len(frames) - 1)
-        )
-        frame_ms = deltas[len(deltas) // 2]
-    else:
-        frame_ms = 33
+    frame_ms = _clip_frame_ms(frames)
 
     clip_lines = []
     for row in frames:
@@ -2536,6 +2569,50 @@ def to_clips_header(clips, convention, write=True, out_dir=None):
     return header, manifest_str
 
 
+def to_clips_extra_json(clips, convention, write=True, out_dir=None):
+    """Bundle clips into clips_extra.json — the format the remote-control app
+    streams client-side (no flash). Unlike clips_all.h (math-space, scaled; the
+    firmware applies translateToServo at runtime), this stores the FINAL per-leg
+    servo degrees [hip, thigh, knee] via _frame_to_servo — the exact wire values
+    the app sends as CMD_CALIBRATE (T:4), identical to what the .js players emit.
+
+    `clips` is an ORDERED dict {clip_name: baked_rows}. Returns the JSON string;
+    when write=True also writes clips_extra.json to out_dir (default
+    animation/exported_clips/)."""
+    out = {"clips": []}
+    for name, rows in clips.items():
+        if not rows:
+            raise ValueError(f"Clip '{name}' has no frames; refusing to emit")
+        frames = []
+        for row in rows:
+            s = _frame_to_servo(row, convention)
+            frames.append(
+                {
+                    "t": int(row["time_ms"]),
+                    "fr": s["fr"],
+                    "fl": s["fl"],
+                    "br": s["br"],
+                    "bl": s["bl"],
+                }
+            )
+        out["clips"].append(
+            {
+                "name": name,
+                "frame_ms": _clip_frame_ms(rows),
+                "duration_ms": int(rows[-1]["time_ms"]),
+                "loop": False,
+                "frames": frames,
+            }
+        )
+    s = json.dumps(out, indent=2) + "\n"
+    if write:
+        base = out_dir or os.path.join(_animation_dir(), "exported_clips")
+        os.makedirs(base, exist_ok=True)
+        with open(os.path.join(base, "clips_extra.json"), "w") as fh:
+            fh.write(s)
+    return s
+
+
 # ---------------------------------------------------------------------------
 # Operators — export (active clip / a ticked selection of clips)
 # ---------------------------------------------------------------------------
@@ -2619,6 +2696,57 @@ def _regenerate_clips_all(context, convention, names=None):
     return list(baked.keys()), ("; ".join(skipped) if skipped else None)
 
 
+def _regenerate_clips_extra(context, convention, names=None):
+    """(Re)write clips_extra.json (the app's streamable bundle). Defaults to ALL
+    clips (names=None): clips_all.h carries only the ticked firmware subset, but
+    the app bundle deliberately includes every clip so an animation is playable
+    in the app the moment it's exported — no flash needed. Skips clips that fail
+    to bake. Returns (bundled_names, skipped_msg)."""
+    wanted = set(names) if names is not None else None
+    baked = {}
+    skipped = []
+    for clip in list_clips():
+        if wanted is not None and clip not in wanted:
+            continue
+        try:
+            rows = bake_clip(clip, context)
+        except ValueError as e:
+            skipped.append(f"{clip} ({e})")
+            continue
+        if rows:
+            baked[clip] = rows
+    if not baked:
+        raise ValueError("no clips could be baked for clips_extra.json")
+    to_clips_extra_json(baked, convention, write=True)
+    return list(baked.keys()), ("; ".join(skipped) if skipped else None)
+
+
+def _app_bundle_step(operator, scene, context, convention):
+    """Regenerate clips_extra.json (ALL clips) and optionally copy it into the
+    app, reporting warnings via `operator`. Returns a note string for the export
+    summary ("" when the app bundle is disabled). Never raises — a failed app
+    bundle must not fail the rest of the export."""
+    if not scene.fh_export_app_bundle:
+        return ""
+    note = ""
+    try:
+        xnames, xskipped = _regenerate_clips_extra(context, convention)
+        note = f" + clips_extra.json ({len(xnames)} clips)"
+        print(f"Regenerated clips_extra.json from {len(xnames)} clip(s)")
+        if xskipped:
+            operator.report({"WARNING"}, f"clips_extra.json skipped: {xskipped}")
+        if scene.fh_copy_extra_to_app:
+            try:
+                dest = _copy_extra_to_app()
+                note += " (copied to app)"
+                print(f"Copied clips_extra.json to app: {dest}")
+            except ValueError as e:
+                operator.report({"WARNING"}, f"clips_extra.json NOT copied to app: {e}")
+    except ValueError as e:
+        operator.report({"WARNING"}, f"clips_extra.json NOT regenerated: {e}")
+    return note
+
+
 class FH_OT_export_clip(bpy.types.Operator):
     """Bake the active clip once, then write the enabled outputs to
     animation/exported_clips/<clip>/ (.csv / .h / .js)."""
@@ -2637,13 +2765,18 @@ class FH_OT_export_clip(bpy.types.Operator):
         if not bpy.data.filepath:
             self.report({"ERROR"}, "Save the .blend file before exporting")
             return {"CANCELLED"}
-        if not (scene.fh_export_csv or scene.fh_export_header or scene.fh_export_js):
+        if not (
+            scene.fh_export_csv
+            or scene.fh_export_header
+            or scene.fh_export_js
+            or scene.fh_export_app_bundle
+        ):
             self.report({"WARNING"}, "No export formats enabled")
             return {"CANCELLED"}
 
         # convention only needed by the .h / .js converters
         convention = None
-        if scene.fh_export_header or scene.fh_export_js:
+        if scene.fh_export_header or scene.fh_export_js or scene.fh_export_app_bundle:
             try:
                 convention = _load_convention()
             except ValueError as e:
@@ -2698,6 +2831,8 @@ class FH_OT_export_clip(bpy.types.Operator):
                 except ValueError as e:
                     self.report({"WARNING"}, f"clips_all.h NOT regenerated: {e}")
 
+        bundle_note += _app_bundle_step(self, scene, context, convention)
+
         self.report({"INFO"}, f"Exported to {rel}/ ({', '.join(written)}){bundle_note}")
         return {"FINISHED"}
 
@@ -2724,12 +2859,17 @@ class FH_OT_export_selected(bpy.types.Operator):
         if not chosen:
             self.report({"ERROR"}, "No clips ticked — select clips to export")
             return {"CANCELLED"}
-        if not (scene.fh_export_csv or scene.fh_export_header or scene.fh_export_js):
+        if not (
+            scene.fh_export_csv
+            or scene.fh_export_header
+            or scene.fh_export_js
+            or scene.fh_export_app_bundle
+        ):
             self.report({"ERROR"}, "No export formats enabled")
             return {"CANCELLED"}
 
         convention = None
-        if scene.fh_export_header or scene.fh_export_js:
+        if scene.fh_export_header or scene.fh_export_js or scene.fh_export_app_bundle:
             try:
                 convention = _load_convention()
             except ValueError as e:
@@ -2779,6 +2919,8 @@ class FH_OT_export_selected(bpy.types.Operator):
             except ValueError as e:
                 self.report({"WARNING"}, f"clips_all.h NOT regenerated: {e}")
 
+        bundle_note += _app_bundle_step(self, scene, context, convention)
+
         if failed:
             self.report(
                 {"WARNING"},
@@ -2823,6 +2965,27 @@ class FH_OT_open_firmware_dir(bpy.types.Operator):
         if not os.path.isdir(path):
             self.report(
                 {"WARNING"}, f"Firmware dir not found ({path}); not in a repo checkout?"
+            )
+            return {"CANCELLED"}
+        bpy.ops.wm.path_open(filepath=path)
+        return {"FINISHED"}
+
+
+class FH_OT_open_app_dir(bpy.types.Operator):
+    """Open the remote-control app's assets folder
+    (code/remote-control-app/MyApp/assets/) in the OS file browser, where the
+    copied clips_extra.json lands."""
+
+    bl_idname = "fh.open_app_dir"
+    bl_label = "Open App Folder"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        path = _app_clips_dir()
+        if not os.path.isdir(path):
+            self.report(
+                {"WARNING"},
+                f"App assets dir not found ({path}); not in a repo checkout?",
             )
             return {"CANCELLED"}
         bpy.ops.wm.path_open(filepath=path)
@@ -3076,6 +3239,18 @@ class FH_PT_export(_FH_PT_child, bpy.types.Panel):
             jsrow.separator()
             jsrow.prop(context.scene, "fh_export_js_dryrun", text="Dry run")
             jsrow.prop(context.scene, "fh_export_js_loop", text="Loop")
+        col.prop(
+            context.scene, "fh_export_app_bundle", text="App clips (clips_extra.json)"
+        )
+        if context.scene.fh_export_app_bundle:
+            sub = col.column(align=True)
+            arow = sub.row(align=True)
+            arow.separator()
+            arow.prop(
+                context.scene,
+                "fh_copy_extra_to_app",
+                text="Copy clips_extra.json to app",
+            )
 
         row = layout.row()
         row.enabled = bool(active)
@@ -3105,6 +3280,7 @@ class FH_PT_export(_FH_PT_child, bpy.types.Panel):
         frow.operator(
             FH_OT_open_firmware_dir.bl_idname, text="Firmware", icon="FILE_FOLDER"
         )
+        frow.operator(FH_OT_open_app_dir.bl_idname, text="App", icon="FILE_FOLDER")
 
 
 class FH_PT_display(_FH_PT_child, bpy.types.Panel):
@@ -3197,6 +3373,7 @@ CLASSES = (
     FH_OT_export_selected,
     FH_OT_open_export_dir,
     FH_OT_open_firmware_dir,
+    FH_OT_open_app_dir,
     FH_OT_toggle_preview,
     FH_OT_sync_frame_range,
     # Panels: parent MUST be registered before its children so the
@@ -3300,6 +3477,26 @@ def register():
         ),
         default="192.168.4.1",
     )
+    bpy.types.Scene.fh_export_app_bundle = bpy.props.BoolProperty(
+        name="Export App Clip Bundle",
+        description=(
+            "Write clips_extra.json — final servo-degree frames for EVERY clip "
+            "so the remote-control app can stream them (T:4) without flashing. "
+            "Independent of the firmware bundle / ticked selection: clips_all.h "
+            "stays the curated on-robot set, the app bundle is everything"
+        ),
+        default=True,
+    )
+    bpy.types.Scene.fh_copy_extra_to_app = bpy.props.BoolProperty(
+        name="Copy clips_extra.json to app",
+        description=(
+            "After writing it, copy clips_extra.json into the app's assets "
+            "(code/remote-control-app/MyApp/assets/) so the app bundles it on "
+            "the next build. Assumes a repo checkout; warns (does not fail) if "
+            "the app dir is absent"
+        ),
+        default=True,
+    )
     bpy.types.Scene.fh_export_selected_clips = bpy.props.StringProperty(
         name="Selected clips for export",
         description=(
@@ -3374,6 +3571,8 @@ def unregister():
         "fh_export_js_loop",
         "fh_export_js_dryrun",
         "fh_esp_ip",
+        "fh_export_app_bundle",
+        "fh_copy_extra_to_app",
         "fh_export_selected_clips",
         "fh_heatmap_active",
     ):

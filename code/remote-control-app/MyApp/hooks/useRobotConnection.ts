@@ -9,6 +9,7 @@ import { useSocketStatus } from './useSocketStatus';
 export const useRobotConnection = () => {
   const ip = useRobotStore((s) => s.connIP);
   const port = useRobotStore((s) => s.connPort);
+  const connTick = useRobotStore((s) => s.connTick);
   const setFsmState = useRobotStore((s) => s.setFsmState);
   const setTofDistances = useRobotStore((s) => s.setTofDistances);
   const setAMU = useRobotStore((s) => s.setAMU);
@@ -33,15 +34,15 @@ export const useRobotConnection = () => {
     connect(ip, port);
 
     onMessage((data) => {
+      // The T:8 (list clips) reply carries no `T` field — it's just
+      // {clips:[{id,name,ms},...]} (firmware buildClipListJson). Handle it
+      // before the T-switch, otherwise the flashed list never populates.
+      if (Array.isArray((data as ClipListResponse).clips)) {
+        setClips((data as ClipListResponse).clips);
+        return;
+      }
       if (data.T) {
         switch (data.T) {
-          case 8: {
-            const resp = data as ClipListResponse;
-            if (Array.isArray(resp.clips)) {
-              setClips(resp.clips);
-            }
-            break;
-          }
           case 10: {
             const { T, ...rest } = data;
             const status = rest as SystemStatus;
@@ -58,9 +59,10 @@ export const useRobotConnection = () => {
     });
 
     // Tear down on unmount and whenever the target changes, so the next
-    // connect() opens a fresh socket to the new ip/port.
+    // connect() opens a fresh socket to the new ip/port. connTick is bumped by
+    // the "tap to retry" badge to re-run this effect (reattaching onMessage).
     return () => { disconnect(); };
-  }, [ip, port]);
+  }, [ip, port, connTick]);
 
   // On reconnect, immediately push all chosen state to the robot
   useEffect(() => {
