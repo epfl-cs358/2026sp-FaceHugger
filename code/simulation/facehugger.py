@@ -254,8 +254,8 @@ def main():
         "--python",
         dest="python_port",
         action="store_true",
-        help="drive clips with the Python re-port instead of the default exact "
-        "compiled firmware (firmware_sil); use when you have no C++ toolchain",
+        help="drive clips AND gaits with the Python re-port instead of the default "
+        "exact compiled firmware (firmware_sil); use when you have no C++ toolchain",
     )
     ps.add_argument("--walk", action="store_true")
     ps.add_argument("--trot", action="store_true")

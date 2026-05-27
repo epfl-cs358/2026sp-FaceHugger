@@ -71,9 +71,9 @@ def main():
         "--python",
         dest="python_port",
         action="store_true",
-        help="play the clip with the Python re-port (firmware_port) instead of the "
-        "default — which is the EXACT compiled firmware (firmware_sil, auto-built). "
-        "Use --python when you have no C++ toolchain. Clips only.",
+        help="drive clips AND gaits with the Python re-port (firmware_port / the "
+        "Python IK gait) instead of the default — which is the EXACT compiled firmware "
+        "(firmware_sil, auto-built). Use --python when you have no C++ toolchain.",
     )
     args = parser.parse_args()
 
@@ -100,6 +100,7 @@ def main():
             float_mode=args.float_mode,
             monitor=args.monitor,
             log=args.log,
+            python_port=args.python_port,
         )
     elif args.trot:
         run_gait(
@@ -110,6 +111,7 @@ def main():
             float_mode=args.float_mode,
             monitor=args.monitor,
             log=args.log,
+            python_port=args.python_port,
         )
     else:
         run_stand(

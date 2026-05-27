@@ -43,6 +43,9 @@ from firmware_port.servo_convention import (  # noqa: E402
 
 _LEG_IDS = (LEG_FR, LEG_FL, LEG_RR, LEG_RL)
 
+# Firmware GaitType enum (movements.h): NONE=0, WALK=1, TROT=2, CRAB=3.
+_GAIT_NAME_TO_ID = {"walk": 1, "trot": 2, "crab": 3}
+
 
 def _compiled_so():
     """The built module file, or None if not present."""
@@ -307,6 +310,32 @@ def trace_clip(fc, clip_name, record_every=24, step_hz=240):
     return samples
 
 
+def trace_gait(fc, gait_name, direction="FW", steps=480, step_hz=240, record_every=24):
+    """Deterministic servo-angle trace of a firmware gait through the SIL.
+
+    Drives the gait the way the app/robot does: set the gait once (T:5), then
+    RE-ISSUE the move (T:1) every tick — the full CMD_MOVE path arms STATE_WALK and
+    resets the 500 ms deadman, so the gait keeps running instead of graceful-stopping.
+    Records the 12 servo angles (whole degrees) every `record_every` steps. Shared
+    driving sequence with FirmwareSILDriver.run_gait_blocking, minus PyBullet.
+
+    Returns: list of [t_ms, [12 int degrees]]. Raises KeyError for an unknown gait.
+    """
+    import json
+
+    gait_id = _GAIT_NAME_TO_ID[gait_name]  # KeyError for an unknown gait name
+    fc.set_clock_ms(0)
+    fc.handle_message(json.dumps({"T": 5, "g": gait_id}))
+    samples = []
+    for step in range(steps):
+        t_ms = int(step * 1000.0 / step_hz)
+        fc.handle_message(json.dumps({"T": 1, "dir": direction}))  # beat the deadman
+        fc.tick(t_ms)
+        if step % record_every == 0:
+            samples.append([t_ms, [int(round(a)) for a in fc.servo_angles()]])
+    return samples
+
+
 class FirmwareSILDriver:
     """Plays clips through the real firmware code, driving PyBullet joints."""
 
@@ -373,6 +402,65 @@ class FirmwareSILDriver:
                 time.sleep(timestep)
             step += 1
             if t_ms >= duration_ms and not gui:
+                break
+
+    def run_gait_blocking(
+        self,
+        robot_id,
+        joint_map,
+        gait_name,
+        force,
+        velocity,
+        direction="FW",
+        gui=True,
+        on_step=None,
+        timestep=1.0 / 240.0,
+        duration_s=None,
+    ):
+        """Run a firmware GAIT through PyBullet at 240 Hz (the exact tickGait/tickTrot).
+
+        Same per-tick PyBullet drive as play_clip_blocking, but instead of a clip it
+        sets the gait (T:5) once and re-issues the move (T:1) every tick so STATE_WALK
+        stays armed and the 500 ms deadman never fires. Gaits have no duration: GUI runs
+        until the window closes; pass duration_s (used headless) for a finite smoke run.
+        """
+        import json
+
+        import pybullet as p
+
+        gait_id = _GAIT_NAME_TO_ID[gait_name]  # KeyError for an unknown gait name
+        self._fc.set_clock_ms(0)
+        self._fc.handle_message(json.dumps({"T": 5, "g": gait_id}))
+
+        step = 0
+        while p.isConnected():
+            t_ms = int(step * 1000.0 / 240.0)
+            # Full CMD_MOVE path each tick: walk() (STATE_WALK) + processCommand(dir),
+            # keeping the deadman fed — literally the app's command stream at 240 Hz.
+            self._fc.handle_message(json.dumps({"T": 1, "dir": direction}))
+            self._fc.tick(t_ms)
+            for name, rad in servo_angles_to_joint_targets(
+                self._fc.servo_angles()
+            ).items():
+                idx = joint_map.get(name)
+                if idx is not None:
+                    p.setJointMotorControl2(
+                        robot_id,
+                        idx,
+                        p.POSITION_CONTROL,
+                        targetPosition=rad,
+                        force=force,
+                        maxVelocity=velocity,
+                    )
+            p.stepSimulation()
+            if step % 12 == 0:
+                apply_torque_colors(p, robot_id, joint_map)
+            if on_step is not None:
+                on_step(step)
+            if gui:
+                time.sleep(timestep)
+            step += 1
+            if duration_s is not None and t_ms >= duration_s * 1000.0:
                 break
 
 

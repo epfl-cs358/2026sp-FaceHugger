@@ -54,8 +54,9 @@ cd code/simulation
 
 python facehugger.py urdf                 # regenerate generated/facehugger.urdf
 python facehugger.py sim                  # GUI, standing pose
-python facehugger.py sim --walk           # walk gait
-python facehugger.py sim --trot           # trot gait
+python facehugger.py sim --walk           # walk gait (EXACT firmware tickGait, via the SIL)
+python facehugger.py sim --trot           # trot gait (EXACT firmware tickTrot, via the SIL)
+python facehugger.py sim --trot --python  # the Python IK gait instead (no C++ toolchain)
 python facehugger.py sim --headless       # no GUI — CI smoke-check
 python facehugger.py sim --clip "wave" --headless   # play a baked clip via the interpreter
 python facehugger.py blender                          # URDF in Blender, placement-only
