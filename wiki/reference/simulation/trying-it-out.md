@@ -1,14 +1,14 @@
 # Trying it out
 
-This page is a hands-on tour of what you can run and what each thing should look like when it works. It is the practical companion to the [CLI](cli.md) reference: the CLI page lists every flag, this page walks through the scenarios you actually test. Run everything from `code/simulation/` unless noted, with the `facehugger` conda env active (see [Software](../../guide/software.md#host-side-simulation)).
+This page is a hands-on tour of what you can run and what each thing should look like when it works. It is the practical companion to the [CLI](cli.md) reference: the CLI page lists every flag, this page walks through the scenarios you actually test. Run the `facehugger.py` commands from the repo root as `python code/facehugger.py ...`, with the `facehugger` conda env active (see [Software](../../guide/software.md#host-side-simulation)). The standalone `python -m ...` tools and `pytest tests/` still run from `code/simulation/`.
 
 ## Smoke check
 
 Start by confirming the pipeline builds and the sim runs end to end:
 
 ```bash
-python facehugger.py urdf
-python facehugger.py sim --headless
+python code/facehugger.py urdf
+python code/facehugger.py sim --headless
 ```
 
 This regenerates the URDF and then runs the simulator with no window. A clean run prints the URDF shoulder-axis check and exits `0` without throwing. The first run also compiles the firmware module (`fh_sim`), which takes a moment; later runs reuse it.
@@ -16,7 +16,7 @@ This regenerates the URDF and then runs the simulator with no window. A clean ru
 Then open the GUI on the standing pose:
 
 ```bash
-python facehugger.py sim
+python code/facehugger.py sim
 ```
 
 You should see the robot holding its `NEUTRAL[]` stance, steady, with no leg sliding or sinking.
@@ -24,26 +24,26 @@ You should see the robot holding its `NEUTRAL[]` stance, steady, with no leg sli
 ## Watching gaits
 
 ```bash
-python facehugger.py sim --walk     # walk gait
-python facehugger.py sim --trot     # trot gait
+python code/facehugger.py sim --walk     # walk gait
+python code/facehugger.py sim --trot     # trot gait
 ```
 
 Both are driven by the exact firmware. The robot should step in place / forward without falling. Add `--monitor` to print a periodic torque and current line, or `--float` to pin the body weightless so you can study the leg motion without balance getting in the way:
 
 ```bash
-python facehugger.py sim --trot --float --monitor
+python code/facehugger.py sim --trot --float --monitor
 ```
 
 If you have no C++ toolchain, add `--python` to drive the gait from the pure-Python re-port instead of the compiled firmware.
 
 ## Playing a clip
 
-Clips are baked gestures compiled into the firmware. To see which names are available, run `python facehugger.py sim --list-clips`, read `animation/exported_clips/clips_manifest.json`, or start `sim --serve` (below) and send `T:8` (list clips). Then:
+Clips are baked gestures compiled into the firmware. To see which names are available, run `python code/facehugger.py sim --list-clips`, read `animation/exported_clips/clips_manifest.json`, or start `sim --serve` (below) and send `T:8` (list clips). Then:
 
 ```bash
-python facehugger.py sim --clip "wave"            # play once
-python facehugger.py sim --clip "wave" --loop     # repeat (GUI only)
-python facehugger.py sim --clip "wave" --float    # geometry only, no balance
+python code/facehugger.py sim --clip "wave"            # play once
+python code/facehugger.py sim --clip "wave" --loop     # repeat (GUI only)
+python code/facehugger.py sim --clip "wave" --float    # geometry only, no balance
 ```
 
 A clip plays, then eases back to the neutral stance. `--loop` carries physics state across repeats so you can watch for drift. If you just re-exported a clip and a running `sim --serve` does not list it, restart it so it reloads the freshly compiled firmware (see [Controlling the simulation](pybullet-control.md#sim-serve-drive-the-sim-like-the-robot)).
@@ -53,7 +53,7 @@ A clip plays, then eases back to the neutral stance. `--loop` carries physics st
 To capture rather than just watch, add `--log`. On exit it prints a summary table and writes `sim_log.csv` and `sim_log.png` to wherever you ran the command:
 
 ```bash
-python facehugger.py sim --trot --log
+python code/facehugger.py sim --trot --log
 ```
 
 Joints are colored against two references: green below the continuous torque, amber up to stall, red at the stall cap. Standing should be solidly green; brief fast-clip frames reading amber are honest "burst" load, not a bug. See [Torque instrumentation](pybullet-control.md#torque-instrumentation).
@@ -63,10 +63,10 @@ Joints are colored against two references: green below the continuous torque, am
 `sim --serve` runs the same `T:` WebSocket protocol the robot uses, dispatched by the compiled firmware:
 
 ```bash
-python facehugger.py sim --serve                 # ws://localhost:8081
-python facehugger.py sim --serve --host 0.0.0.0  # reachable from a phone
-python facehugger.py sim --app                   # also launches the web app
-python facehugger.py sim --panel                 # also hosts the browser control panel
+python code/facehugger.py sim --serve                 # ws://localhost:8081
+python code/facehugger.py sim --serve --host 0.0.0.0  # reachable from a phone
+python code/facehugger.py sim --app                   # also launches the web app
+python code/facehugger.py sim --panel                 # also hosts the browser control panel
 ```
 
 Two clients can drive it:
@@ -81,8 +81,8 @@ Two faithful firmware behaviors to expect: a held direction stops after ~500 ms 
 To inspect the model in Blender or author motion:
 
 ```bash
-python facehugger.py blender            # placement-only cross-check
-python facehugger.py blender --rigged    # the animation rig
+python code/facehugger.py blender            # placement-only cross-check
+python code/facehugger.py blender --rigged    # the animation rig
 ```
 
 The placement scene should match PyBullet's rest pose. The rigged scene is where you pose and bake clips with the FH Clip Panel (see [Blender clip authoring](../../guide/toolchain/blender-clips.md)). After exporting, verify before flashing:

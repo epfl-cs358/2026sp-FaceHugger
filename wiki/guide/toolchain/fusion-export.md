@@ -33,7 +33,7 @@ and writes three outputs to `code/simulation/generated/`:
   landmark, so the URDF generator can emit `<origin xyz="0 0 0"/>` on visuals
   without offset adjustments.
 
-After running the add-in, run `python facehugger.py urdf` from `code/simulation/`
+After running the add-in, run `python code/facehugger.py urdf` from the repo root
 to regenerate `facehugger.urdf` from the new export.
 
 If the chassis STL contains unexpected electronics or PCBs, the `combined.parts`

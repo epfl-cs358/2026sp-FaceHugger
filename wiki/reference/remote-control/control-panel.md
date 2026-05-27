@@ -15,7 +15,7 @@ code/remote-control-app/control-panel/robot_control_panel.html
 The quickest way is to let the simulator host it:
 
 ```bash
-python facehugger.py sim --panel
+python code/facehugger.py sim --panel
 ```
 
 `--panel` implies `--serve` (so the WebSocket API comes up on `:8081`) and serves the panel over HTTP. Open the printed URL, `http://localhost:8082/panel`, and it is already pointed at the sim.

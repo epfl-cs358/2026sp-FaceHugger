@@ -42,7 +42,7 @@ The rebuild happens **at launch**: a long-running process loads `fh_sim` once an
 `facehugger.py sim --serve` exposes the [WebSocket robot API](../remote-control/websocket-api.md) (the `T:` protocol) on port **8081**, with the command dispatch handled by the **compiled firmware's own** `network.cpp::handleParsedMessage`. So any change to the firmware's API handling reflects automatically; there is no Python mirror to drift. (`facehugger.py serve` is a deprecated alias for `sim --serve` and still works.)
 
 ```bash
-python facehugger.py sim --serve --host 0.0.0.0
+python code/facehugger.py sim --serve --host 0.0.0.0
 ```
 
 Two clients can drive it:
@@ -54,7 +54,7 @@ Two clients can drive it:
     A single move command stops after ~500 ms (the firmware deadman), and a gait does nothing until a gait is *also* selected. This is faithful firmware behaviour, not a sim quirk. The panel/app must re-issue a held direction, and you must set a gait (`T:5`) before moving.
 
 !!! tip "Just exported a clip and `T:8` doesn't show it?"
-    Restart the `sim` session. It loads the compiled `fh_sim` once at startup, so a session you launched *before* the re-export keeps serving the old clip set even after the bundle is rebuilt. A fresh `sim` recompiles `fh_sim` from the updated `clips_all.h` and lists the new clip. (The control panel and app also fetch the clip list once on connect, so reconnect them too.) To check the compiled set without launching anything: `python3 -c "import sys; sys.path.insert(0,'.'); sys.path.insert(0,'firmware_sil/build'); import fh_sim; print(fh_sim.FirmwareControl().clip_names())"` from `code/simulation/`, or run `python facehugger.py sim --list-clips`.
+    Restart the `sim` session. It loads the compiled `fh_sim` once at startup, so a session you launched *before* the re-export keeps serving the old clip set even after the bundle is rebuilt. A fresh `sim` recompiles `fh_sim` from the updated `clips_all.h` and lists the new clip. (The control panel and app also fetch the clip list once on connect, so reconnect them too.) To check the compiled set without launching anything: `python3 -c "import sys; sys.path.insert(0,'.'); sys.path.insert(0,'firmware_sil/build'); import fh_sim; print(fh_sim.FirmwareControl().clip_names())"` from `code/simulation/`, or run `python code/facehugger.py sim --list-clips`.
 
 ### Live telemetry (SSE :8082)
 

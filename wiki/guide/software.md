@@ -311,15 +311,15 @@ On Linux you can skip conda and `pip install -r code/simulation/requirements.txt
 directly. See [Software environments](#software-environments) below for the full
 picture of which folders need which environment.
 
-**Common commands** (run from `code/simulation/`):
+**Common commands** (run from the repo root):
 
 ```bash
-python facehugger.py sim                 # GUI, standing pose
-python facehugger.py sim --walk          # walk gait (firmware in the loop)
-python facehugger.py sim --trot          # trot gait
-python facehugger.py sim --clip "wave"   # play a baked clip
-python facehugger.py sim --serve         # firmware-backed WebSocket API on :8081
-python facehugger.py sim --app           # sim + WebSocket API + the web app
+python code/facehugger.py sim                 # GUI, standing pose
+python code/facehugger.py sim --walk          # walk gait (firmware in the loop)
+python code/facehugger.py sim --trot          # trot gait
+python code/facehugger.py sim --clip "wave"   # play a baked clip
+python code/facehugger.py sim --serve         # firmware-backed WebSocket API on :8081
+python code/facehugger.py sim --app           # sim + WebSocket API + the web app
 ```
 
 `--walk` and `--trot` are separate gaits, both driven by the compiled firmware; pass

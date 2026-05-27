@@ -2,12 +2,13 @@
 
 `facehugger.py` is the single entry point for the simulation half of the project. It is a thin dispatcher: each subcommand shells out to the right module (`urdf_gen.generate_urdf`, `pybullet_sim.simulate`, the Blender scripts, the firmware-backed WebSocket server, or PlatformIO) so you never invoke those by path.
 
-Run it from `code/simulation/`:
+Run it from the repo root:
 
 ```bash
-cd code/simulation
-python facehugger.py <subcommand> [options]
+python code/facehugger.py <subcommand> [options]
 ```
+
+It resolves its own paths and shells into the `code/simulation/` packages, so the working directory does not matter.
 
 ## Subcommands at a glance
 
@@ -32,7 +33,7 @@ Rebuilds `generated/facehugger.urdf` from `generated/fusion_export.json` (the CA
 | `--out PATH`    | output URDF path |
 
 ```bash
-python facehugger.py urdf
+python code/facehugger.py urdf
 ```
 
 ## `sim`: the robot in software
@@ -81,18 +82,18 @@ python facehugger.py urdf
 | `--panel` | implies `--serve` **and** hosts the browser [control panel](../remote-control/control-panel.md) over HTTP at `http://localhost:8082/panel` |
 
 ```bash
-python facehugger.py sim                       # GUI, standing pose
-python facehugger.py sim --trot                # trot gait (firmware)
-python facehugger.py sim --clip "wave"         # play a clip (firmware)
-python facehugger.py sim --trot --float        # joint geometry only, no balance
-python facehugger.py sim --clip "wave" --headless --log   # CI + torque capture
-python facehugger.py sim --list-clips          # print compiled clip ids and exit
-python facehugger.py sim --serve               # WebSocket API on :8081 + SSE on :8082
-python facehugger.py sim --app                 # sim + API + the web app (full session)
-python facehugger.py sim --panel               # sim + API + browser control panel
+python code/facehugger.py sim                       # GUI, standing pose
+python code/facehugger.py sim --trot                # trot gait (firmware)
+python code/facehugger.py sim --clip "wave"         # play a clip (firmware)
+python code/facehugger.py sim --trot --float        # joint geometry only, no balance
+python code/facehugger.py sim --clip "wave" --headless --log   # CI + torque capture
+python code/facehugger.py sim --list-clips          # print compiled clip ids and exit
+python code/facehugger.py sim --serve               # WebSocket API on :8081 + SSE on :8082
+python code/facehugger.py sim --app                 # sim + API + the web app (full session)
+python code/facehugger.py sim --panel               # sim + API + browser control panel
 ```
 
-The full interactive session is `python facehugger.py sim --app`: it brings up the sim, the WebSocket API, and the web app together. Drive the app at the sim by tapping the app's **Settings** "Simulator" preset.
+The full interactive session is `python code/facehugger.py sim --app`: it brings up the sim, the WebSocket API, and the web app together. Drive the app at the sim by tapping the app's **Settings** "Simulator" preset.
 
 ## `blender`: open the URDF in Blender
 
@@ -111,9 +112,9 @@ Before opening, `blender` **auto-refreshes a stale URDF**: it regenerates `gener
 | `--reset` | start from a blank scene, discarding existing animations |
 
 ```bash
-python facehugger.py blender                   # placement-only cross-check
-python facehugger.py blender --rigged           # animation rig
-python facehugger.py blender --headless --save /tmp/scene.blend
+python code/facehugger.py blender                   # placement-only cross-check
+python code/facehugger.py blender --rigged           # animation rig
+python code/facehugger.py blender --headless --save /tmp/scene.blend
 ```
 
 See [URDF → Blender rig](../animation/blender-rig.md) for what the rig is and how it is built.
@@ -133,9 +134,9 @@ Builds and uploads the firmware to the ESP32 via PlatformIO.
 | `--env ENV` | PlatformIO environment; default `upesy_wroom` |
 
 ```bash
-python facehugger.py flash                     # build + upload
-python facehugger.py flash --build-only        # compile only
-python facehugger.py flash --monitor           # upload then watch serial
+python code/facehugger.py flash                     # build + upload
+python code/facehugger.py flash --build-only        # compile only
+python code/facehugger.py flash --monitor           # upload then watch serial
 ```
 
 ## Driving `sim` like the real robot

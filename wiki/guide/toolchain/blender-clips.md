@@ -9,8 +9,8 @@ longer supported.
 
 - Blender 5.0+ installed (5.1 recommended).
 - The rig file at `animation/fh_rigged_latest.blend` (git-lfs tracked). If it is
-  absent, regenerate it with `python facehugger.py blender --rigged` from
-  `code/simulation/`.
+  absent, regenerate it with `python code/facehugger.py blender --rigged` from
+  the repo root.
 - `animation/convention.json` committed (neutral joint angles, scale factor,
   servo channel map).
 

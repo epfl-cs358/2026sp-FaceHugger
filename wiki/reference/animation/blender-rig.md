@@ -11,7 +11,7 @@ Three scripts in `animation/scripts/` cooperate, all targeting Blender 5.x:
 Build the rig through the simulation entry point:
 
 ```bash
-python code/simulation/facehugger.py blender --rigged
+python code/facehugger.py blender --rigged
 ```
 
 It reads `code/simulation/generated/facehugger.urdf`, the STLs in `generated/exported_meshes/`, and `fusion_export.json`, and rebuilds from scratch every run. Nothing kinematic persists in a `.blend` between runs, so re-export from Fusion and regenerate the URDF before rebuilding if the CAD moved. For clip authoring and export see [the clip panel](clip-panel.md); for the angle spaces see [Conventions](../conventions.md).
@@ -84,8 +84,8 @@ Actions store keyframe data as FCurve paths that reference object names. If `urd
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Leg bends laterally when dragging a foot target | IK X/Y locks missing | Rebuild with `facehugger.py blender --rigged`; check `lock_ik_x = lock_ik_y = True`. |
+| Leg bends laterally when dragging a foot target | IK X/Y locks missing | Rebuild with `python code/facehugger.py blender --rigged`; check `lock_ik_x = lock_ik_y = True`. |
 | Foot does not follow shoulder rotation | Foot target lost its parent | Re-parent: Parent = Armature, Bone = `{leg}_link1`, Type = Bone. |
-| Mesh drifts vs PyBullet | Rig not rebuilt after URDF regeneration | Rebuild with `facehugger.py blender --rigged`. |
+| Mesh drifts vs PyBullet | Rig not rebuilt after URDF regeneration | Rebuild with `python code/facehugger.py blender --rigged`. |
 | Joint exceeds its URDF limit | `LIMIT_ROTATION` constraint disabled | Check the pose bone constraints. |
 | Foot target starts in the wrong place | foot-tip landmark missing from `fusion_export.json` | Re-export from Fusion, then regenerate the URDF. |
