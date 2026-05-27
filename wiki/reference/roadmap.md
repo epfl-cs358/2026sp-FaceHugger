@@ -19,6 +19,26 @@
 3. **Runtime adaptability:** IMU correction, terrain adaptation, and clip mirroring designed; no implementation yet.
 4. **Servo numbering alignment:** Proposal in `animation/SERVO_ID_CONVENTION.md` needs firmware confirmation.
 
+## Known issues and limitations
+
+These are currently true and worth knowing before you author clips or send commands. The first two are the sharpest.
+
+### BL shoulder authored past the servo range
+
+At least one exported clip keyframes the back-left (BL) shoulder beyond the servo's reachable range. The firmware silently clamps the value on playback, so the motion that runs on hardware differs from the motion authored in Blender. The clip panel's activity heatmap and servo-range alerts surface this at authoring time. The resolution is to re-author the clip within range, or to widen the mechanical range.
+
+### Calibrate command does not bounds-check its index
+
+The firmware `T:4` (calibrate) command does not validate its leg/servo index, so an out-of-range index goes unchecked. Sending only valid indices is currently the caller's responsibility. A firmware bounds-check is a pending fix.
+
+### Servo numbering is still a proposal
+
+`servo_mapping.yaml` (the URDF link to firmware `servo_id` mapping) is pending confirmation against the firmware `SERVO_CONFIG[]`. Flag this before baking any servo assignments. See [Servo numbering alignment](#servo-numbering-alignment) below and the [URDF pipeline reference](animation/urdf-pipeline.md).
+
+### Foot tip is inferred, not a CAD datum
+
+The leg foot tip is currently derived from the lowest mesh vertex cluster of `leg_lower.stl` rather than from a dedicated construction point in CAD. This is also noted in the [URDF pipeline reference](animation/urdf-pipeline.md) gotchas.
+
 ## Next-gen clip format: `.fhc` and foot-space animation
 
 The key architectural step is shifting from baked joint angles to foot positions + Bezier handles, unlocking runtime IK. The locked design lives in `doc/animation-pipeline/leg-coordinates.md`; the sections below summarize it.
