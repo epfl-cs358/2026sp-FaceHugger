@@ -12,8 +12,8 @@ Servo::Servo(Adafruit_PWMServoDriver &pwm, uint8_t pcaChannel, uint16_t servoDef
       servoDefaultAngle(servoDefaultAngle){
     }
 
-void Servo::setServoAngle(double angle){
-    // Electrical backstop. Every motion path (IK, pose, calibrate, future clip player)
+void Servo::applyAngle(double angle){
+    // Electrical backstop. Every motion path (IK, pose, calibrate, clip player)
     // funnels through here, and map() does NOT clamp — an out-of-range angle would drive
     // the servo past MIN/MAX_PULSE. constrain here protects them all at one chokepoint.
     double clamped = constrain(angle, 0.0, 180.0);
@@ -26,6 +26,13 @@ void Servo::setServoAngle(double angle){
     uint16_t pulse = map(clamped, 0, 180, MIN_PULSE, MAX_PULSE);
     pwm.setPWM(this->pcaChannel, 0, pulse);
     this->servoAngle = clamped;
+}
+
+void Servo::setServoAngle(double angle){
+    // A direct write supersedes any in-progress ease, so cancel it. (tickEase
+    // uses applyAngle() instead, so advancing an ease doesn't cancel itself.)
+    applyAngle(angle);
+    easeActive = false;
 }
 
 void Servo::setServoAngleTimed(double angle, uint32_t ms) {
@@ -42,12 +49,12 @@ void Servo::tickEase() {
     if (!easeActive) return;
     uint32_t t = millis() - easeStartMs;
     if (t >= easeDurMs) {
-        setServoAngle(easeTargetAngle);
+        applyAngle(easeTargetAngle);
         easeActive = false;
         return;
     }
     double frac = easeFraction(t, easeDurMs);  // smoothstep ease-in-out
-    setServoAngle(easeStartAngle + (easeTargetAngle - easeStartAngle) * frac);
+    applyAngle(easeStartAngle + (easeTargetAngle - easeStartAngle) * frac);
 }
 
 bool Servo::easing() const { return easeActive; }

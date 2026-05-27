@@ -19,6 +19,10 @@ class Servo {
         uint8_t getChannel() const;
         double getServoAngle() const;
     private:
+        // Clamp + write PWM + store the angle, WITHOUT touching the ease state.
+        // setServoAngle() (a direct write) calls this then cancels any ease;
+        // tickEase() calls this so it doesn't cancel the ease it is advancing.
+        void applyAngle(double angle);
         Adafruit_PWMServoDriver& pwm;
         uint8_t pcaChannel;
         uint16_t servoAngle;

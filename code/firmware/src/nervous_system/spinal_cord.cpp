@@ -22,6 +22,9 @@ static const float CLIP_EMA_ALPHA = 0.75f;
 // (PR #99) is the primary guard against the spam; this is firmware-side insurance.
 static const uint32_t INVERT_DEBOUNCE_MS = 250;
 
+// Glide time when an invert toggle mirrors the current pose in place.
+static const uint32_t INVERT_EASE_MS = 300;
+
 // Gait parameters (step values are in degrees, pre-scaled to 2/3 of raw JS values).
 // Offsets order: [LEG_FR, LEG_FL, LEG_RR, LEG_RL]
 static const GaitParams GAITS[] = {
@@ -188,7 +191,16 @@ void SpinalCord::update() {
             leg4.returnToDefaultAngles();
             break;
     }
-    
+
+    // Advance any in-progress eased move (e.g. the invert flip-in-place) outside
+    // the clip path. Clips run their own tickEase inside tickClip, so skip ACTION
+    // to avoid double-stepping. A direct write (gait/stand/calibrate) cancels the
+    // ease via setServoAngle, so this is a no-op unless a timed move is active.
+    if (robotState != STATE_ACTION) {
+        Leg* easeLegs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+        for (uint8_t i = 0; i < LEG_COUNT; ++i) easeLegs[i]->tickEase();
+    }
+
     face.update();
 }
 
@@ -512,8 +524,28 @@ void SpinalCord::tickClip() {
     }
 }
 
+void SpinalCord::flipPoseInPlace(uint32_t ms) {
+    // Mirror whatever the servos are holding right now: 180 - angle on thigh and
+    // knee only, shoulder unchanged (== applyInvert). Eased via setJointAnglesTimed
+    // so the flip is a glide from the current pose, not a snap to neutral. The
+    // pitch mirror is an involution, so this is continuous with the mirrored
+    // gait/stand poses subsequent ticks produce. (During an active gait the next
+    // tick overrides these targets with the mirrored gait pose, which is
+    // continuous, so this matters while standing, idle, or holding a clip's end.)
+    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+    for (uint8_t i = 0; i < LEG_COUNT; ++i) {
+        float h, t, k;
+        legs[i]->getJointAngles(h, t, k);
+        ServoTriple m = applyInvert({ (double)h, (double)t, (double)k }, true);
+        legs[i]->setJointAnglesTimed(m.hip, m.thigh, m.knee, ms);
+    }
+}
+
 void SpinalCord::setInverted(bool flag) {
+    if (flag == isInverted) return;  // no change → nothing to re-pose
     isInverted = flag;
+    face.setState(isInverted ? EYES_CONFUSED : EYES_FRONT);
+    flipPoseInPlace(INVERT_EASE_MS);  // T:9: mirror the live pose in place
 }
 
 void SpinalCord::invertRobot() {
@@ -525,13 +557,11 @@ void SpinalCord::invertRobot() {
     lastInvertMs_ = now;
 
     isInverted = !isInverted;
-    // No re-pose: the next motion tick (gait, clip, stand) applies the mirror
-    // via applyServos automatically. Re-posing here was fighting animation playback
-    // when called mid-clip. Resetting the gait phase keeps gait timing coherent.
-    // (main's hardcoded inverted-pose table is intentionally dropped — it's the
-    // pre-Change-D behaviour this branch replaced; the eye-state feedback is kept.)
     face.setState(isInverted ? EYES_CONFUSED : EYES_FRONT);
-    gaitPhaseStartMs_ = now;
+    gaitPhaseStartMs_ = now;  // keep gait timing coherent if a gait is running
+    // T:6: mirror the live pose in place (eased) so the flip applies to whatever
+    // the robot is currently holding instead of waiting for the next motion tick.
+    flipPoseInPlace(INVERT_EASE_MS);
 }
 
 SpinalCord::Snapshot SpinalCord::snapshot() const {

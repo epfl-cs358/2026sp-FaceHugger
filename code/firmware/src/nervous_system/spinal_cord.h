@@ -83,6 +83,12 @@ class SpinalCord{
         void goToNeutral();              // instant
         void easeToNeutral(uint32_t ms); // non-blocking ease (clip return)
 
+        // Mirror the pose the robot is CURRENTLY holding, in place and eased
+        // (180 - angle on thigh/knee, shoulder unchanged). Called on an invert
+        // toggle so the flip applies to the live pose instead of snapping to
+        // neutral or waiting for the next motion tick.
+        void flipPoseInPlace(uint32_t ms);
+
         // Single invert choke point: writes a leg's servo triple, mirroring the
         // pitch joints (thigh, knee) about 90 when isInverted. Every motion source
         // (gaits, clips, stand) routes through this so invert is applied uniformly.
