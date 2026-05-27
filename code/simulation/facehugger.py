@@ -3,15 +3,20 @@ facehugger — single-entry CLI wrapping the simulation pipeline.
 
 Subcommands:
   urdf      regenerate generated/facehugger.urdf from generated/fusion_export.json
-  sim       run simulate.py (default: stand; --walk / --trot for gaits)
+  sim       run simulate.py (default: stand; --walk / --trot for gaits;
+            --list-clips to print the available clips and exit)
   blender   import the URDF into Blender (placement-only, no rig by default;
             --rigged builds an armature with IK + foot-target Empties for
             animation work)
+  serve     run the firmware-backed WebSocket robot API (drive from the app)
+  app       serve the remote-control app on the web (Expo)
   all       urdf → sim (smoke shortcut)
 
 Examples:
   python facehugger.py urdf
   python facehugger.py sim --walk
+  python facehugger.py sim --list-clips
+  python facehugger.py app --port 8080
   python facehugger.py blender                                # default 5.1, placement-only
   python facehugger.py blender --rigged                       # armature + IK rig
   python facehugger.py blender --blender-version 5.2          # specific version
@@ -130,7 +135,30 @@ def cmd_urdf(args):
     return _run(cli)
 
 
+def _list_clips():
+    """Print the clip names + ids the sim/robot will run, parsed from the
+    firmware clips_all.h FH_CLIPS[] table (no C++ toolchain needed)."""
+    import re
+
+    header = REPO_ROOT / "code" / "firmware" / "src" / "nervous_system" / "clips_all.h"
+    if not header.is_file():
+        sys.exit(f"clips_all.h not found: {header}")
+    text = header.read_text()
+    m = re.search(r"FH_CLIPS\[[^\]]*\]\s*=\s*\{(.*?)\};", text, re.S)
+    entries = (
+        re.findall(r'\{\s*"([^"]+)"\s*,\s*\w+\s*,\s*(\d+)\s*,\s*(\d+)\s*\}', m.group(1))
+        if m
+        else []
+    )
+    print(f"{len(entries)} clip(s) in {header.relative_to(REPO_ROOT)}:")
+    for i, (name, frames, dur) in enumerate(entries):
+        print(f"  {i:2d}  {name}  ({frames} frames, {dur} ms)")
+
+
 def cmd_sim(args):
+    if getattr(args, "list_clips", False):
+        _list_clips()
+        return 0
     cli = [sys.executable, *SIMULATE]
     if args.clip:
         cli += ["--clip", args.clip]
@@ -213,6 +241,20 @@ def cmd_serve(args):
     return _run(cli, cwd=None)
 
 
+def cmd_app(args):
+    app_dir = REPO_ROOT / "code" / "remote-control-app" / "MyApp"
+    if not app_dir.is_dir():
+        sys.exit(f"app dir not found: {app_dir}")
+    url = f"http://localhost:{args.port}"
+    print(f"Serving the remote-control app (Expo web) at {url}")
+    print("Point it at the robot or the sim from the app's Settings screen.")
+    print("(Ctrl-C to stop.)\n")
+    # cwd in MyApp so expo finds package.json; works from any caller cwd.
+    return _run(
+        ["npx", "expo", "start", "--web", "--port", str(args.port)], cwd=app_dir
+    )
+
+
 def main():
     p = argparse.ArgumentParser(
         prog="facehugger",
@@ -261,6 +303,13 @@ def main():
     ps.add_argument("--trot", action="store_true")
     ps.add_argument("--headless", action="store_true")
     ps.add_argument("--settle", type=float, default=None)
+    ps.add_argument(
+        "--list-clips",
+        dest="list_clips",
+        action="store_true",
+        help="list the available clip names and ids (from clips_all.h) and exit, "
+        "instead of running the simulator",
+    )
     ps.set_defaults(func=cmd_sim)
 
     pb = sub.add_parser("blender", help="open the URDF in Blender")
@@ -332,6 +381,17 @@ def main():
     )
     pserve.add_argument("--gui", action="store_true", help="show the PyBullet window")
     pserve.set_defaults(func=cmd_serve)
+
+    papp = sub.add_parser(
+        "app", help="serve the remote-control app on the web (Expo / npm)"
+    )
+    papp.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="web host port (default 8080; the sim's serve uses 8081)",
+    )
+    papp.set_defaults(func=cmd_app)
 
     args = p.parse_args()
     sys.exit(args.func(args))
