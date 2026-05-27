@@ -210,4 +210,4 @@ Example:
 
 **T:6 vs. T:7:** `T:6` (`CMD_ACTION_SELECTION`) triggers the invert-robot wall-flip maneuver. `T:7` (`CMD_PLAY_CLIP`) plays a bundled animation clip. Both run in `STATE_ACTION` but serve different purposes.
 
-**Angle spaces:** Math-space angles are abstract joint angles symmetric around `NEUTRAL[]`. Servo-space angles are physical 0-180 degree values written to the PCA9685, with per-leg sign conventions applied by `translateToServo`. The angle clamp `constrain(0, 180)` is an electrical backstop applied on every path: IK, pose, calibrate, and clip.
+**Angle spaces:** Math-space angles are abstract joint angles centered on the calibration pose (all URDF joints at 0, all pitch servos at 90 degrees). `NEUTRAL[]` is not the origin of math-space; it is one particular standing pose expressed in math-space, where each shoulder points to its outward rest direction. Servo-space angles are physical 0-180 degree values written to the PCA9685, with per-leg sign conventions applied by `translateToServo`. The angle clamp `constrain(0, 180)` is an electrical backstop applied on every path: IK, pose, calibrate, and clip.

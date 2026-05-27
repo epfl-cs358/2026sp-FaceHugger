@@ -2,16 +2,17 @@
 
 FaceHugger is a working robot, but it is also a starting point. This page collects what we would do next and how someone else could build on it. If you are picking the project up, the [Reference](../reference/conventions.md) section is where the architecture is explained in depth; this page is the shorter "what now" view.
 
-## Future recommendations
+## Future directions
 
-These are the things we know we would tackle next, roughly in priority order.
+FaceHugger walks, but there is a lot of room to take it further. These are the directions we would explore next. Each is a project in its own right, sketched here as a starting point rather than a finished plan.
 
-- **Finish change B on the hardware.** The front-left shoulder was regularized in code so servo 90 points outward like the other three legs, but the physical horn remount and a clip re-export are still pending. Until both happen, the running robot expects the old FL standing pose. See [Conventions](../reference/conventions.md).
-- **Finalize the pinout and the servo map.** The wiring pinout is still a proposal, and the flat servo-id scheme (`servo_mapping.yaml` / a firmware `SERVO_CONFIG[]`) has not been committed. Locking these down removes the "confirm against `config.h`" caveat that runs through the wiring and convention docs.
-- **The on-board animation player.** Clips today are baked frames the firmware replays. The planned richer on-board player (a `.fhc` format with runtime IK and IMU correction) would replace that and the legacy textbook IK. It is designed but not implemented; see the [roadmap](../reference/roadmap.md).
-- **Revisit servo sizing or clip speed.** The simulation shows that fast clip moves demand roughly twice the servo's stall torque in transients, so those moves saturate on real hardware. Either slow the clips (cap joint velocity) or size up the servos. See [Controlling the simulation](../reference/simulation/pybullet-control.md).
-- **Body-pose IK (`T:3`).** The `CMD_POSE` command is documented but has no firmware handler yet, so the robot cannot yet hold a commanded chassis pose. It is a natural next feature.
-- **Bring the sensors into the loop.** The ToF and IMU are wired but the telemetry and any closed-loop use of them are not simulated or fully used yet.
+- **More sensing.** Add sensors beyond the current ToF and IMU, and close the loop on them so the robot reacts to its surroundings rather than just reading them.
+- **IMU stabilization and correction.** Use the IMU to keep the body level and adjust the gait in real time, so the robot stays balanced on uneven ground or when nudged.
+- **Better walk cycles and animation.** Refine the gaits and author smoother, more lifelike clips for richer and more natural motion.
+- **A camera for navigation.** Add a camera so the robot can perceive and navigate its environment instead of being driven blind.
+- **A redesign around the center of gravity.** Revisit the mechanical design to bring the motors closer to the body and lower the center of gravity, which would make balance and dynamic motion much easier.
+
+These are deliberately high level. We would expand each into its own design and milestones before building it.
 
 ## Tips for expanding the project
 
