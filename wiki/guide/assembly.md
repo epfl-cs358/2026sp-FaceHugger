@@ -60,7 +60,7 @@ This guide walks you through building the FaceHugger from scratch. It is written
 
     | Component | Qty | Notes |
     |---|---|---|
-    | QYRC DSS-230MG servo | 12 | 3 per leg |
+    | QYRC DS-3230MG servo | 12 | 3 per leg |
     | PCA9685 PWM multiplexer | 1 | The servo controller board |
     | ESP32 | 1 | The main microcontroller |
     | OLED screen (0.96" I²C) | 1 | |
@@ -128,7 +128,7 @@ Take one **knee piece** (white, elongated shell shape) and locate the hex nut sl
 
 ### Step 2: Knee, install the servo
 
-Take one **DSS-230MG servo**. Before inserting it, notice the cable: it needs to come out through the **small rectangular hole** on the side of the knee piece, not just hang loose.
+Take one **DS-3230MG servo**. Before inserting it, notice the cable: it needs to come out through the **small rectangular hole** on the side of the knee piece, not just hang loose.
 
 Insert the servo into the opening in the knee. The servo body should sit flush inside the housing. Thread the cable through the exit hole as you push the servo in.
 
@@ -143,12 +143,15 @@ Secure the servo with **4× M3×12 screws**, one in each corner. Tighten evenly,
 
 ### Step 3: Knee, install the ball bearing
 
-The ball bearing goes on the **opposite end** from the servo gear (the rounded tip of the knee piece). It sits in a recessed pocket and is held by a single screw that passes through the bearing's inner race.
+The ball bearing goes on the **opposite end** from the servo gear (the rounded tip of the knee piece). 
 
-Press the bearing into the pocket. Thread an **M3×8 screw** through the centre of the bearing and into the hex nut you inserted in Step 1. Tighten until snug, but the bearing should spin freely without rattling.
+Thread an **M3×8 screw** through the centre of the bearing and into the hex nut you inserted in Step 1. Tighten until snug, but the bearing should spin freely without rattling.
 
 !!! tip "Check bearing spin"
     After tightening, spin the bearing with your finger. It should rotate smoothly with no grinding or wobble. If it grinds, the screw is overtightened, so back off slightly.
+
+!!! warning
+    Don't screw the ball bearing too far (hence the use of a M3x8) to not damage the servo.
 
 ![Side view showing ball bearing installed at the tip of the knee, with servo visible behind](../assets/img/assembly/knee_ball_bearing_1.jpg)
 
@@ -162,7 +165,7 @@ The knee is now complete.
 
 Take the **Link 3** piece (the green H-shaped piece labelled "3"). One side of the H has two round recesses for a servo horn; the other side has two recesses for a ball bearing pivot.
 
-Insert the **knee assembly** into the ball-bearing side of Link 3 so that the bearing fits into the matching socket in the link. Then take a **servo horn** and press it onto the servo spline (the toothed shaft coming out of the servo). Align it so the arm points in a neutral direction, then secure with **1× M3×8 screw** through the horn centre into the servo.
+Insert the **knee assembly** into the ball-bearing side of Link 3 so that the bearing fits into the matching socket in the link. Then take a **servo horn** and press it onto the servo spline (the toothed shaft coming out of the servo). Align it so the arm points in a neutral direction (see image below), then secure with **1× M3×8 screw** through the horn centre into the servo.
 
 !!! tip "Servo horn orientation"
     The servo horn should point roughly perpendicular to the knee piece's long axis when the servo is at its centre position (90°). This gives maximum range of motion in both directions. If you are unsure, centre the servo electronically before attaching the horn.
@@ -194,17 +197,17 @@ Insert the servo into the thigh bracket, cable-first, so the cable exits through
 
 ### Step 7: Thigh, install the ball bearings
 
-Press the ball bearing into the recessed pocket on the free arm of the thigh bracket. Secure with **1× M3×8 screw** through the bearing's centre into the hex nut behind it. Screw another ball bearing on the servo directly with another **M3×8 screw**.
+Press the ball bearing into the recessed pocket on the free arm of the thigh bracket. Screw another ball bearing on the servo directly with a **M3×8 screw**.
 
-![Thigh with servo installed and ball bearing fitted on the free arm](../assets/img/assembly/thigh_ball_bearing.jpg)
+![Thigh with servo installed and ball bearing fitted on the free arm](../assets/img/assembly/thigh_ball_bearing_servo.jpg)
 
-![Alternate angle showing thigh, ball bearing, and the knee assembly nearby](../assets/img/assembly/thigh_ball_bearing_servo.jpg)
-
-**Fasteners for this step:** 2× M3×8 screw.
+**Fasteners for this step:** 1× M3×8 screw.
 
 ### Step 8: Add Link 2 to the thigh
 
 Take the **Link 2** piece (green H-shape labelled "2"). Fit the **thigh assembly** into the ball-bearing side of Link 2. Attach the **servo horn** to the thigh servo and screw it to Link 2 with **1× M3×8 screw**.
+
+![Alternate angle showing thigh, ball bearing, and the knee assembly nearby](../assets/img/assembly/thigh_ball_bearing.jpg)
 
 **Fasteners for this step:** 1× M3×8 screw (servo horn).
 
@@ -231,7 +234,7 @@ Insert the servo and secure with **4× M4×12 screws**.
 
 The hip piece **is** Link 1. Clip the thigh+knee sub-assembly onto the hip by mating the open bracket end of Link 2 with the hip bracket. The hip servo horn connects to Link 2.
 
-Attach the servo horn to the hip servo, ensuring it points in the correct neutral direction. Screw the horn to Link 2 with **1× M3×8 screw**.
+Attach the servo horn to the hip servo, ensuring it points in the correct neutral direction. Screw the horn to Link 2 with **1× M3×8 screw**. Screw the ball bearing that's on the bottom side of the mount with another **M3x8 screw**.
 
 !!! warning "Horn orientation matters"
     On all three joints, always attach servo horns with the servo at its electrical centre position (command a 90° / 1500µs pulse if using a servo tester). If you attach the horn with the servo off-centre, the leg will have uneven range of motion and may bind at one extreme.
@@ -240,7 +243,7 @@ Attach the servo horn to the hip servo, ensuring it points in the correct neutra
 
 ![Hip from the underside showing servo horn engagement and cable management](../assets/img/assembly/Hip_bottom_attached.jpg)
 
-**Fasteners for this step:** 1× M3×8 screw (servo horn).
+**Fasteners for this step:** 2× M3×8 screw.
 
 ### Step 12: Elastic band on knee
 
@@ -269,6 +272,8 @@ Before soldering, it helps to understand what each board does:
 - **IMU (MPU-6050)**: Measures orientation and acceleration. Used by the firmware for balance control.
 - **OLED screen**: Small display for status readout.
 - **ToF sensors**: Measure distance to objects. Used for obstacle detection.
+
+![Read more about the parts in ](/parts.md)
 
 ### Step 13: Solder the power chain
 

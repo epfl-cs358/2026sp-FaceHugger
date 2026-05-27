@@ -111,6 +111,12 @@ Before printing, copy the file once and mirror it along the back axis — you ne
 
 ![The hip mounts in Prusa-slicer](../assets/img/printing/HipMountsPrint.png)
 
+`Shell.stl` :
+
+Do not forget to add supports on every surface facing the printing board, including the little surfaces above the hooks.
+
+![The shell in Prusa-slicer](../assets/img/printing/ShellPrint.jpg)
+
 ## Leg parts
 
 The leg `.3mf` files are pre-plated with the correct orientation already set, so open them in PrusaSlicer directly without adjusting anything.
