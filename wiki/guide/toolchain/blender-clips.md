@@ -32,10 +32,11 @@ Press `N` in the 3D Viewport to open the sidebar, then switch to the
 - **Poses**: a commit-tracked library of control-object snapshots. Apply a pose
   to set the viewport without keyframing, then use **Key into Clip** to record
   the pose as a keyframe at the current frame.
-- **Export**: bake and export the active clip (or a selection of clips) to CSV,
+- **Export**: bake and export the active clip (or the ticked selection) to CSV,
   C header (`.h`), and browser JavaScript (`.js`). The bundled
   `clips_all.h` + `clips_manifest.json` is the format consumed by the on-board
-  clip player.
+  clip player, and it is built from exactly the ticked clips, so the per-row
+  checkboxes are how you choose which clips end up on the robot.
 
 A **Preview Robot Motion** toggle switches F-curves between Bezier (authoring)
 and Linear (exact robot playback) without losing Bezier handles.

@@ -34,7 +34,7 @@ Why two output representations? The `.js` ships **finished servo degrees** becau
 - **`_link1_delta_to_absolute`** fixes the shoulder. The rig's analytic yaw driver outputs a *delta from rest* (zero at the standing pose), but everything downstream expects *absolute* math-space angles where standing equals `NEUTRAL`. This converts `absolute = NEUTRAL + sign * delta` per leg, once, so both export paths inherit it.
 - **`_frame_to_servo`** is the host twin of the firmware `translateToServo`. Three steps: scale toward `NEUTRAL` by 2/3, apply the per-leg servo branch (`FL: 90 + (sh - 135)`, `FR: 90 + (sh - 45)`, `BL: 90 + (sh + 135)`, `BR: 90 + (sh + 45)`, with thigh/knee mirrored per side), then clamp to 0-180 and round. It feeds the `.js`.
 - **`_scale_from_neutral`** does only the 2/3 scale, no per-leg conversion. It feeds `clips_all.h`.
-- **`to_js` / `to_c_header` / `to_clips_header`** emit the three artifacts. `to_js` bakes a configurable ESP IP into a self-contained WebSocket player; `to_clips_header` bundles every clip plus a `clips_manifest.json`, enforcing strictly increasing frame times and `uint16` limits.
+- **`to_js` / `to_c_header` / `to_clips_header`** emit the three artifacts. `to_js` bakes a configurable ESP IP into a self-contained WebSocket player; `to_clips_header` bundles the clips it is handed into one `clips_all.h` plus a `clips_manifest.json`, enforcing strictly increasing frame times and `uint16` limits. The panel passes it the ticked export selection, so the bundle is the curated firmware set, not necessarily every clip in the file.
 
 ## Conventions baked at export
 
@@ -54,14 +54,16 @@ The add-on adds a "FaceHugger" tab to the 3D viewport sidebar (press `N`). It ma
 
 **Selection sets.** One-click selection of control groups (All, Body, Legs, Front, Back, and per-leg) for faster keyframing. Pure viewport selection, no transforms touched.
 
-**Export.** The Export sub-panel bakes the active clip (or a subset) and writes, under `animation/exported_clips/`:
+**Export.** The Export sub-panel bakes the active clip (or the ticked selection) and writes, under `animation/exported_clips/`:
 
 | Artifact | Contents | Consumer |
 |---|---|---|
 | `<clip>.csv` | frame, time, 12 math-space angles | inspection (legacy) |
 | `<clip>.h` | the same as a C array | reference (legacy) |
 | `<clip>.js` | finished servo degrees + a WebSocket player | browser/app live preview |
-| `clips_all.h` + `clips_manifest.json` | all clips, pre-scaled math-space | the on-board clip player |
+| `clips_all.h` + `clips_manifest.json` | the ticked export selection, pre-scaled math-space | the on-board clip player |
+
+The per-row checkboxes in the Clips sub-panel are the firmware set: both **Export Active Clip** and **Export Selected Clips** rebuild `clips_all.h` and the manifest from exactly the ticked clips (in clip-list order, so ids stay stable), replacing the previous bundle. Untick a work-in-progress clip and it stays out of the robot's set without being deleted. With nothing ticked, the bundle is left untouched rather than wiped. The headless `export_all_clips.py` is the exception: it bundles *every* clip in the file regardless of the selection, so use the panel for a curated set and the headless tool for a full re-export.
 
 **Activity heatmap.** Colours the servo meshes from green (quiet) to red (jerky) by frame-to-frame angle delta, so you can spot mechanical shock before export. Only 8 of 12 servos are coloured because the hip servo was merged into the body CAD.
 
