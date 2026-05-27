@@ -3,5 +3,4 @@ nav:
   - index.md
   - motion-engine.md
   - fsm-states.md
-  - kinematics.md
   - csv-diagnostics.md

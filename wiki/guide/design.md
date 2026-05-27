@@ -22,11 +22,13 @@ The hip moves in yaw in respect to the body, the femur moves in pitch in respect
 
 ## How a leg moves
 
-!!! todo
-    Plain-language intuition: which joint moves the foot where; forward vs
-    inverse kinematics; the zero pose and sign conventions at a glance. Full
-    treatment in the [kinematics reference](../reference/firmware/kinematics.md)
-    and [servo conventions](../reference/conventions.md).
+Each joint moves the foot in a predictable way: the hip yaw swings the whole leg left or right, the femur pitch lifts or lowers the foot in an arc, and the knee pitch extends or retracts it. Walking gaits are built from coordinated sweeps of those two pitch joints, while yaw steers.
+
+**Inverse kinematics** (IK) is the reverse problem: given a desired foot position in space, compute the three joint angles that reach it. For a 3-DOF leg, the hip and knee angles are solved geometrically (law of cosines on the two-link chain), and the shoulder yaw is found with `atan2` from the target's horizontal position relative to the body. This gives a closed-form solution — no iteration needed.
+
+IK is fully implemented in the simulation pipeline (Python) and in the Blender rig (used by the animation exporter). The firmware, however, does not run IK at runtime. It works from pre-baked angle tables: gaits are fixed pose sequences, and animations are authored offline and exported as frame arrays. The vision of a closed-loop IK controller — where an IMU loop reads body tilt, computes corrective foot targets, and resolves them to servo angles in real time to keep the robot level — was designed but not implemented in the firmware within the scope of this project. The building blocks are all there; the runtime loop is the missing piece.
+
+For the servo sign conventions and the exact coordinate frame, see [Reference → Conventions](../reference/conventions.md).
 
 ## Sizing & loads
 
