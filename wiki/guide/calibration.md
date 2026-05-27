@@ -69,7 +69,7 @@ The target geometry is:
 - **Thigh and knee joints** — the legs should lie **completely flat on the
   table**, fully extended, with no joint bent upward or downward
 
-![Correct calibration pose — top view showing 45° hip angles and flat legs](../assembly/assets/img/top_overview_with_shell_clean.jpg)
+![Correct calibration pose — top view showing 45° hip angles and flat legs](../assets/img/assembly/Top_overview_with_shell_clean.jpg)
 
 Press each horn onto its spline at the closest tooth position that achieves the
 target angle, then drive the centre screw back in finger-tight before giving it a

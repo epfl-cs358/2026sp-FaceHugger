@@ -144,16 +144,16 @@ Print as exported (tip facing up). Paint one support zone on the servo pocket fa
 
 ### Expected print times
 
-The table below is from PrusaSlicer with the full 4-leg set (3 plates) on an **MK4S**. Normal mode is the SPEED profile; Stealth mode is STRUCTURAL.
+The table below is from PrusaSlicer with the full 4-leg set (3 plates) on an **MK4S**. The two print mode columns correspond to the SPEED and STRUCTURAL SPOT profiles.
 
-| Plate | Filament | Normal mode (Speed) | Stealth mode (Structural) |
+| Plate | Filament | SPEED profile | STRUCTURAL profile |
 |-------|----------|---------------------|---------------------------|
 | Bed 1 | 72 g / 23.6 m | 4 h 19 min | 5 h 14 min |
 | Bed 2 | 59 g / 19.4 m | 3 h 39 min | 4 h 27 min |
 | Bed 3 | 67 g / 21.9 m | 3 h 40 min | 4 h 41 min |
 | **Total** | **199 g / 65 m** | **11 h 39 min** | **14 h 22 min** |
 
-Budget roughly half a day of print time for all leg parts in SPEED mode, or a full day in STRUCTURAL mode.
+Budget roughly half a day for all leg parts with the SPEED profile, or a full day with STRUCTURAL.
 
 ## Files
 
@@ -166,6 +166,7 @@ The `.3mf` files include the correct part orientation and plate layout — use t
 
 - [`cad/body/prusa/BodyAndBridges.3mf`](https://github.com/epfl-cs358/2026sp-FaceHugger/blob/main/cad/body/prusa/BodyAndBridges.3mf): body shell and both bridges on one plate
 - [`cad/body/prusa/HipMount.3mf`](https://github.com/epfl-cs358/2026sp-FaceHugger/blob/main/cad/body/prusa/HipMount.3mf): all 4 hip mounts (pre-mirrored)
+- [`cad/body/prusa/ShellPrint.3mf`](https://github.com/epfl-cs358/2026sp-FaceHugger/blob/main/cad/body/prusa/ShellPrint.3mf): decorative shell
 
 **Legs**
 
