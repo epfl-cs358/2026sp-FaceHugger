@@ -177,10 +177,10 @@ Take one **thigh piece** (red, U-shaped bracket). This is a more open structure 
 
 ![Thigh piece with hex nut inserted in the servo-side slot](../assets/img/assembly/thigh_hex_nut.jpg)
 
-!!! tip "The thigh has a printed label"
-    Look for a small embossed label on the thigh piece. This tells you which direction the servo cable should exit.
+!!! note "Link 2 and Link 3 are the same on every leg"
+    All four thighs (Link 2) and knees (Link 3) are identical, so there is nothing to orient per leg here. The only parts that come in a left and a right variant are **Link 1** and the **leg/hip mounts**, and that is where the leg side is indicated. The embossed number on the piece just identifies the part.
 
-![Close-up of the printed label on the thigh piece](../assets/img/assembly/thigh_leg_label.jpg)
+![The embossed part number on the Link 2 piece](../assets/img/assembly/thigh_leg_label.jpg)
 
 **Fasteners for this step:** 5× M3 hex nuts.
 
@@ -248,7 +248,7 @@ Fit one **elastic band** around the knee joint area. This provides light return 
 
 ![Knee joint with elastic band fitted](../assets/img/assembly/knee_elastic_bands.jpg)
 
-### ✅ Repeat Steps 1 to 12 for the remaining three legs
+### Repeat Steps 1 to 12 for the remaining three legs
 
 You should now have **four complete leg assemblies**, each with three servos, two ball bearings, and all link pieces attached.
 
@@ -363,6 +363,7 @@ The remaining **2 ToF sensors** mount on the side bridges using **2× M2×4 scre
 The ESP32 communicates with the OLED, IMU, and PCA9685 over a single I²C bus (two wires: SDA and SCL, plus power). You need to make **4 cable trees**, one for each signal, so that one ESP32 pin fans out to all three peripherals.
 
 Each cable tree has:
+
 - **1 female connector** on one end → plugs into the ESP32
 - **3 female connectors** on the other end → one each for OLED, IMU, PCA9685
 
