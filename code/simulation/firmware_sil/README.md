@@ -121,6 +121,24 @@ robot** — point it at `ws://<robot-ip>:81`. The unmodified app can connect too
 Port note: the real robot uses **81** (privileged on macOS/Linux), so the sim
 defaults to **8081**. `--port 81` works with sudo for true parity.
 
+### Drive the real Expo app against the sim
+
+The full mobile app (`code/remote-control-app/MyApp`) can drive the sim exactly as
+it drives the robot. The app's WebSocket endpoint is configurable in
+`MyApp/config/config.ts`:
+
+1. Set `webSocketPort = 8081` (it defaults to `81`, the robot).
+2. Set `webSocketIP` to the dev machine's **LAN IP** (not `localhost`, unless you
+   run the app's web build on the same machine).
+3. Run the server bound to all interfaces so a phone/emulator can reach it:
+   ```bash
+   python facehugger.py serve --host 0.0.0.0   # WS API on :8081 (+ SSE telemetry on :8082)
+   ```
+4. Start the app (`npm run web` / `npm run ios` / `npm run android`).
+
+The app and the Mac must be on the same network. Revert `webSocketPort` to `81`
+to target the robot again.
+
 ## Sim telemetry (SSE, local debug only)
 
 Alongside the WS API, `serve` streams a per-joint telemetry frame over

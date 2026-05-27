@@ -1,4 +1,4 @@
-import { DEBUGGING } from '../config/config';
+import { DEBUGGING, webSocketPort } from '../config/config';
 
 export let ws: WebSocket | null = null;
 
@@ -24,9 +24,9 @@ const flushPending = () => {
   }
 };
 
-export const connect = (ip: string) => {
+export const connect = (ip: string, port: number = webSocketPort) => {
   if (ws === null || ws === undefined) {
-    ws = new WebSocket(`ws://${ip}:81`);
+    ws = new WebSocket(`ws://${ip}:${port}`);
     ws.onopen = () => {
       if (DEBUGGING) console.log('[WS] open');
       flushPending();
