@@ -317,9 +317,14 @@ void SpinalCord::tickTrot() {
     // Phase offsets per leg index [FR, FL, RR, RL] — JS uses fr/bl=0.5, fl/br=0.0.
     static const float OFFSETS[LEG_COUNT] = { 0.5f, 0.0f, 0.0f, 0.5f };
 
-    // Front leg hip end-points (math degrees), JS values: [FR, FL].
-    static const float HIP_IN[2]  = { 65.0f,  75.0f };
-    static const float HIP_OUT[2] = { 25.0f, 110.0f };
+    // Front leg hip end-points (math degrees), per leg [FR, FL]. FR is the original
+    // JS value. FL was remapped by Change B: translateToServo went `servo = sh`
+    // (neutral 75) → `90 + (sh-135)` (neutral 90, a horn remount), but these were
+    // left stale and pulled FL 25-60° off neutral all cycle. Like Change B did for
+    // tickGait, we keep the OLD sweep DELTA (back at neutral, front +35° forward)
+    // and re-anchor it to the new neutral: HIP_IN = neutral (135), HIP_OUT = +35.
+    static const float HIP_IN[2]  = { 65.0f, 135.0f };
+    static const float HIP_OUT[2] = { 25.0f, 170.0f };
 
     // Magnitude of forward intent in [0, 1]; sign chooses direction.
     const float dirY = activeY;
@@ -384,7 +389,14 @@ void SpinalCord::tickTrot() {
                 sweep    = STEP_LENGTH * (-0.5f + progress) * mag;
                 lift     = sinf(progress * (float)M_PI) * STEP_HEIGHT * mag;
             }
-            sh -= sweep;
+            // Per-leg sweep sign so the two rear shoulders mirror each other for a
+            // straight trot (RR/BR +sweep, RL/BL -sweep). BR was un-mirrored
+            // 2026-05-25 (translateToServo 90-(sh+45) → 90+(sh+45)); tickGait and
+            // tickYawRotation flipped BR's sign in tandem but this was missed, so
+            // both rear legs swept the SAME way and the back veered. +sweep here
+            // restores BR's validated pre-branch servo output (90+sweep).
+            if (i == LEG_RR) sh += sweep;
+            else             sh -= sweep;  // RL/BL
         }
 
         // Lift applied to thigh (+) and knee (-), same convention as JS.

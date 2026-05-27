@@ -53,6 +53,59 @@ def test_firmware_gait_runs_and_sweeps_the_legs(gait_name):
     )
 
 
+# Servo index of each leg's shoulder (hip) in the firmware's 12-angle vector
+# (leg_id*3, firmware order FR,FL,BR,BL).
+_HIP = {"FR": 0, "FL": 3, "BR": 6, "BL": 9}
+
+
+def test_trot_rear_shoulders_mirror_for_straight_walk():
+    """Straight forward trot: the two rear shoulders must mirror each other.
+
+    BR(RR) and BL(RL) are an anti-phase pair (offsets 0.0 / 0.5), so at a MATCHED
+    stride phase their shoulder deviation from neutral (90) must be opposite-signed
+    — otherwise both rear feet sweep the same rotational way and the back veers.
+    This regressed when BR was un-mirrored (2026-05-25): translateToServo flipped
+    but tickTrot's rear sweep wasn't, so both swept the same way. PERIOD_S=1.5s, so
+    samples 750 ms apart are half a cycle = matched leg phase.
+    """
+    from firmware_sil.sil_bridge import trace_gait
+
+    fc = _fc_or_skip()
+    # record_every=180 @240Hz = 750 ms = half the 1.5 s trot period.
+    samples = trace_gait(fc, "trot", direction="FW", steps=900, record_every=180)
+    # Skip the first sample (gait just armed, motion still ramping).
+    pairs = [
+        (samples[i], samples[i + 1])
+        for i in range(1, len(samples) - 1)
+        if samples[i + 1][0] - samples[i][0] == 750
+    ]
+    assert pairs, "need samples 750 ms apart to compare matched stride phases"
+    for (t0, a0), (t1, a1) in pairs:
+        dev_br = a0[_HIP["BR"]] - 90
+        dev_bl_next = a1[_HIP["BL"]] - 90  # BL half a cycle later = BR's leg phase
+        assert abs(dev_br + dev_bl_next) <= 4, (
+            f"rear shoulders not mirrored: BR@{t0}ms dev={dev_br:+d}, "
+            f"BL@{t1}ms dev={dev_bl_next:+d} (expected opposite)"
+        )
+
+
+def test_trot_front_left_anchored_near_neutral():
+    """FL front shoulder must sit at/above neutral (90) through the trot, not be
+    pulled 25-60° inward. Change B remapped FL's servo neutral 75->90 (horn
+    remount) but left tickTrot's HIP table stale, parking FL at servo ~30-65. The
+    fix re-anchors the old sweep delta to the new neutral, so FL stays >= ~90.
+    """
+    from firmware_sil.sil_bridge import trace_gait
+
+    fc = _fc_or_skip()
+    samples = trace_gait(fc, "trot", direction="FW", steps=480)
+    fl_hip = [a[_HIP["FL"]] for _t, a in samples]
+    assert min(fl_hip) >= 88, (
+        f"FL shoulder pulled off neutral: min servo {min(fl_hip)} "
+        f"(range [{min(fl_hip)}, {max(fl_hip)}]); expected anchored near 90"
+    )
+
+
 def test_unknown_gait_name_rejected():
     from firmware_sil.sil_bridge import trace_gait
 
