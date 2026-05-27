@@ -9,3 +9,4 @@ nav:
   - calibration.md
   - remote_control_app.md
   - toolchain
+  - extending.md
