@@ -754,7 +754,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
     )
     shoulder_servo_R_world = find_point_world_at_occurrence(
         occs,
-        f"{LEG_ASSEMBLY}/MotorMountR:1/LegBaseServoEnclosure(Mirror):1",
+        f"{LEG_ASSEMBLY}/MotorMountR:1/Servo_Mouser_Model(Mirror):1",
         "ServoMountPoint",
     )
     # Top-level hip / knee servos: shared (no L/R variants in CAD).
@@ -892,6 +892,12 @@ def generate(export: dict, cfg: dict, out_path: Path):
             rotated = _rotate_z(ss_offset, rpy_z_deg)
             ss_xyz = [mount_mm[i] + rotated[i] for i in range(3)]
             base_extra_visuals.append((servo_mesh_name, ss_xyz, bracket_rpy))
+        elif servo_mesh_name:
+            print(
+                f"warning: shoulder-servo ServoMountPoint not found for "
+                f"{side}-side bracket; skipping shoulder servo visual for "
+                f"{leg['id']}"
+            )
 
     urdf.link(
         base_cfg["name"],

@@ -45,9 +45,21 @@
       </geometry>
     </visual>
     <visual>
+      <origin xyz="0.050401 0.043222 0.036844" rpy="0.000000 0.000000 0.000000"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
       <origin xyz="-0.034000 -0.046000 0.026000" rpy="0.000000 0.000000 3.141593"/>
       <geometry>
         <mesh filename="exported_meshes/leg_mount_R.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.050401 -0.043222 0.036844" rpy="0.000000 0.000000 3.141593"/>
+      <geometry>
+        <mesh filename="exported_meshes/servo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
     <collision>
