@@ -35,7 +35,7 @@ FaceHugger was built by six Computer Science students at EPFL for the *Making In
 
     ---
 
-    **Worked on:** mechanical assembly and integration.
+    **Worked on:** mechanical assembly and integration, firmware and PyBullet simulation
 
     [GitHub](#) · [LinkedIn](#)
 
