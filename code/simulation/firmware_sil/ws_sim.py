@@ -25,6 +25,7 @@ import argparse
 import asyncio
 import json
 import time
+from pathlib import Path
 
 import websockets
 
@@ -140,18 +141,34 @@ async def _telemetry_loop(sim, clients, period=0.5):
             )
 
 
-def build_telemetry_app(telem_queue):
-    """Starlette app serving the per-joint frames as Server-Sent Events.
+def _panel_path():
+    """The relocated browser control panel, next to the remote-control app."""
+    repo_root = Path(__file__).resolve().parents[3]
+    return (
+        repo_root
+        / "code"
+        / "remote-control-app"
+        / "control-panel"
+        / "robot_control_panel.html"
+    )
+
+
+def build_telemetry_app(telem_queue, serve_panel=False):
+    """Starlette app serving the per-joint frames as Server-Sent Events, and
+    optionally the browser control panel itself.
 
     GET /telemetry streams `data: <frame-json>` at the rate the sim loop pushes
-    (~20 Hz). CORS is wide open because a `file://` control panel is a cross-origin
+    (~20 Hz). CORS is wide open because the control panel is a cross-origin
     EventSource client. The queue is single-consumer (the local debug panel); a
-    second client would split frames rather than each getting every frame.
+    second client would split frames rather than each getting every frame. With
+    `serve_panel`, GET / and /panel return the panel HTML so it opens at an http://
+    URL instead of a file:// path.
     """
     from sse_starlette.sse import EventSourceResponse
     from starlette.applications import Starlette
     from starlette.middleware import Middleware
     from starlette.middleware.cors import CORSMiddleware
+    from starlette.responses import FileResponse
     from starlette.routing import Route
 
     async def telemetry(request):
@@ -162,13 +179,24 @@ def build_telemetry_app(telem_queue):
 
         return EventSourceResponse(gen())
 
+    routes = [Route("/telemetry", telemetry)]
+    if serve_panel:
+        panel = _panel_path()
+
+        async def panel_page(request):
+            return FileResponse(str(panel))
+
+        routes += [Route("/", panel_page), Route("/panel", panel_page)]
+
     return Starlette(
-        routes=[Route("/telemetry", telemetry)],
+        routes=routes,
         middleware=[Middleware(CORSMiddleware, allow_origins=["*"])],
     )
 
 
-async def serve(host="localhost", port=8081, gui=False, sse_port=_SSE_PORT):
+async def serve(
+    host="localhost", port=8081, gui=False, sse_port=_SSE_PORT, panel=False
+):
     sim = RobotSim(gui=gui)
     clients = set()
     telem_queue = asyncio.Queue(maxsize=1)
@@ -191,7 +219,7 @@ async def serve(host="localhost", port=8081, gui=False, sse_port=_SSE_PORT):
     try:
         import uvicorn
 
-        app = build_telemetry_app(telem_queue)
+        app = build_telemetry_app(telem_queue, serve_panel=panel)
         sse_server = uvicorn.Server(
             uvicorn.Config(app, host=host, port=sse_port, log_level="warning")
         )
@@ -201,6 +229,8 @@ async def serve(host="localhost", port=8081, gui=False, sse_port=_SSE_PORT):
             "[ws-sim] sse-starlette/uvicorn not installed — sim telemetry SSE "
             "disabled (pip/conda install them to enable the panel's telemetry table)"
         )
+        if panel:
+            print("[ws-sim] --panel also needs sse-starlette/uvicorn; panel not served")
 
     async with websockets.serve(handler, host, port):
         print(
@@ -209,6 +239,8 @@ async def serve(host="localhost", port=8081, gui=False, sse_port=_SSE_PORT):
         )
         if sse_task is not None:
             print(f"[ws-sim] sim telemetry (SSE) on http://{host}:{sse_port}/telemetry")
+            if panel:
+                print(f"[ws-sim] control panel on http://{host}:{sse_port}/panel")
         coros = [_sim_loop(sim, telem_queue), _telemetry_loop(sim, clients)]
         if sse_task is not None:
             coros.append(sse_task)
@@ -228,9 +260,16 @@ def main():
         default=_SSE_PORT,
         help=f"telemetry SSE port (default {_SSE_PORT})",
     )
+    ap.add_argument(
+        "--panel",
+        action="store_true",
+        help="also host the browser control panel over HTTP (at the SSE port /panel)",
+    )
     args = ap.parse_args()
     try:
-        asyncio.run(serve(args.host, args.port, args.gui, args.sse_port))
+        asyncio.run(
+            serve(args.host, args.port, args.gui, args.sse_port, panel=args.panel)
+        )
     except KeyboardInterrupt:
         pass
 

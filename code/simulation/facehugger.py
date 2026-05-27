@@ -159,7 +159,11 @@ def cmd_sim(args):
     if getattr(args, "list_clips", False):
         _list_clips()
         return 0
-    if getattr(args, "serve", False) or getattr(args, "app", False):
+    if (
+        getattr(args, "serve", False)
+        or getattr(args, "app", False)
+        or getattr(args, "panel", False)
+    ):
         # Drive the sim from an external client (app / panel) over the T: WebSocket
         # API instead of from CLI flags. GUI on by default; --headless turns it off.
         return _serve_session(
@@ -168,6 +172,7 @@ def cmd_sim(args):
             gui=not args.headless,
             app=args.app,
             app_port=args.app_port,
+            panel=args.panel,
         )
     cli = [sys.executable, *SIMULATE]
     if args.clip:
@@ -256,9 +261,10 @@ def cmd_blender(args):
     return _run(cli)
 
 
-def _serve_session(*, host, port, gui, app, app_port):
+def _serve_session(*, host, port, gui, app, app_port, panel=False):
     """Run the firmware-backed WebSocket API (ws_sim), optionally launching the web
-    app alongside it. Backs `sim --serve` / `sim --app` and the legacy `serve`."""
+    app alongside it and hosting the browser control panel. Backs `sim --serve` /
+    `sim --app` / `sim --panel` and the legacy `serve`."""
     app_proc = None
     if app:
         app_dir = REPO_ROOT / "code" / "remote-control-app" / "MyApp"
@@ -272,6 +278,8 @@ def _serve_session(*, host, port, gui, app, app_port):
             cwd=str(app_dir),
         )
     print(f"WebSocket: ws://{host}:{port}   (telemetry SSE on :8082)")
+    if panel:
+        print(f"Panel:     http://{host}:8082/panel")
     cli = [
         sys.executable,
         "-m",
@@ -283,6 +291,8 @@ def _serve_session(*, host, port, gui, app, app_port):
     ]
     if gui:
         cli.append("--gui")
+    if panel:
+        cli.append("--panel")
     # cwd=None: run in the user's dir (HERE on PYTHONPATH) so firmware_sil imports.
     try:
         return _run(cli, cwd=None)
@@ -412,6 +422,12 @@ def main():
         default=8080,
         dest="app_port",
         help="web host port for --app (default 8080)",
+    )
+    ps.add_argument(
+        "--panel",
+        action="store_true",
+        help="imply --serve and host the browser control panel over HTTP "
+        "(at http://localhost:8082/panel)",
     )
     ps.set_defaults(func=cmd_sim)
 
