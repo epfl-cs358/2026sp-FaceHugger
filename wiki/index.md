@@ -31,7 +31,7 @@ This wiki is two things at once: a **build guide** if you want to reproduce or a
 
     ---
 
-    What to print, slicer settings, and orientation for each part.
+    What to print, slicer settings, and orientation for each part. All prints were made at the SPOT (EPFL's makerspace) on Prusa MK3S and MK4S printers.
 
     [:octicons-arrow-right-24: Printing](guide/printing.md)
 
