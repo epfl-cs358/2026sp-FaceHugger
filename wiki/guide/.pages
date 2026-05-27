@@ -1,5 +1,6 @@
 title: Build Guide
 nav:
+  - index.md
   - design.md
   - parts.md
   - printing.md
@@ -9,3 +10,4 @@ nav:
   - calibration.md
   - remote_control_app.md
   - toolchain
+  - extending.md

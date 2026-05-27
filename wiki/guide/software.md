@@ -2,25 +2,35 @@
 
 ## Overview
 
-The FaceHugger software ecosystem is divided into three main components: the embedded C++ firmware running on the ESP32, a host-side physics simulation using PyBullet, and a mobile remote-control application built with React Native.
+FaceHugger spans several toolchains that meet at one shared contract (the conventions and the WebSocket protocol). The pieces are:
+
+| Component | Language / tooling | Where |
+|---|---|---|
+| Firmware | C++ (Arduino), built with **PlatformIO** for the ESP32 | `code/firmware/` |
+| Simulation | **Python 3.12** + PyBullet (a conda env, see below) | `code/simulation/` |
+| Animation | **Blender 5.1** (its own bundled Python) + a Fusion 360 export script | `animation/`, `cad/scripts/` |
+| Remote control app | **React Native / Expo** (TypeScript) | `code/remote-control-app/MyApp/` |
+| Mechanical design | **Fusion 360** + the printable-STL export script | `cad/` |
+
+The three software components that run code are the embedded C++ firmware on the ESP32, a host-side PyBullet simulation, and the mobile remote-control app. The animation and CAD tooling run inside Blender and Fusion 360 respectively, using those applications' own bundled Python, so they need no environment of their own.
 
 ### Firmware architecture (ESP32)
 
-The firmware is divided into 5 modules:
+The firmware lives under `code/firmware/src/`: four module folders plus the top-level `main.cpp`.
 
 | Module | Role |
 |---|---|
-| `nervous_system/` | Coordinates the whole robot body (legs, screen, servos, and the IK math) |
+| `nervous_system/` | Coordinates the whole robot body: legs, screen, servos, gaits, and clip playback |
 | `brain/` | High-level external communication: receiving and processing packets, handling sensor I/O |
-| `shared/` | All data shared across modules |
+| `shared/` | Configuration and data types shared across modules |
 | `display/` | Assets and utility files for the screen |
-| `main/` | Initialises and updates `nervous_system` and `brain` |
+| `main.cpp` | Initialises and continuously updates `nervous_system` and `brain` |
 
 **`nervous_system/`**
 
-- `spinal_cord.cpp/h`: software abstraction for full limb coordination; implements all gaits and actions
-- `leg.cpp/h`: software abstraction for a single leg (`setPose` not used, since gaits are hardcoded)
-- `kinematics.cpp/h`: IK math computation (bypassed, since gaits are hardcoded)
+- `spinal_cord.cpp/h`: software abstraction for full limb coordination; implements the gaits, the baked-clip player, the invert maneuver, and the state machine
+- `leg.cpp/h`: software abstraction for a single leg
+- `kinematics.cpp/h`: IK math, kept for reference and tested against the simulation. Locomotion does not use runtime IK: gaits are phase-based angle schedules and gestures are baked clips
 - `servo.cpp/h`: software abstraction for servo control (angles and PWM pulses)
 - `face.cpp/h`: software abstraction for screen display and updates
 - `movements.h`: enums for the module: Leg IDs, gait parameters and types, action types
@@ -74,11 +84,11 @@ The firmware is divided into 5 modules:
 
 ### Host-side tooling
 
-**Remote control app**: built with React Native and Expo Go. Connects to the ESP32's hotspot and sends lightweight JSON packets over WebSockets to trigger gaits, individual limb control, and special actions (inverted walking, dancing, etc.).
+**Remote control app**: built with React Native and Expo Go. Connects to the ESP32's hotspot and sends lightweight JSON packets over WebSockets to trigger gaits, individual limb control, and special actions (the invert maneuver, clip playback, etc.).
 
-**Simulation**: a PyBullet physics environment used to test Inverse Kinematics, gait patterns, and weight distribution offline before deploying to hardware.
+**Simulation**: a PyBullet physics environment for testing gaits, clips, and weight distribution offline before deploying to hardware. It can run the exact compiled firmware in the loop (software-in-the-loop), so what you validate in the sim is the same C++ that runs on the robot. See the [simulation reference](../reference/simulation/index.md).
 
-**`API_SPEC.md`**: the strict JSON contract defining exactly how the app and the ESP32 communicate.
+**`API_SPEC.md`**: the JSON contract describing how the app and the ESP32 communicate. The [WebSocket API reference](../reference/api.md) documents the live `T:` protocol.
 
 ## How it works
 
@@ -96,29 +106,42 @@ When the ESP32 receives power, `main.cpp` triggers the following setup sequence:
 FaceHugger runs on a non-blocking, continuous update loop:
 
 1. `brain` listens for incoming WebSocket packets from the app
-2. On receipt (e.g. `{"dir": "FW"}`), it parses the JSON and updates the target state in the shared data structure
+2. On receipt (e.g. `{"T":1,"dir":"FW"}`), it parses the JSON and updates the target state in the shared data structure
 3. `nervous_system`'s FSM reads the state and calculates the next micro-step for the active gait
 4. `face` checks whether the robot's state requires an emotional update (e.g. confused jittering when stopped or inverted) and pushes pixels to the OLED
 
 ### Finite State Machine (FSM)
 
-The physical posture and gait cycle are driven by a strict FSM inside `SpinalCord`:
+The physical posture and gait cycle are driven by an FSM inside `SpinalCord`. There are six states (`data.h`):
+
+| State | Value | Meaning |
+|---|---|---|
+| `STATE_IDLE` | 0 | Holding position, awaiting a command |
+| `STATE_WALK` | 1 | Executing a gait |
+| `STATE_ACTION` | 2 | Running a one-shot maneuver (invert / wall-flip) or a clip |
+| `STATE_FAILSAFE` | 3 | Hardware exception or flipped; motion suppressed |
+| `STATE_REST` | 4 | All servos at 90 degrees: the flat calibration pose, safe to power off |
+| `STATE_STAND` | 5 | Standing on the per-leg `NEUTRAL[]` pose; the launch reference for gaits |
 
 ```mermaid
 stateDiagram-v2
     [*] --> STATE_IDLE
 
-    STATE_IDLE --> STATE_WALK : Valid joystick input
-    STATE_WALK --> STATE_IDLE : Stop command (graceful halt)
+    STATE_STAND --> STATE_WALK : Valid joystick input
+    STATE_WALK --> STATE_STAND : Stop command (eases back to standing)
 
-    STATE_IDLE --> STATE_REST : Relax command
-    STATE_REST --> STATE_IDLE : Wake command
+    STATE_IDLE --> STATE_STAND : Stand command
+    STATE_IDLE --> STATE_REST : Relax command (flat calibration)
+    STATE_REST --> STATE_STAND : Stand command
+
+    STATE_IDLE --> STATE_ACTION : Play clip / invert
+    STATE_ACTION --> STATE_IDLE : Maneuver complete
 
     STATE_WALK --> STATE_FAILSAFE : Hardware exception / flipped
-    STATE_IDLE --> STATE_FAILSAFE : Hardware exception / flipped
-
     STATE_FAILSAFE --> STATE_IDLE : Reset
 ```
+
+A gait launches from `STATE_STAND` and, when stopped, eases back to standing rather than dropping to idle. `STATE_REST` is the all-90 calibration pose used when mounting servo horns or powering down, not a "neutral" pose.
 
 ## Setup
 
@@ -151,18 +174,27 @@ stateDiagram-v2
         bblanchon/ArduinoJson @ ^7.0.0
         links2004/WebSockets @ ^2.4.1
         adafruit/Adafruit PWM Servo Driver Library
+        adafruit/Adafruit GFX Library @ ^1.11.5
+        adafruit/Adafruit SSD1306 @ ^2.5.7
 
     [env:native]
     platform = native
     test_framework = unity
+    lib_deps = bblanchon/ArduinoJson @ ^7.0.0
     build_flags =
         -std=c++14
         -Isrc/nervous_system
+        -Isrc/brain
+        -D UNITY_INCLUDE_DOUBLE
     build_src_filter =
         +<nervous_system/kinematics.cpp>
+        +<nervous_system/motion_math.cpp>
         +<brain/csv_log.cpp>
+        +<brain/clip_list_serializer.cpp>
     test_build_src = yes
 ```
+
+The `[env:native]` block builds a handful of source files on the host (no ESP32 needed) so the Unity tests can run, including the IK math and the math-to-servo transform shared with the simulation. Run them with `pio test -e native`.
 4. Connect the ESP32 via USB, then run the following commands from the PlatformIO terminal:
 ```bash
    pio run                        # compile the firmware
@@ -259,31 +291,66 @@ commanded state, causing the robot to collapse suddenly.
 
 ### Host-side simulation
 
-The PyBullet simulation lets you develop and test gaits entirely offline, without
-any risk to the hardware. It mirrors the same kinematic model used in the firmware.
+The PyBullet simulation lets you develop and test gaits and clips entirely offline,
+without any risk to the hardware. By default it runs the **exact compiled firmware**
+in the loop, so the motion you see is produced by the same C++ that runs on the robot.
 
-**Prerequisites:** Python 3.8+, `pybullet`, and `numpy` installed:
-
-```bash
-pip install pybullet numpy
-```
-
-**Available commands:**
-
-| Command | Description |
-|---|---|
-| `python facehugger.py sim` | PyBullet GUI, robot in default standing pose |
-| `python facehugger.py sim --walk` | PyBullet GUI, immediately runs the default Trot gait |
-| `python facehugger.py blender --rigged` | Launch Blender with the rigged model |
+**Prerequisites:** Python 3.12 and a few packages. On macOS there is no PyBullet wheel
+on PyPI, so a **conda environment is the recommended setup** (it also pulls in the
+pybind11 toolchain used to compile the firmware into the sim). One environment covers
+the simulator and the helper scripts:
 
 ```bash
-python facehugger.py sim              # GUI, standing pose
-python facehugger.py sim --walk       # walk gait
-python facehugger.py blender --rigged # Blender rigged model
+conda create -n facehugger python=3.12
+conda activate facehugger
+conda install -c conda-forge pybullet pybind11
+pip install -r code/simulation/requirements.txt
 ```
+
+On Linux you can skip conda and `pip install -r code/simulation/requirements.txt`
+directly. See [Software environments](#software-environments) below for the full
+picture of which folders need which environment.
+
+**Common commands** (run from `code/simulation/`):
+
+```bash
+python facehugger.py sim                 # GUI, standing pose
+python facehugger.py sim --walk          # walk gait (firmware in the loop)
+python facehugger.py sim --trot          # trot gait
+python facehugger.py sim --clip "wave"   # play a baked clip
+python facehugger.py serve --gui         # firmware-backed WebSocket API on :8081
+```
+
+`--walk` and `--trot` are separate gaits, both driven by the compiled firmware; pass
+`--python` to use the pure-Python re-port instead (no C++ toolchain needed). `serve`
+runs the same `T:` WebSocket protocol as the real robot, so the mobile app or the
+browser control panel can drive the sim. The full flag surface, the under-the-hood
+firmware-in-the-loop design, and the Blender subcommand are documented in the
+[simulation CLI reference](../reference/simulation/cli.md).
 
 !!! tip
-    Use `sim` to validate any changes to gait parameters or IK constants in
-    `config.h` before flashing new firmware to the ESP32. A gait that looks stable
-    in simulation will not always be stable on hardware, but a gait that fails in
-    simulation will always fail on hardware.
+    Validate any change to gait parameters or clips in the sim before flashing the
+    ESP32. A gait that looks stable in simulation is not guaranteed stable on
+    hardware, but a gait that fails in simulation will always fail on hardware.
+
+## Software environments
+
+Each toolchain manages its own dependencies; there is no single environment that
+spans all of them, because they run in different runtimes.
+
+- **Simulation (`code/simulation/`)** is the only host-Python project. Use one conda
+  environment named `facehugger` (PyBullet and pybind11 from conda-forge, the rest
+  from `requirements.txt`). The same env runs the simulator, the URDF generator, and
+  the verification scripts.
+- **Firmware (`code/firmware/`)** is managed entirely by PlatformIO, which creates
+  its own isolated build environments from `platformio.ini`. No Python env is needed.
+- **Mobile app (`code/remote-control-app/MyApp/`)** uses npm; `npm install` reads
+  `package.json`.
+- **Animation and CAD** run inside Blender and Fusion 360, each using that
+  application's bundled Python. The scripts are loaded from within the app, not run
+  against a project environment.
+
+So "one environment for everything" is not possible across these runtimes, but the
+host-Python side is genuinely one conda env. A `pyproject.toml` for `code/simulation/`
+(with optional-dependency groups for sim, serve, and docs) would be a reasonable
+future tidy-up, but `requirements.txt` is what the project uses today.

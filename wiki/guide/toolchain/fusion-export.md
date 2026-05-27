@@ -1,11 +1,19 @@
-# Fusion 360 export add-ins
+# Fusion 360 export scripts
 
-Two Fusion 360 add-ins live in `cad/scripts/`. They run inside Fusion, not in the
-host Python environment, so you load them through Fusion's own script runner.
+Two Fusion 360 scripts live in `cad/scripts/`, both written for this project. They
+run inside Fusion, not in the host Python environment, so you load them through
+Fusion's own script runner. (Their manifests declare `type: script`, so they are
+Scripts you run on demand, not persistent Add-Ins.)
 
-To load either add-in: open Fusion 360, go to **Utilities -> Add-Ins -> Scripts
-and Add-Ins**, switch to the **Add-Ins** tab, click the `+` icon next to **My
-Add-Ins**, and browse to the add-in folder. Run it from the same panel.
+To load either one: open Fusion 360, go to **Utilities -> ADD-INS -> Scripts and
+Add-Ins**, stay on the **Scripts** tab, click the green `+` next to **My Scripts**,
+and browse to the script's inner folder (the one containing the `.py` and
+`.manifest`). It then appears in the list; select it and click **Run**. You only
+need to add it once; afterwards it stays in **My Scripts**.
+
+!!! todo "Add install screenshots"
+    Add screenshots of the Scripts and Add-Ins dialog, the green `+`, and the
+    folder picker, so a first-time user can follow along.
 
 ## ExportBodiesToURDF
 

@@ -4,12 +4,12 @@ FaceHugger's build pipeline connects four tools in a fixed order. Understanding
 each stage prevents surprises when you change something upstream and wonder why
 nothing moved downstream.
 
-**Fusion 360 -> URDF export.** The two Fusion add-ins in
+**Fusion 360 -> URDF export.** The two Fusion scripts in
 `cad/scripts/ExportBodiesToURDF/` and `cad/scripts/ExportPrintableSTLs/` are the
 first stage. The URDF exporter writes a JSON manifest and STL meshes that the
 Python generator (`generate_urdf.py`) turns into `facehugger.urdf`. Everything
 downstream is derived from that URDF, so never hand-edit the generated files. See
-[Fusion 360 export add-ins](fusion-export.md) for the step-by-step.
+[Fusion 360 export scripts](fusion-export.md) for the step-by-step.
 
 **URDF -> Blender rig.** Running `facehugger.py blender --rigged` ingests the
 URDF and builds an armature in Blender 5.x. The rigged scene
