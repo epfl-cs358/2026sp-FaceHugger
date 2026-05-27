@@ -109,11 +109,13 @@ WebSocket transport and the periodic telemetry are Python.
 
 ```bash
 cd code/simulation
-python facehugger.py serve                 # ws://localhost:8081  (or: python -m firmware_sil.ws_sim)
+python facehugger.py sim --serve                 # ws://localhost:8081  (or: python -m firmware_sil.ws_sim)
 ```
 
-Then open `tools/robot_control_panel.html` in a browser (no build/deps): set the
-target to `ws://localhost:8081` and Connect. One button per API command (clip
+Then open the control panel (no build/deps). Easiest: run `python facehugger.py sim
+--panel` and open the printed `http://localhost:8082/panel`. Or open the file
+directly at `code/remote-control-app/control-panel/robot_control_panel.html` and set
+the target to `ws://localhost:8081` and Connect. One button per API command (clip
 discovery T:8, play T:7, state T:2, move T:1, gait T:5, invert T:6, calibrate T:4);
 it shows the exact JSON sent and logs replies. The **same panel drives the real
 robot** — point it at `ws://<robot-ip>:81`. The unmodified app can connect too.
@@ -124,20 +126,16 @@ defaults to **8081**. `--port 81` works with sudo for true parity.
 ### Drive the real Expo app against the sim
 
 The full mobile app (`code/remote-control-app/MyApp`) can drive the sim exactly as
-it drives the robot. The app's WebSocket endpoint is configurable in
-`MyApp/config/config.ts`:
+it drives the robot. One command brings up the sim, the WebSocket API, and the app:
 
-1. Set `webSocketPort = 8081` (it defaults to `81`, the robot).
-2. Set `webSocketIP` to the dev machine's **LAN IP** (not `localhost`, unless you
-   run the app's web build on the same machine).
-3. Run the server bound to all interfaces so a phone/emulator can reach it:
-   ```bash
-   python facehugger.py serve --host 0.0.0.0   # WS API on :8081 (+ SSE telemetry on :8082)
-   ```
-4. Start the app (`npm run web` / `npm run ios` / `npm run android`).
+```bash
+python facehugger.py sim --app --host 0.0.0.0   # sim + WS API on :8081 + Expo web app
+```
 
-The app and the Mac must be on the same network. Revert `webSocketPort` to `81`
-to target the robot again.
+Then in the app's **Settings** screen, tap the **Simulator** preset (or enter the
+dev machine's LAN IP and port `8081`). Tap **Robot** to target hardware again. (To
+run only the server, use `sim --serve --host 0.0.0.0` and start the app yourself.)
+The app and the Mac must be on the same network.
 
 ## Sim telemetry (SSE, local debug only)
 
@@ -155,7 +153,8 @@ shoulder/hip/knee, where every joint carries **both** spaces:
 - `torque_nm` / `current_a` — from PyBullet + `sim_monitor`,
 - `pre_clamp_deg` — the firmware's pre-clamp `[OOR]` request for that servo this tick, else null.
 
-`tools/robot_control_panel.html` renders this in its "Sim telemetry" table (Δ red
+The control panel (`code/remote-control-app/control-panel/robot_control_panel.html`)
+renders this in its "Sim telemetry" table (Δ red
 when |Δ|>5°, τ coloured by `sim_monitor.band()` — green = safe continuous
 (<~0.98 N·m), amber = burst (under stall), red = saturated (≥2.94 N·m stall) — a
 Clamp column from `pre_clamp_deg`, and a stale banner when frames stop). With
@@ -165,7 +164,7 @@ requested <deg>` before clamping to [0,180] (visible on the bench serial monitor
 which the SIL's Serial mock captures.
 
 ```bash
-python facehugger.py serve --gui            # ws://localhost:8081 + SSE http://localhost:8082/telemetry
+python facehugger.py sim --serve --gui            # ws://localhost:8081 + SSE http://localhost:8082/telemetry
 ```
 
 ## Status

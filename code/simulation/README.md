@@ -63,7 +63,8 @@ python facehugger.py blender                          # URDF in Blender, placeme
 python facehugger.py blender --rigged                 # animator-facing rig (armature + IK)
 python facehugger.py blender --blender-version 5.2    # specific Blender version
 python facehugger.py blender --headless --save /tmp/scene.blend
-python facehugger.py all                  # urdf → sim
+python facehugger.py sim --app            # sim + WebSocket API + Expo web app
+python facehugger.py flash                # build + upload the firmware
 ```
 
 ### `blender` subcommand

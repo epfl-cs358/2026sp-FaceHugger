@@ -25,7 +25,7 @@ code/simulation/generated/
 
 Everything downstream of the Fusion export (URDF, PyBullet, Blender rig, IK reference cases, eventually the `.fhc` animation files) is **derived**. The URDF is the kinematic source of truth — every other component is expected to agree with it, not the other way around. Anything in `code/simulation/generated/` is regenerated; never hand-edit those files.
 
-The single entry point for the simulation half of the pipeline is [code/simulation/facehugger.py](code/simulation/facehugger.py). Subcommands: `urdf`, `sim` (`--walk` / `--trot` / `--headless` / `--clip NAME` / `--monitor` / `--log`), `blender` (`--rigged` for the animation rig), `all`, `serve`. The runtime lives in the `pybullet_sim/` package, the URDF build step in `urdf_gen/`, and the firmware-faithful clip re-port in `firmware_port/`. **Clip playback defaults to the EXACT compiled firmware** (`firmware_sil/`, software-in-the-loop via pybind11; auto-built); pass `sim --clip NAME --python` to use the Python re-port instead (no C++ toolchain). `facehugger.py serve` runs the firmware-backed WebSocket robot API (API_SPEC `T:` protocol on :8081) so the app or `tools/robot_control_panel.html` can drive the sim exactly like the real robot. See [code/simulation/README.md](code/simulation/README.md) and [code/simulation/firmware_sil/README.md](code/simulation/firmware_sil/README.md).
+The single entry point for the simulation half of the pipeline is [code/simulation/facehugger.py](code/simulation/facehugger.py). Subcommands: `urdf`, `sim` (`--walk` / `--trot` / `--headless` / `--clip NAME` / `--monitor` / `--log` / `--list-clips`, plus the interface flags `--serve` / `--app` / `--panel`), `blender` (`--rigged` for the animation rig; auto-refreshes a stale URDF), `app` (Expo web), and `flash` (PlatformIO build + upload). `serve` survives as a deprecated alias for `sim --serve`; `all` was removed (use `urdf` then `sim`). The runtime lives in the `pybullet_sim/` package, the URDF build step in `urdf_gen/`, and the firmware-faithful clip re-port in `firmware_port/`. **Clip playback defaults to the EXACT compiled firmware** (`firmware_sil/`, software-in-the-loop via pybind11; auto-built); pass `sim --clip NAME --python` to use the Python re-port instead (no C++ toolchain). `facehugger.py sim --serve` (or `--app`) runs the firmware-backed WebSocket robot API (API_SPEC `T:` protocol on :8081) so the app or the browser control panel (`code/remote-control-app/control-panel/robot_control_panel.html`, hostable via `sim --panel`) can drive the sim exactly like the real robot. See [code/simulation/README.md](code/simulation/README.md) and [code/simulation/firmware_sil/README.md](code/simulation/firmware_sil/README.md).
 
 ## Repo layout (non-obvious bits)
 
@@ -54,7 +54,8 @@ python facehugger.py sim --clip "wave" --headless   # play a baked clip through 
 python facehugger.py blender                    # placement-only, default Blender 5.1
 python facehugger.py blender --rigged           # animator-facing rig
 python facehugger.py blender --headless --save /tmp/scene.blend
-python facehugger.py all                        # urdf → sim
+python facehugger.py sim --app                  # sim + WebSocket API + Expo web app
+python facehugger.py flash                       # build + upload the firmware
 ```
 
 Override the Blender executable with `BLENDER_BIN=/path/to/blender`. The CLI searches `/Applications/Blender-{V}-LTS.app`, `/Applications/Blender {V}.app`, etc. — see `_resolve_blender_bin` in [code/simulation/facehugger.py](code/simulation/facehugger.py:62) if it can't find your install.
