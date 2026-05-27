@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Modal, Pressable, StyleSheet, TouchableOpacity, View } from "react-native";
 import { IndividualSelectionButton } from "../components/IndividualSelectionButton/IndividualSelectionButton";
 import { AppText } from "../components/text/AppText";
 import { ClipList } from "../components/ClipList";
 import { sendCommand } from "../services/socket";
 import { useRobotStore } from "../store/robotStore";
+import { orangeColor } from "../colors/colors";
 import { InvertRobotPacket, restAllServosPackets, neutralStancePackets } from "../api/api-messages";
 
 export function Actions() {
@@ -36,22 +37,12 @@ export function Actions() {
 
     return (
         <View style={styles.mainContainer}>
-            <View style={styles.invertRow}>
+            <View style={styles.actionRow}>
                 <IndividualSelectionButton
-                    selected={pendingInvert || inverted}
+                    selected={inverted}
                     title={inverted ? "Inverted (tap to flip back)" : "Invert robot"}
-                    onClick={() => setPendingInvert(prev => !prev)}
+                    onClick={() => setPendingInvert(true)}
                 />
-                {pendingInvert && (
-                    <View style={styles.confirmRow}>
-                        <AppText text="Are you sure you want to invert the robot?" size={14} color={'#ffffff'} />
-                        <IndividualSelectionButton
-                            selected={true}
-                            title="Confirm invert"
-                            onClick={onConfirmInvert}
-                        />
-                    </View>
-                )}
             </View>
             <View style={styles.actionRow}>
                 <IndividualSelectionButton
@@ -68,6 +59,32 @@ export function Actions() {
                 />
             </View>
             <ClipList />
+
+            {/* Confirm as a bottom sheet so it doesn't reflow the action list. */}
+            <Modal
+                visible={pendingInvert}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setPendingInvert(false)}
+            >
+                <Pressable style={styles.backdrop} onPress={() => setPendingInvert(false)}>
+                    <Pressable style={styles.sheet} onPress={() => { /* swallow taps inside the sheet */ }}>
+                        <AppText
+                            text={inverted ? "Flip the robot back upright?" : "Invert the robot?"}
+                            size={16}
+                            color="#ffffff"
+                        />
+                        <View style={styles.sheetButtons}>
+                            <TouchableOpacity style={styles.cancelBtn} onPress={() => setPendingInvert(false)}>
+                                <AppText text="Cancel" size={15} color="#ffffff" />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.confirmBtn} onPress={onConfirmInvert}>
+                                <AppText text={inverted ? "Flip back" : "Invert"} size={15} color="#121212" />
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </View>
     );
 }
@@ -84,15 +101,35 @@ const styles = StyleSheet.create({
         gap: 12,
         alignItems: 'flex-start',
     },
-    invertRow: {
-        flexDirection: 'row',
-        gap: 12,
-        alignItems: 'center',
-        flexWrap: 'wrap',
+    backdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
     },
-    confirmRow: {
+    sheet: {
+        backgroundColor: '#1a1a2e',
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 32,
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        gap: 16,
+    },
+    sheetButtons: {
         flexDirection: 'row',
-        gap: 10,
-        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 12,
+    },
+    cancelBtn: {
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+        backgroundColor: '#2a2a2a',
+    },
+    confirmBtn: {
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+        backgroundColor: orangeColor,
     },
 });
