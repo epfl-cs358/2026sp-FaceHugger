@@ -90,13 +90,13 @@ This guide walks you through building the FaceHugger from scratch. It is written
 
 The FaceHugger has three major sections built in this order:
 
-1. **Legs**: Build all four legs first, completely, before touching the body. Each leg is identical.
+1. **Legs**: Build all four legs first, completely, before touching the body. The four legs are built the same way; they differ only in the left/right variant of Link 1 and the leg/hip mount.
 2. **Body electronics**: Solder and mount all electronics into the body frame.
 3. **Final assembly**: Attach legs to body, route all wiring, connect the battery last.
 
 ## Part 1: Legs
 
-The robot has four identical legs. Each leg consists of three segments connected in a chain:
+The robot has four legs: front-left (FL), front-right (FR), back-left (BL), and back-right (BR). They are left/right mirror pairs, not four identical copies: the thigh (Link 2) and knee (Link 3) are the same on every leg, while Link 1 and the leg/hip mount come in a left and a right variant. Each leg consists of three segments connected in a chain:
 
 - **Knee** (white): the foot/lower segment. Contains one servo and one ball bearing.
 - **Thigh** (red): the middle segment. Contains one servo and one ball bearing.
@@ -406,12 +406,12 @@ The PCA9685 has 16 servo output channels (0-15). Plug the **12 servo cables** (3
 | 3 | Front-left hip |
 | 4 | Front-left thigh |
 | 5 | Front-left knee |
-| 6 | Rear-right hip |
-| 7 | Rear-right thigh |
-| 8 | Rear-right knee |
-| 9 | Rear-left hip |
-| 10 | Rear-left thigh |
-| 11 | Rear-left knee |
+| 6 | Back-right hip |
+| 7 | Back-right thigh |
+| 8 | Back-right knee |
+| 9 | Back-left hip |
+| 10 | Back-left thigh |
+| 11 | Back-left knee |
 
 !!! warning "Plug servo cables the right way"
     The 3-pin servo connector is not keyed, so it can go in backwards. The dark wire (GND) should face the outside edge of the PCA9685 board (the side labelled GND). Check your PCA9685's silkscreen to confirm.

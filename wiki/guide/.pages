@@ -1,5 +1,6 @@
 title: Build Guide
 nav:
+  - index.md
   - design.md
   - parts.md
   - printing.md
