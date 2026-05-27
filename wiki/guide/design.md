@@ -1,4 +1,4 @@
-<!-- Sections below are suggestions, not requirements - keep what's useful, drop or merge the rest. -->
+<!-- Sections below are suggestions, not requirements. Keep what's useful, drop or merge the rest. -->
 # Design
 
 !!! todo "Stub - to be written"

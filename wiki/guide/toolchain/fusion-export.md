@@ -14,13 +14,13 @@ Folder: `cad/scripts/ExportBodiesToURDF/`
 This add-in is the first stage of the URDF pipeline. It reads the Fusion assembly
 and writes three outputs to `code/simulation/generated/`:
 
-- `fusion_export.json` - CAD tree, mesh manifest (`mesh_files`), per-occurrence
+- `fusion_export.json`: CAD tree, mesh manifest (`mesh_files`), per-occurrence
   world transforms, and the `_servo_role_assignment` field that maps meshes to
   firmware servo roles. Re-runs preserve any edits you have made to
   `_servo_role_assignment`.
-- `fusion_export.txt` - human-readable version of the same tree, for quick
+- `fusion_export.txt`: human-readable version of the same tree, for quick
   inspection.
-- `exported_meshes/*.stl` - eight STL files (chassis, leg mounts, shoulders,
+- `exported_meshes/*.stl`: eight STL files (chassis, leg mounts, shoulders,
   upper and lower links, servo). Each leg mesh is re-origined to its URDF joint
   landmark, so the URDF generator can emit `<origin xyz="0 0 0"/>` on visuals
   without offset adjustments.

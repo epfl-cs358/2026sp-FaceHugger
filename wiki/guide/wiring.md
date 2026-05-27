@@ -3,7 +3,7 @@
 This document details the complete electrical nervous system of the FaceHugger quadruped. It covers the dual-rail power distribution strategy (Muscle vs. Logic), the I2C sensor bus, and the exact servo pin mappings.
 
 !!! warning "Pinout may change"
-    The exact pinout is not final. Treat pin assignments here as the current proposal, not a contract - always confirm against the firmware `config.h` before wiring or soldering.
+    The exact pinout is not final. Treat pin assignments here as the current proposal, not a contract. Always confirm against the firmware `config.h` before wiring or soldering.
 
 ## Schematic
 *(Insert KiCad SVG Export Here)*
