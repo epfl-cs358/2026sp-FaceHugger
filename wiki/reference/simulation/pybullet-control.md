@@ -25,7 +25,9 @@ Each tick the bridge advances the firmware's clock, runs one `update()`, reads b
 | Needs | CMake + C++17 + pybind11 (auto-builds) | nothing beyond PyBullet |
 | Use when | you want true parity with the robot | you have no C++ toolchain, or want the reference re-port |
 
-The `fh_sim` module **auto-rebuilds** whenever the firmware/HAL/binding sources change, so `--sim` never silently runs stale firmware. A parity test suite asserts each clip's full servo-angle trace is bit-identical to a committed golden, so any firmware change that shifts an angle fails CI.
+The `fh_sim` module **auto-rebuilds** whenever the firmware/HAL/binding sources change, so a fresh `sim` or `serve` never silently runs stale firmware. The staleness check scans the whole firmware `src/` tree, and `clips_all.h` lives there, so re-exporting clips (which rewrites the firmware copy) marks the module stale and the next launch recompiles it. A parity test suite asserts each clip's full servo-angle trace is bit-identical to a committed golden, so any firmware change that shifts an angle fails CI.
+
+The rebuild happens **at launch**: a long-running process loads `fh_sim` once and a compiled extension is not hot-reloaded. So after re-exporting or re-flashing clips you must **restart** a running `serve` (or `sim`) for the new clips to appear; otherwise the old in-memory module keeps serving the previous clip set.
 
 ## Stand, gaits, and clips
 
@@ -50,6 +52,9 @@ Two clients can drive it:
 
 !!! note "The deadman is real"
     A single move command stops after ~500 ms (the firmware deadman), and a gait does nothing until a gait is *also* selected. This is faithful firmware behaviour, not a sim quirk. The panel/app must re-issue a held direction, and you must set a gait (`T:5`) before moving.
+
+!!! tip "Just exported a clip and `T:8` doesn't show it?"
+    Restart `serve`. It loads the compiled `fh_sim` once at startup, so a session you launched *before* the re-export keeps serving the old clip set even after the bundle is rebuilt. A fresh `serve` recompiles `fh_sim` from the updated `clips_all.h` and lists the new clip. (The control panel and app also fetch the clip list once on connect, so reconnect them too.) To check the compiled set without launching anything: `python3 -c "import sys; sys.path.insert(0,'.'); sys.path.insert(0,'firmware_sil/build'); import fh_sim; print(fh_sim.FirmwareControl().clip_names())"` from `code/simulation/`.
 
 ### Live telemetry (SSE :8082)
 

@@ -45,7 +45,7 @@ python facehugger.py sim --clip "wave" --loop     # repeat (GUI only)
 python facehugger.py sim --clip "wave" --float    # geometry only, no balance
 ```
 
-A clip plays, then eases back to the neutral stance. `--loop` carries physics state across repeats so you can watch for drift.
+A clip plays, then eases back to the neutral stance. `--loop` carries physics state across repeats so you can watch for drift. If you just re-exported a clip and a running `serve` does not list it, restart `serve` so it reloads the freshly compiled firmware (see [Controlling the simulation](pybullet-control.md#serve-drive-the-sim-like-the-robot)).
 
 ## Torque and current
 
