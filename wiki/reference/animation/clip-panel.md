@@ -65,6 +65,8 @@ The add-on adds a "FaceHugger" tab to the 3D viewport sidebar (press `N`). It ma
 
 The per-row checkboxes in the Clips sub-panel are the firmware set: both **Export Active Clip** and **Export Selected Clips** rebuild `clips_all.h` and the manifest from exactly the ticked clips (in clip-list order, so ids stay stable), replacing the previous bundle. Untick a work-in-progress clip and it stays out of the robot's set without being deleted. With nothing ticked, the bundle is left untouched rather than wiped. The headless `export_all_clips.py` is the exception: it bundles *every* clip in the file regardless of the selection, so use the panel for a curated set and the headless tool for a full re-export.
 
+When the **Copy clips_all.h to firmware** toggle is on (default), each bundle export also copies `clips_all.h` straight into `code/firmware/src/nervous_system/` and reports the path, so there is no manual sync step (it assumes the add-on runs from a repo checkout, and warns instead of failing if the firmware dir is absent). Two folder buttons, **Exports** and **Firmware**, open the source and destination directories in the OS file browser.
+
 **Activity heatmap.** Colours the servo meshes from green (quiet) to red (jerky) by frame-to-frame angle delta, so you can spot mechanical shock before export. Only 8 of 12 servos are coloured because the hip servo was merged into the body CAD.
 
 **Bezier/Linear toggle.** Switches the active clip's F-curves between Bezier (smooth authoring) and Linear (exact robot playback). Non-destructive: Bezier handles are restored on switch back.
@@ -82,7 +84,7 @@ BLENDER_BIN=/Applications/Blender-5.1.app/Contents/MacOS/Blender
 
 ## Gotchas for a builder or extender
 
-1. **There are two `clips_all.h`, hand-synced.** The exporter writes `animation/exported_clips/clips_all.h`; the firmware compiles `code/firmware/src/nervous_system/clips_all.h`. There is no automated copy, so after every re-export you must hand-copy the bundle into the firmware tree (this is step 3 of the [flash workflow](../../guide/toolchain/flashing.md)). Forgetting it ships stale motion. A third `clips_all.h` under `code/firmware/test/fixtures/` is an unrelated test fixture.
+1. **There are two `clips_all.h`.** The exporter writes `animation/exported_clips/clips_all.h`; the firmware compiles `code/firmware/src/nervous_system/clips_all.h`. They are the same self-contained bundle format, so syncing is a plain file copy (no per-clip `#include`, no `.cpp` to edit). By default the panel copies it for you on export (the **Copy clips_all.h to firmware** toggle); with the toggle off you must copy it by hand, or stale motion ships. A third `clips_all.h` under `code/firmware/test/fixtures/` is an unrelated test fixture.
 2. **The shoulder fix lives in the exporter, not the rig.** Clips used to collapse on playback because the rig's yaw driver emits a delta (zero at rest), under-anchoring the shoulders. The fix is `_link1_delta_to_absolute` in the exporter, which keeps `convention.json` as the single source of truth and stays unit-testable. Do not "fix" it by rebuilding the rig. See [the clip shoulder convention](../conventions.md) for the full reasoning.
 3. **Change B has a hardware dependency.** FL's `90 + (sh - 135)` regularization needs a physical FL horn remount *and* a clip re-export. Clips baked under the old FL convention are stale until re-baked.
 4. **`SCALE` applies to clips only.** Do not conflate it with the per-gait SCALE inside the firmware gait engine.

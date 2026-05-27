@@ -59,20 +59,28 @@ clips exported cleanly.
 
 ## Getting the clip onto the robot
 
-Exporting produces the headers in `animation/exported_clips/`, but the firmware
-keeps its own copy under `code/firmware/src/nervous_system/`, so a new clip has to
-be wired in by hand. Validate the exports first:
+The bundled `clips_all.h` is a self-contained drop-in: the firmware compiles
+`code/firmware/src/nervous_system/clips_all.h`, which is exactly the file the
+exporter writes (no per-clip `#include` and no separate `.cpp` to edit). Getting a
+clip onto the robot is therefore just keeping that file in sync and reflashing.
+
+By default the panel does the sync for you: with the **Copy clips_all.h to
+firmware** toggle on (in the Export sub-panel), every bundle export copies
+`clips_all.h` straight into the firmware tree and reports the destination path. The
+**Firmware** folder button opens that directory. If you turn the toggle off, or run
+outside a repo checkout, copy `animation/exported_clips/clips_all.h` over
+`code/firmware/src/nervous_system/clips_all.h` yourself.
+
+Validate the exports before flashing:
 
 ```bash
 python3 animation/scripts/check_export_consistency.py
 ```
 
 This checks that every clip's `.h` and `.js` agree with the servo-frame convention
-(exit code 0 means all pass). Then add the clip's header to
-`code/firmware/src/nervous_system/clips_all.h` (an `#include`) and register it in
-`clips_all.cpp` (add it to `FH_CLIPS[]` and bump `FH_CLIP_COUNT`), then reflash with
-`pio run -t upload`. See [Flashing the firmware](flashing.md). Because the simulator
-runs the same firmware, the clip is then playable in the sim too.
+(exit code 0 means all pass). Then reflash with `pio run -t upload`. See
+[Flashing the firmware](flashing.md). Because the simulator runs the same firmware,
+the clip is then playable in the sim too.
 
 For the full feature reference (pose library, selection sets, activity heatmap,
 authoring-time warnings, and integration tests), see
