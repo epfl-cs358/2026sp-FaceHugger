@@ -199,14 +199,14 @@ void SpinalCord::update() {
             break;
     }
 
-    // Advance any in-progress eased move (e.g. the invert flip-in-place) outside
-    // the clip path. Clips run their own tickEase inside tickClip, so skip ACTION
-    // to avoid double-stepping. A direct write (gait/stand/calibrate) cancels the
-    // ease via setServoAngle, so this is a no-op unless a timed move is active.
-    if (robotState != STATE_ACTION) {
-        Leg* easeLegs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
-        for (uint8_t i = 0; i < LEG_COUNT; ++i) easeLegs[i]->tickEase();
-    }
+    // Advance any in-progress eased move every tick, in EVERY state, so the invert
+    // flip-in-place plays out even on the app's Actions tab (which sits in
+    // STATE_ACTION). This is the single place eases are pumped (tickClip no longer
+    // does it). A direct write (gait/stand/calibrate, or a clip's per-frame pose)
+    // cancels the ease via setServoAngle, so this is a no-op unless a timed move
+    // (invert, clip-return, gait-stop) is actually active.
+    Leg* easeLegs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+    for (uint8_t i = 0; i < LEG_COUNT; ++i) easeLegs[i]->tickEase();
 
     face.update();
 }
@@ -543,10 +543,9 @@ void SpinalCord::tickClip() {
             break;
         }
         case CLIP_ACT_EASE:
-            for (uint8_t i = 0; i < LEG_COUNT; ++i) legs[i]->tickEase();
+            // The clip-return ease is advanced by update()'s per-tick tickEase.
             break;
         case CLIP_ACT_FINISH:
-            for (uint8_t i = 0; i < LEG_COUNT; ++i) legs[i]->tickEase(); // snap to target
             robotState = STATE_STAND;   // hold the neutral stand, not inert IDLE
             break;
         case CLIP_ACT_NONE:
