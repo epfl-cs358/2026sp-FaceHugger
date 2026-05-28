@@ -35,7 +35,7 @@ FaceHugger was built by six Computer Science students at EPFL for the *Making In
 
     ---
 
-    **Worked on:** mechanical assembly and integration, firmware and PyBullet simulation
+    **Worked on:** mechanical assembly and integration, PyBullet simulation
 
     [GitHub](#) · [LinkedIn](#)
 
@@ -47,13 +47,13 @@ FaceHugger was built by six Computer Science students at EPFL for the *Making In
 
     [GitHub](#) · [LinkedIn](#)
 
--   __Name__
+-   Antoine VITUPIER
 
     ---
 
     **Worked on:** firmware: the WebSocket API, the state machine, and motion control.
 
-    [GitHub](#) · [LinkedIn](#)
+    [GitHub](https://github.com/Antoine-VP) · [LinkedIn](https://www.linkedin.com/in/antoine-vitupier)
 
 </div>
 
