@@ -178,10 +178,13 @@ No parameters required.
 | 'a' | array | AMU array containing speed + gyroscope [Speed, Rotation x, Rotation y, Rotation z] |
 | 'g' | int   | Current gait mode of the robot                   |
 | 'pc'| float | The current percentage of the movement (gait) accomplished |
-| `e` | string or null | Error message observed (if any)         | 
+| `e` | string or null | Error message observed (if any)         |
+| `pitch_deg`   | float | Signed pitch tilt in degrees (nose up = positive), MPU6050 accel-derived |
+| `roll_deg`    | float | Signed roll tilt in degrees (right-side-down = positive), MPU6050 accel-derived |
+| `upside_down` | bool  | Latched upside-down flag with hysteresis (flip > 150°, clear < 30°); the same boolean the firmware uses to auto-`setInverted` when idle |
 
-**Example:** `{"T": 10, "s": 0, "d": [200, 200, 200, 200, 150], "a": [0.6, 50, 90, 15], "g": 1, "pc": 0.7, "e": "an error message has been observed"}`
-**Note:** `System should send status every 500 ms to know that we still have a connection, or use ping pong standard way in websockets`
+**Example:** `{"T": 10, "s": 0, "d": [200, 200, 200, 200, 150], "a": [0.6, 50, 90, 15], "g": 1, "pc": 0.7, "e": null, "pitch_deg": 1.2, "roll_deg": -0.5, "upside_down": false}`
+**Note:** Broadcast every 100 ms (10 Hz) to every connected WebSocket client. The three IMU fields piggyback on this packet rather than running a separate stream — keeps connection bandwidth low.
 
 ---
 

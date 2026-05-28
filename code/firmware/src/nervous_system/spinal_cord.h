@@ -36,6 +36,10 @@ class SpinalCord{
         void stopClipPlayback();
         void setClipSmoothing(float alpha);   // T:11 runtime smoothing knob
         void setInverted(bool flag);
+        // Accessor for the auto-flip gate in main.cpp: only call setInverted()
+        // off the IMU when the FSM is idle, so an in-flight gait/clip is never
+        // mid-motion-interrupted.
+        uint8_t getRobotState() const { return (uint8_t)robotState; }
         Face& getFace() { return face; }
 
         // POD bundle of read-only state for the diagnostics CSV logger.

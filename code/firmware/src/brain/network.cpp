@@ -8,7 +8,14 @@
 #include "../nervous_system/movements.h"
 #include "../nervous_system/motion_math.h"   // clampPoseEaseMs (T:2 dur_ms)
 #include "clip_list_serializer.h"
+#include "sensors.h"                          // IMU pitch/roll/upside_down for T:10
 #include "../nervous_system/clips_all.h"
+
+// T:10 telemetry broadcast cadence. 10 Hz keeps the connection cost low — the
+// IMU fields add ~50 bytes per packet, negligible at this rate. Bumping this
+// frequency is the cheapest way to overload the connection; don't, per the
+// "be careful we don't overload the connection" constraint.
+static constexpr uint32_t TELEMETRY_INTERVAL_MS = 100;
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 extern SpinalCord spinalCord;
@@ -223,4 +230,38 @@ void handleParsedMessage(uint8_t num, uint8_t * payload) {
 
 void updateNetwork() {
     webSocket.loop();
+
+    // T:10 telemetry broadcast at TELEMETRY_INTERVAL_MS (10 Hz). Single shared
+    // packet sent to every connected client via broadcastTXT — no fan-out cost.
+    // The three IMU fields (pitch_deg, roll_deg, upside_down) piggyback on the
+    // existing payload rather than a separate stream, to keep the connection
+    // budget low.
+    static uint32_t lastTelemetryMs = 0;
+    uint32_t now = millis();
+    if (now - lastTelemetryMs >= TELEMETRY_INTERVAL_MS) {
+        lastTelemetryMs = now;
+
+        JsonDocument doc;
+        doc["T"] = CMD_TELEMETRY;            // 10
+        doc["s"] = (int)spinalCord.getRobotState();
+        doc["g"] = (int)spinalCord.currentGait();
+        // ToF + AMU are still stubs upstream; keep their slots so the on-wire
+        // shape matches API_SPEC.md while the real wiring lands.
+        JsonArray d = doc["d"].to<JsonArray>();
+        for (int i = 0; i < 5; ++i) d.add(getDistance());
+        JsonArray a = doc["a"].to<JsonArray>();
+        a.add(0.0f); a.add(0.0f); a.add(0.0f); a.add(0.0f);
+        doc["pc"] = 0.0f;
+        doc["e"]  = nullptr;
+        // IMU extensions (this PR):
+        doc["pitch_deg"]   = imuPitchDeg();
+        doc["roll_deg"]    = imuRollDeg();
+        doc["upside_down"] = imuIsInverted();
+
+        char buf[384];
+        size_t n = serializeJson(doc, buf, sizeof(buf));
+        if (n > 0 && n < sizeof(buf)) {
+            webSocket.broadcastTXT(buf, n);
+        }
+    }
 }
