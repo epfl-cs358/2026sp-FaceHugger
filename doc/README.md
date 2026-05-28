@@ -12,7 +12,7 @@ TODO: how the Fusion assembly is structured; the ExportBodiesToURDF add-in; what
 
 → see also: [code/simulation/docs/PIPELINE_SPEC.md](../code/simulation/docs/PIPELINE_SPEC.md), [code/simulation/docs/MERGE_AND_CONVENTION.md](../code/simulation/docs/MERGE_AND_CONVENTION.md)
 
-TODO: how `urdf_pipeline/generate_urdf.py` consumes `fusion_export.json` + `facehugger_config.yaml`; mesh re-origining; per-leg shoulder convention; what to never hand-edit in `generated/`.
+TODO: how `urdf_gen/generate_urdf.py` consumes `fusion_export.json` + `facehugger_config.yaml`; mesh re-origining; per-leg shoulder convention; what to never hand-edit in `generated/`.
 
 ---
 
@@ -20,13 +20,13 @@ TODO: how `urdf_pipeline/generate_urdf.py` consumes `fusion_export.json` + `face
 
 → see also: [code/simulation/README.md](../code/simulation/README.md)
 
-TODO: `facehugger.py sim` / `--walk` / `--trot` / `--headless`; how `sim/kinematics.py` reads geometry from the URDF; gait registry in `sim/gaits.py`.
+TODO: `facehugger.py sim` / `--walk` / `--trot` / `--headless`; how `pybullet_sim/kinematics.py` reads geometry from the URDF; gait registry in `pybullet_sim/gaits.py`.
 
 ---
 
 ## 4. Blender pipeline
 
-→ see also: [animation/pipeline/README.md](../animation/pipeline/README.md), [code/simulation/docs/API_ANIMATION_SPEC.md](../code/simulation/docs/API_ANIMATION_SPEC.md)
+→ see also: [animation/scripts/README.md](../animation/scripts/README.md), [code/simulation/docs/API_ANIMATION_SPEC.md](../code/simulation/docs/API_ANIMATION_SPEC.md)
 
 TODO: rigged vs placement-only; `visualize_fusion_export.py` for CAD cross-check; how to rebuild the rig with `facehugger.py blender --rigged`.
 
