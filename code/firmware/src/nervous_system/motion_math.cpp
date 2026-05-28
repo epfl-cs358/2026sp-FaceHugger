@@ -22,10 +22,14 @@ float emaStep(float prev, float target, float alpha) {
     return alpha * prev + (1.0f - alpha) * target;
 }
 
-ServoTriple applyInvert(ServoTriple s, bool inverted) {
+ServoTriple applyInvert(uint8_t legId, ServoTriple s, bool inverted) {
     if (inverted) {
-        s.thigh = 180.0 - s.thigh;
-        s.knee  = 180.0 - s.knee;
+        // Mirror about CALIB (= flat in servo space) per joint, so mirror equals
+        // math-space negation. Pre-calibration this was (180 - s) because flat was
+        // assumed to be servo 90 uniformly. With per-joint CALIB the mirror axis
+        // is 2*CALIB - s; reduces to 180 - s exactly when CALIB == 90.
+        s.thigh = 2.0 * CALIB_THIGH_BY_LEG[legId] - s.thigh;
+        s.knee  = 2.0 * CALIB_KNEE_BY_LEG[legId]  - s.knee;
     }
     return s;
 }

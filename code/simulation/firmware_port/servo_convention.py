@@ -65,6 +65,23 @@ NEUTRAL: list[NeutralPose] = [
     NeutralPose(sh=-135.0, th=-60.0, kn=-35.0),  # LEG_RL / BL (3)
 ]
 
+# Per-servo zero-point calibration: servo angle when the joint is at mechanical
+# zero (math 0° = thigh/knee horizontal). Mirror of CALIB_* macros in
+# code/firmware/src/shared/config.h. Hip is uncalibrated (stays at 90).
+# Keep in sync with the firmware whenever CALIB values change.
+CALIB_THIGH: dict[int, int] = {
+    LEG_FR: 84,
+    LEG_FL: 87,
+    LEG_RR: 103,  # BR
+    LEG_RL: 84,  # BL
+}
+CALIB_KNEE: dict[int, int] = {
+    LEG_FR: 95,
+    LEG_FL: 82,
+    LEG_RR: 80,  # BR
+    LEG_RL: 87,  # BL
+}
+
 
 @dataclass
 class ServoTriple:
@@ -98,23 +115,23 @@ def translate_to_servo(leg_id: int, sh: float, th: float, kn: float) -> ServoTri
     out = ServoTriple(hip=90.0, thigh=90.0, knee=90.0)
     if leg_id == LEG_FR:
         out.hip = 90.0 + (sh - 45.0)
-        out.thigh = 90.0 - th
-        out.knee = 90.0 + kn
+        out.thigh = CALIB_THIGH[LEG_FR] - th
+        out.knee = CALIB_KNEE[LEG_FR] + kn
     elif leg_id == LEG_FL:
         out.hip = 90.0 + (sh - 135.0)
-        out.thigh = 90.0 + th
-        out.knee = 90.0 - kn
+        out.thigh = CALIB_THIGH[LEG_FL] + th
+        out.knee = CALIB_KNEE[LEG_FL] - kn
     elif leg_id == LEG_RR:
         # BR shoulder un-mirrored (2026-05-25): +sh = +servo like fr/fl/bl
         # (identical motor, yaw shaft on the same vertical axis). Byte-identical
         # to firmware translateToServo / exporter _frame_to_servo.
         out.hip = 90.0 + (sh + 45.0)
-        out.thigh = 90.0 + th
-        out.knee = 90.0 - kn
+        out.thigh = CALIB_THIGH[LEG_RR] + th
+        out.knee = CALIB_KNEE[LEG_RR] - kn
     elif leg_id == LEG_RL:
         out.hip = 90.0 + (sh + 135.0)
-        out.thigh = 90.0 - th
-        out.knee = 90.0 + kn
+        out.thigh = CALIB_THIGH[LEG_RL] - th
+        out.knee = CALIB_KNEE[LEG_RL] + kn
     else:
         raise ValueError(f"unknown leg_id {leg_id!r}")
     return out

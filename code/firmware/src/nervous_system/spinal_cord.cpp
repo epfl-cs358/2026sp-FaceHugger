@@ -130,7 +130,7 @@ void SpinalCord::relax() {
 // math-space angle (translateToServo emits 90±angle, and 180-(90±x)=90∓x), so routing
 // gait output through here is bit-for-bit identical to the old math-space th=-th/kn=-kn.
 void SpinalCord::applyServos(Leg* leg, ServoTriple s) {
-    s = applyInvert(s, isInverted);  // pitch-only mirror; pure + host-tested
+    s = applyInvert(leg->legId(), s, isInverted);  // CALIB-aware pitch mirror; pure + host-tested
     leg->setJointAngles(s.hip, s.thigh, s.knee);
 }
 
@@ -156,7 +156,7 @@ void SpinalCord::easeToNeutral(uint32_t ms) {
     Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
         ServoTriple n = applyInvert(
-            translateToServo(i, NEUTRAL[i].sh, NEUTRAL[i].th, NEUTRAL[i].kn), isInverted);
+            i, translateToServo(i, NEUTRAL[i].sh, NEUTRAL[i].th, NEUTRAL[i].kn), isInverted);
         legs[i]->setJointAnglesTimed(n.hip, n.thigh, n.knee, ms);
     }
 }
@@ -530,6 +530,7 @@ void SpinalCord::playClip(uint8_t id, bool loop) {
     Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
         ServoTriple f0 = applyInvert(
+            i,
             clampClipServos(translateToServo(i,
                 FH_CLIPS[id].frames[0].a[i * 3 + 0],
                 FH_CLIPS[id].frames[0].a[i * 3 + 1],
@@ -620,7 +621,7 @@ void SpinalCord::flipPoseInPlace(uint32_t ms) {
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
         float h, t, k;
         legs[i]->getJointAngles(h, t, k);
-        ServoTriple m = applyInvert({ (double)h, (double)t, (double)k }, true);
+        ServoTriple m = applyInvert(i, { (double)h, (double)t, (double)k }, true);
         legs[i]->setJointAnglesTimed(m.hip, m.thigh, m.knee, ms);
     }
 }

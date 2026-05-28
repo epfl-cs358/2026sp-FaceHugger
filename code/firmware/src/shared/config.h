@@ -34,6 +34,13 @@
 #define CALIB_BL_THIGH  84
 #define CALIB_BL_KNEE   87
 
+// Indexed-by-LegId views for runtime lookup (e.g. applyInvert mirrors about CALIB).
+// Order matches LegId enum: 0=FR, 1=FL, 2=BR/RR, 3=BL/RL.
+#ifdef __cplusplus
+constexpr int CALIB_THIGH_BY_LEG[4] = { CALIB_FR_THIGH, CALIB_FL_THIGH, CALIB_BR_THIGH, CALIB_BL_THIGH };
+constexpr int CALIB_KNEE_BY_LEG[4]  = { CALIB_FR_KNEE,  CALIB_FL_KNEE,  CALIB_BR_KNEE,  CALIB_BL_KNEE };
+#endif
+
 // DEFAULT_ANGLE = translateToServo(NEUTRAL[leg]) with the calibration above applied.
 // Recompute whenever CALIB_* or NEUTRAL[] changes (guarded by test_neutral_consistency).
 #define FRONT_RIGHT_LEG_HIP_DEFAULT_ANGLE 90
