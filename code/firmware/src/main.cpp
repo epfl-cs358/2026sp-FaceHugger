@@ -26,21 +26,10 @@ void loop() {
     updateNetwork();
     tickImu();
 
-    // Auto-flip gate: forward the IMU latch to SpinalCord whenever auto-invert
-    // is enabled. The STATE_IDLE gate was dropped — applyServos / applyInvert
-    // is safe to call mid-motion (that's the entire point of the live-flip
-    // pose mirror), and the 150°/30° hysteresis on the IMU side already
-    // prevents chatter near 90°. Disabling auto-invert via T:6 freezes
-    // isInverted at its current value until re-enabled or a T:9 overrides it.
-    static bool s_prevInverted = false;
-    bool        nowInverted    = imuIsInverted();
-    if (nowInverted != s_prevInverted) {
-        if (spinalCord.isAutoInvertEnabled()) {
-            spinalCord.setInverted(nowInverted);
-            s_prevInverted = nowInverted;
-        }
-        // else: hold s_prevInverted so we re-evaluate next loop once re-enabled.
-    }
+    // Auto-flip gate. The edge-trigger latch lives on SpinalCord so the SIL
+    // (bindings.cpp::tick) gets identical behavior without duplicating the
+    // logic. The 150°/30° IMU hysteresis already prevents chatter near 90°.
+    spinalCord.tickAutoInvert(imuIsInverted());
 
     spinalCord.update();
     diagnostics::tick();

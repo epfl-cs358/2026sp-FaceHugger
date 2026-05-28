@@ -40,8 +40,12 @@ class FirmwareControl {
     }
 
     // Advance "firmware time" then run exactly one firmware control tick.
+    // We replicate main.cpp::loop()'s auto-flip gate here — the SIL bypasses
+    // loop() entirely (the WS server is Python-side), so without this the
+    // IMU latch would be set but never forwarded to setInverted().
     void tick(uint32_t t_ms) {
         fh_sim::clock_ms = t_ms;
+        spinalCord.tickAutoInvert(imuIsInverted());
         spinalCord.update();
     }
 
@@ -109,10 +113,15 @@ class FirmwareControl {
     // it here. imu_is_inverted() reads back through the firmware's own
     // sensors.h accessor so tests can assert on the same surface main.cpp
     // would see on hardware.
-    void set_imu_upside_down(bool v) { fh_sim::imu_upside_down = v; }
-    void set_imu_pitch_deg(float v)  { fh_sim::pitch_deg = v; }
-    void set_imu_roll_deg(float v)   { fh_sim::roll_deg = v; }
-    bool imu_is_inverted() const     { return imuIsInverted(); }
+    void  set_imu_upside_down(bool v) { fh_sim::imu_upside_down = v; }
+    void  set_imu_pitch_deg(float v)  { fh_sim::pitch_deg = v; }
+    void  set_imu_roll_deg(float v)   { fh_sim::roll_deg = v; }
+    bool  imu_is_inverted() const     { return imuIsInverted(); }
+    // Read-back surface for Python telemetry — mirrors the same getters
+    // main.cpp would call when building the T:10 frame on hardware.
+    float imu_pitch_deg() const            { return imuPitchDeg(); }
+    float imu_roll_deg() const             { return imuRollDeg(); }
+    bool  is_auto_invert_enabled() const   { return spinalCord.isAutoInvertEnabled(); }
 
     // Drain the firmware's captured Serial output (complete lines since the last
     // call) and clear it. The firmware's own out-of-range guard prints
@@ -162,5 +171,8 @@ PYBIND11_MODULE(fh_sim, m) {
         .def("set_imu_upside_down", &FirmwareControl::set_imu_upside_down, py::arg("v"))
         .def("set_imu_pitch_deg", &FirmwareControl::set_imu_pitch_deg, py::arg("v"))
         .def("set_imu_roll_deg", &FirmwareControl::set_imu_roll_deg, py::arg("v"))
-        .def("imu_is_inverted", &FirmwareControl::imu_is_inverted);
+        .def("imu_is_inverted", &FirmwareControl::imu_is_inverted)
+        .def("imu_pitch_deg", &FirmwareControl::imu_pitch_deg)
+        .def("imu_roll_deg", &FirmwareControl::imu_roll_deg)
+        .def("is_auto_invert_enabled", &FirmwareControl::is_auto_invert_enabled);
 }

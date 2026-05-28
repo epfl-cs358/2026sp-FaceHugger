@@ -45,6 +45,12 @@ class SpinalCord{
         // re-enabled or a manual T:9 (CMD_SET_INVERT) overrides it.
         void setAutoInvertEnabled(bool enabled);
         bool isAutoInvertEnabled() const { return autoInvertEnabled_; }
+        // Forward the IMU's upside-down latch into the invert state. Edge-triggered:
+        // only acts when `imuInverted` differs from the previously-observed value,
+        // so once-per-flip — and only when auto-invert is enabled. Called every
+        // loop tick from both main.cpp (hardware) and bindings.cpp::tick (SIL) so
+        // the auto-flip behavior is identical in both runtimes.
+        void tickAutoInvert(bool imuInverted);
         // Accessor used elsewhere (e.g. telemetry / diagnostics CSV).
         uint8_t getRobotState() const { return (uint8_t)robotState; }
         Face& getFace() { return face; }
@@ -95,6 +101,8 @@ class SpinalCord{
         bool isMovingRequested;
         bool isInverted;
         bool autoInvertEnabled_ = true;   // default ON; togglable via T:6
+        bool prevImuInverted_ = false;    // last imuIsInverted() value forwarded by
+                                          // tickAutoInvert; edge-triggers the gate
         uint32_t lastCommandMs;
         uint32_t lastInvertMs_;   // timestamp of the last accepted T:6 toggle (debounce)
         bool     hasInverted_;    // false until the first invert, so it is never debounced away

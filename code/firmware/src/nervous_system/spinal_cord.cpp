@@ -671,6 +671,17 @@ void SpinalCord::setAutoInvertEnabled(bool enabled) {
     autoInvertEnabled_ = enabled;
 }
 
+void SpinalCord::tickAutoInvert(bool imuInverted) {
+    // Edge-triggered: only act when the latch flips. If auto-invert is OFF we
+    // intentionally do NOT advance prevImuInverted_, so re-enabling the toggle
+    // re-evaluates against the LAST-FORWARDED value (the IMU may have moved
+    // while we were frozen, and we want the next change to fire setInverted).
+    if (imuInverted == prevImuInverted_) return;
+    if (!autoInvertEnabled_) return;
+    setInverted(imuInverted);
+    prevImuInverted_ = imuInverted;
+}
+
 void SpinalCord::invertRobot() {
     // Debounce a duplicated/retried T:6 so it can't double-flip (the first invert
     // is always honoured; only a SECOND within the window is dropped).

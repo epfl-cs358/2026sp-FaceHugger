@@ -42,23 +42,6 @@ _STEP_HZ = 240
 _TELEM_EVERY = 12  # build a telemetry frame every 12th step → 240/12 = 20 Hz
 _SSE_PORT = 8082
 
-# Anchor for the live IMU overlay in the GUI (world coords). Slightly above and
-# behind the robot's spawn so it stays in view of the default camera.
-_IMU_OVERLAY_POS = [0.0, -0.30, 0.15]
-_IMU_OVERLAY_RGB_UPRIGHT = (1.0, 0.8, 0.1)  # yellow
-_IMU_OVERLAY_RGB_INVERTED = (1.0, 0.3, 0.2)  # red
-_IMU_OVERLAY_SIZE = 1.2
-
-
-def format_imu_overlay(pitch_deg: float, roll_deg: float, upside_down: bool) -> str:
-    """Build the multi-line text shown on the PyBullet GUI as a live IMU readout.
-
-    Pure helper so the formatting can be unit-tested without a GUI."""
-    return (
-        f"Pitch: {pitch_deg:+6.1f}°  Roll: {roll_deg:+6.1f}°\n"
-        f"upside_down: {'true' if upside_down else 'false'}"
-    )
-
 
 class RobotSim:
     """A PyBullet robot driven by the compiled firmware control code."""
@@ -80,15 +63,9 @@ class RobotSim:
         # rotate the robot in the GUI (Ctrl-drag) and see the firmware's
         # auto-invert path fire just like real hardware.
         self._imu_state = False
-        # PyBullet debug-text id for the live IMU overlay (GUI only). -1 means
-        # "no item yet"; first addUserDebugText call returns a real id which we
-        # then pass back via replaceItemUniqueId so the text updates in-place
-        # instead of stacking a new line each step.
-        self._debug_text_id = -1
-        self._step_count = 0
 
     def step(self, t_ms):
-        from .sil_bridge import imu_pitch_roll_deg, update_imu_from_pybullet
+        from .sil_bridge import update_imu_from_pybullet
 
         self._imu_state = update_imu_from_pybullet(
             self.fc, self.p, self.robot_id, self._imu_state
@@ -106,26 +83,6 @@ class RobotSim:
                     maxVelocity=self.cfg.servo_velocity,
                 )
         self.p.stepSimulation()
-        # Live IMU readout in the PyBullet window. GUI-only; throttled to the
-        # telemetry cadence so the text doesn't churn at 240 Hz.
-        if self.gui and (self._step_count % _TELEM_EVERY == 0):
-            _, quat = self.p.getBasePositionAndOrientation(self.robot_id)
-            pitch, roll = imu_pitch_roll_deg(quat)
-            text = format_imu_overlay(pitch, roll, self._imu_state)
-            color = (
-                _IMU_OVERLAY_RGB_INVERTED
-                if self._imu_state
-                else _IMU_OVERLAY_RGB_UPRIGHT
-            )
-            self._debug_text_id = self.p.addUserDebugText(
-                text,
-                _IMU_OVERLAY_POS,
-                textColorRGB=color,
-                textSize=_IMU_OVERLAY_SIZE,
-                lifeTime=0,
-                replaceItemUniqueId=self._debug_text_id,
-            )
-        self._step_count += 1
 
     def handle(self, raw):
         """Route a raw JSON message through the EXACT firmware dispatch.
@@ -135,7 +92,9 @@ class RobotSim:
         return self.fc.handle_message(raw)
 
     def telemetry(self):
-        # Spec-shaped T:10 (robot -> dashboard). ToF/IMU aren't simulated -> null.
+        # Spec-shaped T:10 (robot -> dashboard). ToF still stubbed; IMU fields
+        # mirror the firmware's own T:10 broadcast in network.cpp so the app
+        # sees the same shape from sim and hardware.
         return {
             "T": CMD_TELEMETRY,
             "s": self.fc.robot_state(),
@@ -144,6 +103,10 @@ class RobotSim:
             "d": None,
             "a": None,
             "e": None,
+            "pitch_deg": self.fc.imu_pitch_deg(),
+            "roll_deg": self.fc.imu_roll_deg(),
+            "upside_down": self.fc.imu_is_inverted(),
+            "auto_invert_enabled": self.fc.is_auto_invert_enabled(),
             "servo_deg": [round(x) for x in self.fc.servo_angles()],
         }
 
