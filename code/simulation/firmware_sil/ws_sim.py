@@ -57,8 +57,19 @@ class RobotSim:
         self.cfg = build_config()
         self.robot_id, self.joint_map = _connect_and_setup(self.cfg, gui)
         self.fc = load_fh_sim().FirmwareControl()
+        # IMU emulation hysteresis state — flips when body Z crosses ~150°/30°
+        # from world up, matching the firmware's imu_hysteresis thresholds. Read
+        # each step from PyBullet's body orientation; lets the user manually
+        # rotate the robot in the GUI (Ctrl-drag) and see the firmware's
+        # auto-invert path fire just like real hardware.
+        self._imu_state = False
 
     def step(self, t_ms):
+        from .sil_bridge import update_imu_from_pybullet
+
+        self._imu_state = update_imu_from_pybullet(
+            self.fc, self.p, self.robot_id, self._imu_state
+        )
         self.fc.tick(t_ms)  # advance firmware time + run one control tick
         for name, rad in servo_angles_to_joint_targets(self.fc.servo_angles()).items():
             idx = self.joint_map.get(name)
