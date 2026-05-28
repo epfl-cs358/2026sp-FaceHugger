@@ -6,7 +6,7 @@ import { ClipList } from "../components/ClipList";
 import { sendCommand } from "../services/socket";
 import { useRobotStore } from "../store/robotStore";
 import { orangeColor } from "../colors/colors";
-import { InvertRobotPacket, restAllServosPackets, neutralStancePackets, setClipSmoothing, stopMotion } from "../api/api-messages";
+import { InvertRobotPacket, sendRestPose, sendNeutralStance, setClipSmoothing, stopMotion } from "../api/api-messages";
 
 // Clip-playback smoothing presets (T:11 EMA alpha): snappy follows the raw
 // frames, smooth lags and rounds the motion.
@@ -42,17 +42,12 @@ export function Actions() {
         setPendingInvert(false);
     };
 
-    // Reset every servo to 90° with one CMD_CALIBRATE (T:4) packet per joint.
-    // Mirrored when inverted (no-op at 90°, but kept consistent with the rest).
-    const onRestPose = () => {
-        restAllServosPackets(90, inverted).forEach(pkt => sendCommand(JSON.stringify(pkt)));
-    };
-
-    // Drive every servo to the neutral standing pose (one T:4 packet per joint),
-    // mirrored when inverted so the stance matches a flipped robot.
-    const onNeutralStance = () => {
-        neutralStancePackets(inverted).forEach(pkt => sendCommand(JSON.stringify(pkt)));
-    };
+    // Pose buttons: one T:2 with dur_ms so the firmware eases the pose. REST is
+    // the flat / all-90 calibration pose (clears invert); NEUTRAL is the
+    // standing pose the gait engine launches from. invert-aware ease lives on
+    // the firmware side (easeToNeutral routes through applyInvert).
+    const onRestPose = () => sendRestPose();
+    const onNeutralStance = () => sendNeutralStance();
 
     return (
         <View style={styles.mainContainer}>

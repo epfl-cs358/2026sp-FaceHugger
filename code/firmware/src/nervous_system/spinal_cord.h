@@ -17,7 +17,9 @@ class SpinalCord{
         void walk();
         void rest();
         void relax();
+        void relax(uint32_t ms);   // T:2 dur_ms: ease every joint to 90 over ms.
         void stand();
+        void stand(uint32_t ms);   // T:2 dur_ms: invert-aware ease to NEUTRAL.
         void wallFlip();
         void update();
         void invertRobot();

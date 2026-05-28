@@ -21,6 +21,12 @@ ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn);
  * NOT applied to gaits or T:4 — gait output stays bit-for-bit. */
 ServoTriple clampClipServos(ServoTriple s);
 
+/* Clamp a wire-supplied T:2 `dur_ms` (pose-button ease window) into the safe
+ * range [0, POSE_EASE_MS_MAX]. 0 is "snap" (handler keeps existing instant
+ * path); any value above the ceiling is capped. Pulled out as a pure helper
+ * so it is unit-tested on the host (network.cpp is not native-buildable). */
+uint32_t clampPoseEaseMs(uint32_t dur_ms);
+
 /* Smoothstep ease-in-out fraction for a timed servo move (Servo::tickEase).
  * smoothstep(t) = t*t*(3-2t): slow at both ends, fast through the middle, and
  * reaches exactly 1.0 at elapsed_ms == dur_ms (so the move lands on target).

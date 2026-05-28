@@ -13,6 +13,12 @@
 #define MIN_PULSE 150
 #define MAX_PULSE 600
 
+// T:2 optional `dur_ms` ease window for the REST/STAND pose buttons. A wire
+// value above this is clamped down so a malicious / buggy app can't park the
+// robot in an arbitrarily long ease (during which the user can't take control
+// back with another T:2). 5 s is well above the 1 s default the app sends.
+#define POSE_EASE_MS_MAX 5000
+
 // define PCA addresses for servos as well as default angles (IDLE_STAND pose)
 
 // Front right leg (Leg 0 in spinal_cord.cpp)

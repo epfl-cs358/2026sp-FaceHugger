@@ -54,6 +54,19 @@ Requests a change in high-level behavior.
 Out-of-range `s` is ignored. State 4 (REST) is the pose to assume when physically
 calibrating the robot: all servos go to mid-travel and you mount the links to match.
 
+**Optional `dur_ms`** (uint, ms): on the two pose states REST (4) and STAND (5),
+specifies an ease window for the transition into the pose. The firmware glides
+each joint to the target over `dur_ms` ms using the same timed-move infrastructure
+as the clip-return ease (`setJointAnglesTimed`). Default / absent / `0` means
+snap (the original instant pose write). Clamped on the firmware to
+`[0, POSE_EASE_MS_MAX]` (= 5000 ms) so a bad value can't park the robot in a
+multi-minute ease. Ignored on non-pose states (IDLE / WALK / ACTION / FAILSAFE).
+
+**Examples:**
+- `{"T": 2, "s": 5}` — snap to standing neutral (existing behaviour).
+- `{"T": 2, "s": 5, "dur_ms": 1000}` — ease into standing neutral over 1 s
+  (the default the app sends from the REST / NEUTRAL pose buttons).
+
 ---
 
 ### 3. Body Pose / Static IK (`T: 3`)

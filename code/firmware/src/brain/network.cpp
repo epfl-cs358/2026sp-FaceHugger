@@ -6,6 +6,7 @@
 #include "shared/config.h"
 #include "../nervous_system/spinal_cord.h"
 #include "../nervous_system/movements.h"
+#include "../nervous_system/motion_math.h"   // clampPoseEaseMs (T:2 dur_ms)
 #include "clip_list_serializer.h"
 #include "../nervous_system/clips_all.h"
 
@@ -80,13 +81,26 @@ void handleParsedMessage(uint8_t num, uint8_t * payload) {
             if(doc.containsKey("s")){
                 int newState = doc["s"];
                 if(isValidStateCommand(newState)){
+                    // Optional `dur_ms`: when present and > 0 on a pose state
+                    // (REST/STAND), the firmware eases the pose over that many
+                    // ms instead of snapping. Clamped to [0, POSE_EASE_MS_MAX]
+                    // so a bad value can't park the robot in a multi-minute
+                    // ease. Non-pose states ignore `dur_ms`.
+                    uint32_t ease = doc["dur_ms"].is<uint32_t>()
+                        ? clampPoseEaseMs(doc["dur_ms"].as<uint32_t>()) : 0u;
                     switch(newState){
                         case STATE_IDLE: spinalCord.rest(); break;
                         case STATE_WALK: spinalCord.walk(); break;
                         case STATE_ACTION: spinalCord.wallFlip(); break;
-                        case STATE_REST: spinalCord.relax(); break;   // flat / all-90 calibration
-                        case STATE_STAND: spinalCord.stand(); break;  // standing / neutral
-                        default: break;                               // FAILSAFE: no-op (unchanged)
+                        case STATE_REST:
+                            if (ease > 0) spinalCord.relax(ease);
+                            else          spinalCord.relax();   // flat / all-90 calibration
+                            break;
+                        case STATE_STAND:
+                            if (ease > 0) spinalCord.stand(ease);
+                            else          spinalCord.stand();   // standing / neutral
+                            break;
+                        default: break;                          // FAILSAFE: no-op (unchanged)
                     }
                 }
             }

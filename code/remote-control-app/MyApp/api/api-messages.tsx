@@ -1,5 +1,6 @@
 import { sendCommand } from "../services/socket";
 import { stopStream } from "../services/clipStreamer";
+import { POSE_EASE_MS } from "../config/config";
 import { ActionPacket, ActionTypes, DirectionVector, GaitIntegration, GaitMode, ManualMovement, ServoCalibration } from "./api-types";
 
 //Movement packets
@@ -49,44 +50,15 @@ export const setClipSmoothing = (alpha: number) =>
 export const calibrationPacket = (leg: number, servo: number, angle: number) =>
     ({T: 4, id: leg, servo_id: servo, a: angle} as ServoCalibration);
 
-// Pitch-only mirror, matching firmware applyInvert: thigh (servo 1) and knee
-// (servo 2) become 180 - angle, hip (servo 0) unchanged. T:4 carries absolute
-// angles the firmware invert flag can't touch, so any app-sent pose must mirror
-// itself to stay consistent with a flipped robot (same reason the clip streamer
-// mirrors its frames).
-const mirrorPacket = (pkt: ServoCalibration, inverted: boolean): ServoCalibration =>
-    inverted && (pkt.servo_id === 1 || pkt.servo_id === 2)
-        ? { ...pkt, a: 180 - pkt.a }
-        : pkt;
+// Pose buttons (Task #11). Both REST (flat / all-90 calibration) and NEUTRAL
+// (standing) are firmware-side states; the firmware owns the pose values and
+// the ease. We send ONE T:2 with `dur_ms = POSE_EASE_MS` so the joints glide
+// instead of slamming. The previous burst-of-T:4 helpers were deleted: they
+// duplicated the firmware's per-servo defaults (drift hazard) and snapped
+// the pose. The firmware clamps `dur_ms` to POSE_EASE_MS_MAX, so an
+// out-of-range constant here can't park the robot in a multi-minute ease.
+export const sendRestPose = () =>
+    sendCommand(JSON.stringify({ T: 2, s: 4, dur_ms: POSE_EASE_MS }));
 
-// One CMD_CALIBRATE per (leg 0-3, servo 0-2) at 90° — resets every servo.
-export const restAllServosPackets = (angle: number = 90, inverted: boolean = false) => {
-    const packets: ServoCalibration[] = [];
-    for (let leg = 0; leg < 4; leg++) {
-        for (let servo = 0; servo < 3; servo++) {
-            packets.push(mirrorPacket(calibrationPacket(leg, servo, angle), inverted));
-        }
-    }
-    return packets;
-};
-
-// Neutral standing pose — raw servo angles per [leg id][servo_id] = [hip, thigh, knee].
-// Mirrors the firmware per-servo *_DEFAULT_ANGLE in config.h (returnToDefaultAngles()).
-// Keep in sync if the firmware defaults change.
-const NEUTRAL_STANCE_ANGLES: number[][] = [
-    [90, 150, 53],  // leg 0 - front right
-    [75, 30, 130],  // leg 1 - front left
-    [90, 40, 130],  // leg 2 - rear right
-    [90, 150, 50],  // leg 3 - rear left
-];
-
-// One CMD_CALIBRATE per joint to drive every servo to the neutral stance.
-export const neutralStancePackets = (inverted: boolean = false) => {
-    const packets: ServoCalibration[] = [];
-    NEUTRAL_STANCE_ANGLES.forEach((servos, leg) => {
-        servos.forEach((angle, servo) => {
-            packets.push(mirrorPacket(calibrationPacket(leg, servo, angle), inverted));
-        });
-    });
-    return packets;
-};
+export const sendNeutralStance = () =>
+    sendCommand(JSON.stringify({ T: 2, s: 5, dur_ms: POSE_EASE_MS }));

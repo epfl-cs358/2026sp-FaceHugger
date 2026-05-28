@@ -2,6 +2,12 @@
 #include "../shared/config.h"  // CALIB_* per-servo zero-point calibration
 #include "clips_all.h"
 
+uint32_t clampPoseEaseMs(uint32_t dur_ms) {
+    // 0 ("snap") is preserved; otherwise cap at POSE_EASE_MS_MAX. uint32_t so a
+    // wire negative read as int becomes a huge unsigned and clamps to MAX, not 0.
+    return dur_ms > (uint32_t)POSE_EASE_MS_MAX ? (uint32_t)POSE_EASE_MS_MAX : dur_ms;
+}
+
 double easeFraction(uint32_t elapsed_ms, uint32_t dur_ms) {
     if (dur_ms == 0 || elapsed_ms >= dur_ms) return 1.0;
     double t = (double)elapsed_ms / (double)dur_ms;
