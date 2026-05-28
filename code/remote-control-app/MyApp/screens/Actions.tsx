@@ -5,7 +5,6 @@ import { AppText } from "../components/text/AppText";
 import { ClipList } from "../components/ClipList";
 import { useRobotStore } from "../store/robotStore";
 import { sendRestPose, sendNeutralStance, sendSetAutoInvert, setClipSmoothing, stopMotion } from "../api/api-messages";
-import { formatPitch, formatRoll, formatOrientationState } from "../api/orientation";
 
 // Clip-playback smoothing presets (T:11 EMA alpha): snappy follows the raw
 // frames, smooth lags and rounds the motion.
@@ -17,14 +16,6 @@ const SMOOTHING_PRESETS: { label: string; alpha: number }[] = [
 
 export function Actions() {
     const [smoothing, setSmoothing] = useState(0.75);
-
-    // Orientation tile is driven from the T:10 broadcast (~10 Hz) that the
-    // connection hook already consumes — no polling fetch is added here, the
-    // store re-renders us when the firmware pushes a new frame. Fields may be
-    // null on pre-IMU firmware; the formatters render "—" in that case.
-    const pitchDeg = useRobotStore((s) => s.pitchDeg);
-    const rollDeg = useRobotStore((s) => s.rollDeg);
-    const upsideDown = useRobotStore((s) => s.upsideDown);
     const autoFlipEnabled = useRobotStore((s) => s.autoFlipEnabled);
     const setAutoFlipEnabled = useRobotStore((s) => s.setAutoFlipEnabled);
 
@@ -56,18 +47,6 @@ export function Actions() {
 
     return (
         <View style={styles.mainContainer}>
-            <View style={styles.orientationTile}>
-                <AppText text="Orientation" size={13} color="#aaa" />
-                <View style={styles.orientationRow}>
-                    <AppText text={formatPitch(pitchDeg)} size={15} color="#ffffff" />
-                    <AppText text={formatRoll(rollDeg)} size={15} color="#ffffff" />
-                </View>
-                <AppText
-                    text={formatOrientationState(upsideDown)}
-                    size={14}
-                    color={upsideDown === true ? "#ff9966" : "#a0d8a0"}
-                />
-            </View>
             <View style={styles.actionRow}>
                 <IndividualSelectionButton
                     selected={false}
@@ -115,18 +94,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         gap: 16,
         alignItems: 'flex-start',
-    },
-    orientationTile: {
-        alignSelf: 'stretch',
-        backgroundColor: '#1a1a2e',
-        borderRadius: 10,
-        paddingVertical: 10,
-        paddingHorizontal: 14,
-        gap: 6,
-    },
-    orientationRow: {
-        flexDirection: 'row',
-        gap: 16,
     },
     actionRow: {
         gap: 12,

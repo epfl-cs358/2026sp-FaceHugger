@@ -4,6 +4,7 @@ import { AppText } from "../text/AppText";
 import { useRobotStore } from "../../store/robotStore";
 import { useSocketStatus } from "../../hooks/useSocketStatus";
 import { darkerOrangeColor } from "../../colors/colors";
+import { formatPitch, formatRoll, formatOrientationState } from "../../api/orientation";
 
 export function RobotStatus(){
     const robotStore = useRobotStore();
@@ -21,16 +22,16 @@ export function RobotStatus(){
         </View>
         <View style={styles.gyroscopeDataContainer}>
             <View style={styles.orangeButtonStyling}>
-                <AppText text={`Gyroscope: `} size={15}/>
+                <AppText text={`Orientation: `} size={15}/>
             </View>
             <View style={styles.orangeButtonStyling}>
-                <AppText text={`X: ${robotStore.gyroscope[0].toFixed(1)}`} size={15}/>
+                <AppText text={formatPitch(robotStore.pitchDeg)} size={15}/>
             </View>
             <View style={styles.orangeButtonStyling}>
-                <AppText text={`Y: ${robotStore.gyroscope[1].toFixed(1)}`} size={15}/>
+                <AppText text={formatRoll(robotStore.rollDeg)} size={15}/>
             </View>
             <View style={styles.orangeButtonStyling}>
-                <AppText text={`Z: ${robotStore.gyroscope[2].toFixed(1)}`} size={15}/>
+                <AppText text={formatOrientationState(robotStore.upsideDown)} size={15}/>
             </View>
         </View>
         <View style={styles.errorMessageContainer}>
