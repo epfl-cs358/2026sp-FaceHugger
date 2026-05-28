@@ -133,6 +133,42 @@ def test_trot_sideways_engages_the_thighs():
     )
 
 
+def test_crab_keeps_shoulders_at_neutral_and_sweeps_thighs():
+    """Crab pure-X path: thighs do the lateral work, shoulders hold neutral (90).
+
+    Locks the post-branch crab against regression after the FL Change B / BR
+    un-mirror reshuffle. Audited 2026-05-28 vs pre-branch: the crab code path in
+    tickGait was structurally untouched — the conversions changed only on the
+    hip axis, and crab's pure-X flow keeps the shoulder at NEUTRAL (fwdContrib=0,
+    yawDir*0=0), so the new translateToServo lands every shoulder at 90 just by
+    virtue of NEUTRAL matching it. This test pins that invariant so a future
+    NEUTRAL or translateToServo edit can't silently re-introduce shoulder
+    motion in pure-sideways crab.
+    """
+    from firmware_sil.sil_bridge import trace_gait
+
+    fc = _fc_or_skip()
+    # Side direction (R / L) drives pure-X crab.
+    samples = trace_gait(fc, "crab", direction="R", steps=720, record_every=30)
+
+    # Shoulders must stay near 90 (no shoulder sweep in pure crab).
+    for leg, hip_idx in _HIP.items():
+        hip_dev = [abs(a[hip_idx] - 90) for _t, a in samples]
+        assert max(hip_dev) <= 4, (
+            f"crab moved {leg} shoulder away from neutral: max |dev| = {max(hip_dev)}° "
+            f"(expected <=4°); pure-X crab should not sweep shoulders"
+        )
+
+    # Thighs must actually sweep — that's where the lateral motion comes from.
+    thigh_range = [
+        max(s[1][i] for s in samples) - min(s[1][i] for s in samples)
+        for i in _THIGH.values()
+    ]
+    assert max(thigh_range) > 5, (
+        f"crab did not engage the thighs: ranges {thigh_range} (expected >5° on at least one)"
+    )
+
+
 def test_unknown_gait_name_rejected():
     from firmware_sil.sil_bridge import trace_gait
 
