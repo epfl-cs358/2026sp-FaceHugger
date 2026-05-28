@@ -848,11 +848,11 @@ def _seeded_pose(name):
 # sign conventions did not match the rig.
 #
 # The rig (URDF) is the kinematic source of truth (CLAUDE.md). N in
-# convention.json is in the rig's joint-angle space: Convention A makes
-# every leg uniform on bone-local Z, and Part 2's `scaled = N+(raw-N)*s`
-# means raw == N at the neutral anchor (the per-leg translateToServo
-# offsets cancel there). So the correct foot target is simply "where the
-# IK chain tip ends up when the 12 joint bones are posed at N".
+# convention.json is in the rig's joint-angle space: every leg is uniform
+# on bone-local Z, and Part 2's `scaled = N+(raw-N)*s` means raw == N at
+# the neutral anchor (the per-leg translateToServo offsets cancel there).
+# So the correct foot target is simply "where the IK chain tip ends up
+# when the 12 joint bones are posed at N".
 #
 # The IK constraint on `*_link3` uses use_tail=True targeting
 # foot_ik (== foot_target), so the IK chain tip IS the link3 bone tail.
