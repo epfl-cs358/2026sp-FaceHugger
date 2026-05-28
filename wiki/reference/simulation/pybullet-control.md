@@ -27,6 +27,8 @@ Each tick the bridge advances the firmware's clock, runs one `update()`, reads b
 
 The `fh_sim` module **auto-rebuilds** whenever the firmware/HAL/binding sources change, so a fresh `sim` never silently runs stale firmware. The staleness check scans the whole firmware `src/` tree, and `clips_all.h` lives there, so re-exporting clips (which rewrites the firmware copy) marks the module stale and the next launch recompiles it. A parity test suite asserts each clip's full servo-angle trace is bit-identical to a committed golden, so any firmware change that shifts an angle fails CI.
 
+Because the SIL compiles `shared/config.h` directly, it picks up the same per-servo `CALIB_*_THIGH` / `CALIB_*_KNEE` values the robot is flashed with. Both `translateToServo` and the upside-down `applyInvert` mirror (`2 * CALIB - angle`) therefore evaluate identically in the sim and on hardware - editing a CALIB value and relaunching `sim` shifts the simulated robot's stand and mirror in the same way it shifts the real one, with no separate sim-side calibration to keep in sync. See [Invert mirror and CALIB](../conventions.md#invert-mirror-and-calib).
+
 The rebuild happens **at launch**: a long-running process loads `fh_sim` once and a compiled extension is not hot-reloaded. So after re-exporting or re-flashing clips you must **restart** a running `sim` for the new clips to appear; otherwise the old in-memory module keeps serving the previous clip set.
 
 ## Stand, gaits, and clips

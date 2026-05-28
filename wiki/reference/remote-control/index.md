@@ -28,4 +28,16 @@ The Zustand store tracks live robot state (`fsmState`, `gaitMode`, `tofDistances
 
 Preset packet constants (`TrotGaitPacket`, `CrabGaitPacket`, `InvertRobotPacket`, etc.) are exported from `api-messages.tsx`; use these rather than constructing raw JSON.
 
+## Stop-on-blur
+
+Each control screen tears down whatever motion it owns when the user navigates away. Without this, a looping firmware clip launched from Actions would keep running invisibly after the user swiped to GaitControl, leaving the robot dancing with no on-screen control. The same hazard applies to a JS-streamed clip whose timer survives the unmount.
+
+The Pager swaps screens by unmount, so the screen's `useEffect` cleanup is the natural place to hook this. `Actions.tsx` registers `useEffect(() => () => stopMotion(), [])`, which on blur calls `stopMotion()` from `api/api-messages.tsx`. That helper sends `T:2 {"s": 0}` (STATE_IDLE) to preempt any firmware clip (`T:7`) or gait (`T:1`/`T:5`), then calls `stopStream()` on the JS clip streamer in case it was running. Both halves are no-ops when nothing is in flight, so the cleanup is safe to fire unconditionally. The robot holds its last commanded pose after IDLE; tap Neutral stance to reset.
+
+## App-streamed clips (disabled)
+
+Clips are now triggered firmware-side via `T:7` (CMD_PLAY_CLIP): the ESP32 owns the timing and only one packet crosses the wire. The app used to alternatively *stream* bundled clips frame-by-frame as `T:4` calibration packets, but that path saturated the ESP32 WebSocket on real hardware and the connection would drop mid-clip. Flashed clips were unaffected, so the streamer was switched off rather than removed.
+
+The flag lives in `config/config.ts` as `JS_STREAMED_CLIPS_ENABLED = false`. The streamer source (`services/clipStreamer.ts`, `api/streamClips.ts`) is intentionally left intact; `ClipList.tsx` hides the "App" segment and the per-row "App" button when the flag is off, and the streamer cleanup is a no-op when never started. Flipping the constant back to `true` re-enables the path once firmware throughput is fixed.
+
 For the full protocol specification see [../api.md](../api.md). For a no-build laptop debug client that speaks the same protocol, see the [browser control panel](control-panel.md).

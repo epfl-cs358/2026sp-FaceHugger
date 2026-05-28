@@ -73,6 +73,8 @@ Toggling invert mirrors whatever pose the robot is currently holding, in place: 
 
 Because `isInverted` is latching and every motion path applies the same pitch mirror, the robot keeps the mirror through gaits, clips, and standing, so it can locomote upside-down.
 
+**Auto-flip is not a state either.** The IMU-driven gate (`SpinalCord::tickAutoInvert`, called every loop tick) is a runtime mirror toggle that runs orthogonal to the FSM: an upside-down edge can fire while the robot is IDLE, WALK, ACTION, or STAND, and `isInverted` flips without `robotState` changing. T:6 (`CMD_SET_AUTO_INVERT`) freezes the gate without touching either flag. See [Orientation and auto-flip](orientation.md).
+
 ## REST
 
 REST holds all servos at 90° (mid-point of the 0-180° physical range). This is the safe-to-power-down pose: no joint is at an extreme and the robot is mechanically neutral. The `relax()` method sets all four legs to (90, 90, 90) immediately on entry.

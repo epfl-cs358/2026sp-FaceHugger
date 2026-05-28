@@ -123,6 +123,8 @@ See [URDF → Blender rig](../animation/blender-rig.md) for what the rig is and 
 
 Starts the Expo web app, the mobile remote-control client running in a browser. On its own it is just the app; point it at a running sim (`sim --serve`) or the real robot from the app's **Settings** screen. For the all-in-one session that brings up the sim and the app together, use `sim --app`.
 
+On a fresh clone the Expo app has no `node_modules/` and `npx expo start` would fail silently inside the spawned process. `app` (and `sim --app`) handle this before launching: if `node_modules/.package-lock.json` is older than `package.json` they run `npm ci` (or `npm install` when there is no lock file) in `code/remote-control-app/MyApp/`, streaming the output so you see install progress. Subsequent launches skip the install. You need Node.js 18+ on `PATH`; the launcher exits with a hint if `npm`/`npx` is missing. If you would rather install by hand, `cd code/remote-control-app/MyApp && npm install` once is enough.
+
 ## `flash`: build and upload firmware
 
 Builds and uploads the firmware to the ESP32 via PlatformIO.

@@ -98,8 +98,46 @@ repeat.
 
 ## Fine-tuning in `config.h`
 
-For residual offsets that cannot be resolved by re-seating the horn (sub-tooth
-errors), the default angle for each servo channel can be adjusted directly in
-`shared/config.h`. Each channel has a defined default angle that is sent on boot
-and on **Reset Pose**. Incrementing or decrementing these values by a few degrees
-will trim the standing pose without requiring physical disassembly.
+A spline tooth is a few degrees wide, so after the horn step every thigh and
+knee will still be a degree or two off mechanical flat. Rather than chasing
+that out of the horn, the firmware lets you record where flat actually landed
+and works from there. The eight `CALIB_*` macros at the top of
+`code/firmware/src/shared/config.h` hold the **servo angle at which each thigh
+or knee link is mechanically flat** (thigh horizontal, knee fully extended):
+
+```cpp
+#define CALIB_FR_THIGH  84
+#define CALIB_FR_KNEE   95
+#define CALIB_FL_THIGH  87
+#define CALIB_FL_KNEE   82
+#define CALIB_BR_THIGH 103
+#define CALIB_BR_KNEE   80
+#define CALIB_BL_THIGH  84
+#define CALIB_BL_KNEE   87
+```
+
+The inverse-kinematics path (`translateToServo`) adds and subtracts deltas
+**from these values**, not from a hardcoded 90, so the same math-space pose
+produces the same physical pose on every leg regardless of which tooth the
+horn ended up on. The upside-down pitch mirror (`applyInvert`) also pivots
+around `CALIB`, not 90: it computes `2 * CALIB - angle` per joint, so an
+inverted robot lands on the same physical flat as upright. Set all eight to
+`90` to disable per-servo calibration and fall back to the pre-calibration
+behaviour.
+
+### Workflow
+
+1. Stand the robot and open the app's **Individual Servo Control** for one
+   thigh or knee. Drive the joint until the link is visually flat (thigh
+   horizontal, or knee fully extended in line with the thigh).
+2. Read the servo angle the app is sending in that pose.
+3. Write that number into the matching `CALIB_<LEG>_<JOINT>` macro in
+   `shared/config.h`.
+4. Repeat for the other seven thigh/knee channels.
+5. Rebuild and reflash. The `_DEFAULT_ANGLE` constants below the `CALIB`
+   block are pre-computed `CALIB ± NEUTRAL` values and should be recomputed
+   in the comments to match; a host-side parity test (`test_neutral_consistency`)
+   catches a mismatch.
+
+Hips are not calibrated this way. The hip target is a 45 deg outward angle,
+not "flat", and trimming it is rarely useful past the one-tooth step above.

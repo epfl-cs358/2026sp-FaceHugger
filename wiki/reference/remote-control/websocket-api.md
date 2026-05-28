@@ -39,6 +39,7 @@ Two automatic safety behaviours are worth knowing:
 
 - **Movement timeout:** if no `T:1` direction command arrives within 2 seconds while the robot is walking, it automatically returns to the idle pose. You do not need to send a stop command — the timeout handles it.
 - **Angle clamp:** every servo write, regardless of source, is clamped to 0–180 degrees. Out-of-range values are silently clamped rather than rejected, and a warning is printed to the serial monitor.
+- **Stop on tab switch:** when you swipe away from the Actions tab, the app sends `T:2 {"s": 0}` (STATE_IDLE) so any in-flight firmware clip (`T:7`) stops instead of running invisibly under another screen. The robot holds its last commanded pose; tap Neutral stance to reset. See [Remote control app → Stop-on-blur](index.md#stop-on-blur).
 
 ## Full protocol reference
 

@@ -152,9 +152,21 @@ Each servo independently eases to its NEUTRAL angle. The clip does not loop; pla
 
 ### invertRobot (invert toggle)
 
-`invertRobot()` (`T:6`) toggles the `isInverted` flag and flips the pose the robot is currently holding, in place: it reads each servo's current angle, mirrors the pitch joints (`180 - angle` on thigh and knee, shoulder unchanged), and eases there over ~300 ms via `setJointAnglesTimed`. The earlier hard-coded inverted-pose table was dropped; the flip is now computed from the live pose and eased, not an instant snap to fixed angles. `setInverted()` (`T:9`) does the same but sets the flag explicitly instead of toggling. A duplicate `T:6` within 250 ms is debounced.
+`invertRobot()` (`T:6`) toggles the `isInverted` flag and flips the pose the robot is currently holding, in place: it reads each servo's current angle, mirrors the pitch joints (`2 * CALIB - angle` on thigh and knee, shoulder unchanged), and eases there over ~300 ms via `setJointAnglesTimed`. The earlier hard-coded inverted-pose table was dropped; the flip is now computed from the live pose and eased, not an instant snap to fixed angles. `setInverted()` (`T:9`) does the same but sets the flag explicitly instead of toggling. A duplicate `T:6` within 250 ms is debounced.
 
 While `isInverted` is active, every motion source routes through `applyServos`, which applies the same pitch mirror, so gaits, clips, and the standing pose are all mirrored and the robot can locomote upside-down. Because the eased flip uses a timed move, `update()` advances `tickEase()` outside the clip path each loop, and a direct servo write (a gait or stand tick) supersedes a pending ease, so an in-progress flip is overridden cleanly when motion resumes.
+
+### `applyServos` / `applyInvert` choke point
+
+There is exactly one place in the firmware where math-space angles become servo writes: `SpinalCord::applyServos()` in `spinal_cord.cpp`. Every motion source - `tickGait`, `tickTrot`, `tickYawRotation`, `tickClip`, `goToNeutral`, the stand path - converts to servo space with `translateToServo` and then calls `applyServos`, never `leg->setJointAngles` directly. `applyServos` runs `applyInvert(legId, s, isInverted)` and only then writes the servo angles.
+
+The point of the single choke is that the upside-down pitch mirror is applied centrally, in servo space, on every path - not duplicated into each gait or clip routine. `applyInvert` itself is pure and host-tested, and uses the per-joint mirror `2 * CALIB_*_BY_LEG[legId] - angle` so the mirror lands on real mechanical flat regardless of where the horn happens to sit. See [Invert mirror and CALIB](../conventions.md#invert-mirror-and-calib) for the formula and rationale.
+
+### Live invert via `tickAutoInvert`
+
+The choke point above is *where* the mirror happens; `setInverted` is *what* flips it. When the IMU latches upside-down (or the user sends T:9), `setInverted` flips the `isInverted` flag and calls `flipPoseInPlace(INVERT_EASE_MS)`, which reads each leg's current servo angles and eases them to their mirrored values (`applyInvert(legId, current, true)`) over ~300 ms. The next motion tick naturally produces the mirrored pose anyway — every gait/clip frame already runs through `applyServos` — so `flipPoseInPlace` exists for the *quiet* states: standing, idle, holding a clip's end frame. Without it, an inverted-while-standing robot would just sit in the upright pose until the user sent the next move.
+
+The edge-triggered gate that decides when to call `setInverted` from the IMU lives on `SpinalCord::tickAutoInvert(bool imuInverted)`. It uses an instance-member latch (`prevImuInverted_`) so the call fires once per flip, respects a user-controlled `autoInvertEnabled_` flag (T:6), and is invoked from both `main.cpp::loop()` and the SIL's `bindings.cpp::tick()` so hardware and simulation behave identically. See [Orientation and auto-flip](orientation.md) for the full IMU pipeline.
 
 ## Motion architecture summary
 
