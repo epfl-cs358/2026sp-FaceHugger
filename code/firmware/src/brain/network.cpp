@@ -89,7 +89,15 @@ void handleParsedMessage(uint8_t num, uint8_t * payload) {
                     uint32_t ease = doc["dur_ms"].is<uint32_t>()
                         ? clampPoseEaseMs(doc["dur_ms"].as<uint32_t>()) : 0u;
                     switch(newState){
-                        case STATE_IDLE: spinalCord.rest(); break;
+                        case STATE_IDLE:
+                            spinalCord.rest();
+                            // Also clear any in-flight clip loop. The FSM
+                            // transition alone left clipLoop_ + clipState_.phase
+                            // alive; the app's page-blur stopMotion() would ease
+                            // to neutral but the loop would resume on the next
+                            // re-entry into STATE_ACTION.
+                            spinalCord.stopClipPlayback();
+                            break;
                         case STATE_WALK: spinalCord.walk(); break;
                         case STATE_ACTION: spinalCord.wallFlip(); break;
                         case STATE_REST:

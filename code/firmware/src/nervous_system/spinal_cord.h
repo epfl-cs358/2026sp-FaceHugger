@@ -28,6 +28,12 @@ class SpinalCord{
         GaitType currentGait() const;
         void processCommand(String dir);
         void playClip(uint8_t id, bool loop = false);
+        // Hard-stop clip playback: phase := CLIP_DONE, clipLoop_ := false,
+        // clipPrerollUntilMs_ := 0. Called by the T:2 IDLE handler so a looping
+        // clip doesn't survive across the FSM transition and resume when the
+        // FSM next re-enters STATE_ACTION. Pose is NOT touched here — the IDLE
+        // dispatch (spinalCord.rest()) handles the actual ease.
+        void stopClipPlayback();
         void setClipSmoothing(float alpha);   // T:11 runtime smoothing knob
         void setInverted(bool flag);
         Face& getFace() { return face; }

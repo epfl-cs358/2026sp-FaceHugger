@@ -521,6 +521,16 @@ void SpinalCord::setClipSmoothing(float alpha) {
     Serial.printf("[clip] smoothing alpha = %.2f\n", clipEmaAlpha_);
 }
 
+void SpinalCord::stopClipPlayback() {
+    // Reset the clip player's lifecycle state. Without this, T:2 IDLE only
+    // changed the FSM and a `loop=true` clip would resume next time the FSM
+    // re-entered STATE_ACTION (clipLoop_ + clipState_.phase survived).
+    // Pose-easing is handled separately by the T:2 dispatch (rest()/stand()).
+    clipState_.phase       = CLIP_DONE;
+    clipLoop_              = false;
+    clipPrerollUntilMs_    = 0;
+}
+
 void SpinalCord::playClip(uint8_t id, bool loop) {
     if (id >= FH_CLIP_COUNT) {
         Serial.printf("[clip] ignored: id %u >= %u\n", id, (unsigned)FH_CLIP_COUNT);

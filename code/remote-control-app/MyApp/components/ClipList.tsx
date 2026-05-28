@@ -44,8 +44,17 @@ export function ClipList() {
     () => () => {
       clearTimer();
       stopStream();
+      // Reset the UI playing indicator on unmount. Without this, the global
+      // `clipPlaying` flag survives a screen-blur and the "↻ looping" / "▶
+      // playing" badge re-renders stale when the user comes back. The firmware
+      // side is cleared by stopMotion() (T:2 IDLE -> stopClipPlayback()); this
+      // is the matching app-side cleanup.
+      // (We don't render a Jest unit test here because the existing test setup
+      // doesn't include @testing-library/react-native — adding it just to cover
+      // a one-line useEffect cleanup isn't worth the dep weight.)
+      setClipPlaying(false);
     },
-    [],
+    [setClipPlaying],
   );
 
   const rows = useMemo(
