@@ -13,3 +13,14 @@
 
 pybullet>=3.2
 pyyaml>=6.0
+matplotlib>=3.5    # optional: only for `simulate.py --log` plots (sim_log.png); --log degrades to CSV-only without it
+
+# --- optional: only for the firmware SIL (`simulate.py --sil` / firmware_sil/) ---
+# Building the fh_sim module also needs CMake >= 3.15 and a C++17 compiler (not
+# pip-installable). On macOS prefer conda: `conda install -c conda-forge pybind11`.
+# Without these, the sim falls back to the Python re-port (firmware_port/) and the
+# SIL tests skip. See code/simulation/firmware_sil/README.md.
+pybind11>=2.10    # build-time only (CMake find_package); imported by the build, not the sim
+websockets>=12    # only for `facehugger.py serve` (the firmware-backed robot WebSocket API)
+sse-starlette>=2   # only for `serve` sim telemetry (SSE on :8082); serve runs without it (telemetry just disabled)
+uvicorn>=0.27      # ASGI server hosting the telemetry SSE app (paired with sse-starlette)

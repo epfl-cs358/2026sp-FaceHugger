@@ -51,6 +51,7 @@ import datetime
 import json
 import math
 import os
+from pathlib import Path
 
 import bpy
 
@@ -99,6 +100,17 @@ _JOINT_AXIS_EULER_IDX = 2  # bone-local Z, all 12 bones
 # by more than this threshold in a single frame step.
 _DELTA_THRESHOLD_DEG = 5.0
 
+# Authoring-time torque guard: warn if any joint moves more than this many
+# degrees between consecutive baked frames (fast keyframe = mechanical shock
+# on hardware). Tunable; not a hard limit — the firmware clamp is the
+# electrical backstop, this catches bad animation before it ships.
+FRAME_DELTA_WARN_DEG = 20.0
+
+# Recommended max authoring fps for robot export. Higher = more WS packets
+# per second with no motion benefit for these slow clips. Not enforced —
+# the animator sets fps in Output Properties; we only nudge.
+RECOMMENDED_MAX_FPS = 12
+
 # Heatmap colour thresholds (degrees).
 _HEATMAP_MID_DEG = 5.0
 _HEATMAP_HIGH_DEG = 20.0
@@ -117,6 +129,24 @@ _heatmap_prev_angles: dict = {}
 _heatmap_saved_obj_color: dict = {}  # mesh name -> prior obj.color tuple
 _heatmap_saved_shading: list = []  # [(View3DShading, prior color_type)]
 _heatmap_hip_gap_warned = False
+
+
+def _warn_frame_deltas(rows):
+    """Print a console WARNING for each joint that moves more than
+    FRAME_DELTA_WARN_DEG between consecutive frames. Returns the number of
+    warnings emitted (for tests)."""
+    n = 0
+    for prev, cur in zip(rows, rows[1:]):
+        for bone in JOINT_BONES:
+            delta = abs(cur[bone] - prev[bone])
+            if delta > FRAME_DELTA_WARN_DEG:
+                print(
+                    f"WARNING: {bone} moves {delta:.0f}° between frame "
+                    f"{prev['frame']} and {cur['frame']} "
+                    f"(threshold: {FRAME_DELTA_WARN_DEG:.0f}°)"
+                )
+                n += 1
+    return n
 
 
 # ---------------------------------------------------------------------------
@@ -485,8 +515,21 @@ def _autocomplete_clip(clip, context):
 
 
 def _redraw_view3d(context):
-    for area in context.screen.areas:
-        if area.type == "VIEW_3D":
+    """Force panels to redraw so they reflect data changes immediately.
+
+    Tags every area in every open window — not just one VIEW_3D via
+    `context.screen` — because the Clips panel's per-row include/exclude
+    checkbox is an operator button whose icon is computed in draw(); without a
+    redraw of the N-panel's region it keeps a stale visual (the toggle data
+    updates, the tick doesn't move) until the next mouse event."""
+    wm = getattr(bpy.context, "window_manager", None)
+    if wm is None:
+        if context.screen is not None:
+            for area in context.screen.areas:
+                area.tag_redraw()
+        return
+    for window in wm.windows:
+        for area in window.screen.areas:
             area.tag_redraw()
 
 
@@ -566,11 +609,74 @@ def _load_convention():
     return data
 
 
-def _exported_gaits_dir(clip_name):
-    """animation/exported_gaits/<clip_name>/, created if absent."""
-    out = os.path.join(_animation_dir(), "exported_gaits", clip_name)
+def _exported_clips_dir(clip_name):
+    """animation/exported_clips/<clip_name>/, created if absent."""
+    out = os.path.join(_animation_dir(), "exported_clips", clip_name)
     os.makedirs(out, exist_ok=True)
     return out
+
+
+def _exported_clips_root():
+    """animation/exported_clips/ (where the bundle clips_all.h lands)."""
+    return os.path.join(_animation_dir(), "exported_clips")
+
+
+def _repo_root():
+    """Repo root = the parent of animation/. The add-on assumes it runs from
+    a checkout (the .blend lives in animation/), which is the normal case."""
+    return os.path.dirname(_animation_dir())
+
+
+def _firmware_clips_dir():
+    """The firmware dir that holds clips_all.h (the on-board source of truth)."""
+    return os.path.join(_repo_root(), "code", "firmware", "src", "nervous_system")
+
+
+def _copy_bundle_to_firmware():
+    """Copy the freshly written exported_clips/clips_all.h over the firmware
+    copy. The firmware header is the same self-contained bundle format the
+    exporter writes, so this is a plain file copy. Returns the destination
+    path on success; raises ValueError (no bundle, or not a repo checkout) so
+    the caller can warn without failing the export."""
+    import shutil
+
+    src = os.path.join(_exported_clips_root(), "clips_all.h")
+    if not os.path.exists(src):
+        raise ValueError(f"no bundle to copy at {src}")
+    dest_dir = _firmware_clips_dir()
+    if not os.path.isdir(dest_dir):
+        raise ValueError(
+            f"firmware dir not found ({dest_dir}); not in a repo checkout?"
+        )
+    dest = os.path.join(dest_dir, "clips_all.h")
+    shutil.copyfile(src, dest)
+    return dest
+
+
+def _app_clips_dir():
+    """The remote-control app's asset dir, where clips_extra.json is bundled so
+    the app can stream clips that aren't flashed (see to_clips_extra_json)."""
+    return os.path.join(_repo_root(), "code", "remote-control-app", "MyApp", "assets")
+
+
+def _copy_extra_to_app():
+    """Copy the freshly written exported_clips/clips_extra.json into the app's
+    assets dir (the app bundles it at build time). Returns the destination path;
+    raises ValueError (no bundle, or not a repo checkout) so the caller can warn
+    without failing the export. Mirrors _copy_bundle_to_firmware for the app."""
+    import shutil
+
+    src = os.path.join(_exported_clips_root(), "clips_extra.json")
+    if not os.path.exists(src):
+        raise ValueError(f"no clips_extra.json to copy at {src}")
+    dest_dir = _app_clips_dir()
+    if not os.path.isdir(dest_dir):
+        raise ValueError(
+            f"app assets dir not found ({dest_dir}); not in a repo checkout?"
+        )
+    dest = os.path.join(dest_dir, "clips_extra.json")
+    shutil.copyfile(src, dest)
+    return dest
 
 
 # ---------------------------------------------------------------------------
@@ -834,7 +940,131 @@ class FH_OT_apply_clip(bpy.types.Operator):
             )
         else:
             self.report({"INFO"}, f"Applied clip '{self.clip_name}'")
+        # Sync the scene's playback range to this clip's authored range so
+        # the timeline + playback match the clip you just switched to.
+        _sync_scene_frame_range(context, self.clip_name)
         _redraw_view3d(context)
+        return {"FINISHED"}
+
+
+# ---------------------------------------------------------------------------
+# Per-clip frame range <-> scene sync
+# ---------------------------------------------------------------------------
+
+# msgbus owner token — lets us react to edits of the built-in Action range
+# props (which cannot carry an `update=` callback) and re-sync the scene live.
+_FRAME_RANGE_MSGBUS_OWNER = object()
+
+
+def _clip_frame_span(clip):
+    """(start, end) frame span of a clip = the UNION of `frame_range` over ALL
+    its actions (body_ctrl + the four foot_targets), not just body_ctrl.
+
+    A clip's real span is wherever ANY target is keyed. body_ctrl alone can be
+    single-keyed — e.g. a clip whose body just holds a pose while the feet
+    carry the motion (fallingRobot) — which would otherwise truncate the export
+    to one frame and collapse the panel/scene range to 0-0. `frame_range`
+    honours each action's `use_frame_range`. Returns None if the clip has no
+    actions. Note the span may be degenerate (start == end) for a genuinely
+    single-frame clip — callers decide what to do with that."""
+    starts, ends = [], []
+    for target in CLIP_TARGETS:
+        action = clip_action(clip, target)
+        if action is None:
+            continue
+        s, e = action.frame_range
+        starts.append(s)
+        ends.append(e)
+    if not starts:
+        return None
+    return int(min(starts)), int(max(ends))
+
+
+def _clip_export_range(clip):
+    """The frame range to EXPORT (and mirror to the scene) for a clip.
+
+    This is the per-clip "which section of the animation to export" selector:
+      * "Custom range" ON  (body_ctrl `use_frame_range`) -> the body_ctrl
+        action's manual `frame_start..frame_end` — the user's explicit section.
+      * "Custom range" OFF -> the full clip span (`_clip_frame_span`, the union
+        of all actions), so a clip whose body is single-keyed (fallingRobot)
+        still exports its whole motion.
+    Returns (start, end) or None if the clip has no actions. The "Custom range"
+    toggle/fields live on body_ctrl, so the choice persists per clip."""
+    action = clip_action(clip, "body_ctrl")
+    if action is not None and action.use_frame_range:
+        return int(action.frame_start), int(action.frame_end)
+    return _clip_frame_span(clip)
+
+
+def _sync_scene_frame_range(context, clip=None):
+    """Set the scene playback range to the active clip's export range
+    (`_clip_export_range`). Refuses to set a degenerate range (end <= start) —
+    returns False and leaves the scene untouched rather than zeroing it.
+    Returns True on a successful, non-degenerate sync."""
+    if clip is None:
+        clip = active_clip()
+    if clip is None:
+        return False
+    span = _clip_export_range(clip)
+    if span is None or span[1] <= span[0]:
+        return False
+    context.scene.frame_start, context.scene.frame_end = span
+    return True
+
+
+def _on_action_range_changed(*_args):
+    """msgbus notify: an Action's frame_start/frame_end/use_frame_range was
+    edited — re-sync the scene to the active clip. Guarded so a stray edit on
+    some unrelated Action while no clip is active is a harmless no-op."""
+    try:
+        _sync_scene_frame_range(bpy.context)
+    except Exception as e:  # never let a UI-thread notify raise
+        print(f"[fh_clip_panel] frame-range sync skipped: {e}")
+
+
+def _subscribe_frame_range_msgbus():
+    """Subscribe to the built-in Action range props so panel edits sync the
+    scene live (built-in props can't take an `update=` callback). Best-effort:
+    if msgbus is unavailable the Apply-to-Scene button + apply-clip sync still
+    cover it."""
+    try:
+        for prop in ("frame_start", "frame_end", "use_frame_range"):
+            bpy.msgbus.subscribe_rna(
+                key=(bpy.types.Action, prop),
+                owner=_FRAME_RANGE_MSGBUS_OWNER,
+                args=(),
+                notify=_on_action_range_changed,
+            )
+    except Exception as e:
+        print(f"[fh_clip_panel] frame-range msgbus not subscribed: {e}")
+
+
+def _unsubscribe_frame_range_msgbus():
+    try:
+        bpy.msgbus.clear_by_owner(_FRAME_RANGE_MSGBUS_OWNER)
+    except Exception:
+        pass
+
+
+class FH_OT_sync_frame_range(bpy.types.Operator):
+    """Set the scene's playback range to the active clip's authored range.
+    Useful after editing the clip's Custom range fields by hand."""
+
+    bl_idname = "fh.sync_frame_range"
+    bl_label = "Apply to Scene"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        if not _sync_scene_frame_range(context):
+            self.report({"WARNING"}, "No active clip to sync from")
+            return {"CANCELLED"}
+        clip = active_clip()
+        self.report(
+            {"INFO"},
+            f"Scene range → {context.scene.frame_start}-{context.scene.frame_end} "
+            f"(clip '{clip}')",
+        )
         return {"FINISHED"}
 
 
@@ -1596,6 +1826,69 @@ _SELECTION_PRESETS = {
 _SELECTION_ORDER = ("ALL", "BODY", "FRONT", "BACK", "LEGS", "FL", "FR", "BL", "BR")
 
 
+def _clip_interpolation_mode(clip):
+    """Current keyframe interpolation of `clip`, as the panel toggle shows
+    it: "LINEAR", "BEZIER", or None (no clip / no keyframes). Reads the
+    FIRST keyframe found across the clip's layered f-curves — the same
+    first-keyframe heuristic FH_OT_toggle_preview uses to decide its flip
+    direction, so the displayed state and the toggle's action never
+    disagree. Derived from the curves, never stored, so it can't drift."""
+    if clip is None:
+        return None
+    for target in CLIP_TARGETS:
+        action = clip_action(clip, target)
+        if action is None:
+            continue
+        for layer in action.layers:
+            for strip in layer.strips:
+                for channelbag in strip.channelbags:
+                    for fcurve in channelbag.fcurves:
+                        for kp in fcurve.keyframe_points:
+                            return (
+                                "LINEAR" if kp.interpolation == "LINEAR" else "BEZIER"
+                            )
+    return None
+
+
+class FH_OT_toggle_preview(bpy.types.Operator):
+    """Toggle the active clip's F-curves between BEZIER (authoring) and
+    LINEAR (exactly what the robot plays). Non-destructive: Bezier handles
+    are preserved on the keyframes and restored when toggled back."""
+
+    bl_idname = "fh.toggle_preview"
+    bl_label = "Preview Robot Motion"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        clip = active_clip()
+        if clip is None:
+            self.report({"WARNING"}, "No active clip")
+            return {"CANCELLED"}
+        going_linear = None  # decided from the first keyframe seen
+        touched = 0
+        for target in CLIP_TARGETS:
+            action = clip_action(clip, target)
+            if action is None:
+                continue
+            # Blender 5.x layered Action API: F-curves live in
+            # layer → strip → channelbag → fcurves (not action.fcurves).
+            for layer in action.layers:
+                for strip in layer.strips:
+                    for channelbag in strip.channelbags:
+                        for fcurve in channelbag.fcurves:
+                            for kp in fcurve.keyframe_points:
+                                if going_linear is None:
+                                    going_linear = kp.interpolation != "LINEAR"
+                                kp.interpolation = (
+                                    "LINEAR" if going_linear else "BEZIER"
+                                )
+                                touched += 1
+        mode = "LINEAR (robot preview)" if going_linear else "BEZIER (authoring)"
+        self.report({"INFO"}, f"{clip}: {touched} keyframes -> {mode}")
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
 class FH_OT_select_controls(bpy.types.Operator):
     """Select a preset group of rig control objects (replacing the
     current selection) and make one of them active. Selection only —
@@ -1650,6 +1943,52 @@ class FH_OT_select_controls(bpy.types.Operator):
 # ---------------------------------------------------------------------------
 
 
+# Per-leg sign applied to the link1 (shoulder/yaw) delta on export.
+#
+# Canon (convention PNG, DRAFT-delta-conventions.md §2): math-space +sh = CCW
+# yaw, UNIFORM across all four legs ("absolute rotation values like a unit
+# circle, same rotation"). The rig's link1 yaw driver writes the bone-local Z
+# rotation, i.e. it multiplies the true CCW foot-yaw delta by the bone axis
+# sign (URDF link1 <axis z>: fr -1, fl +1, br +1, bl -1). To recover the
+# uniform CCW math-space the export must CANCEL that bone-axis sign — so this
+# table IS the axis sign. translateToServo then maps uniform math-space to
+# servos, where BR's documented hardware mirror (slope -1) makes BR's servo
+# move opposite the other three for a body yaw. That is correct, not a bug;
+# whether BR should be un-mirrored is a separate hardware question. See
+# docs/CLIP_SHOULDER_CONVENTION.md.
+_LINK1_DELTA_SIGN = {"fr": -1, "fl": +1, "br": +1, "bl": -1}
+
+
+def _link1_delta_to_absolute(angles, convention):
+    """Convert each `*_link1` (shoulder/yaw) angle from delta-to-absolute.
+
+    The rig drives link1 with an analytic yaw driver that outputs a DELTA
+    from the flat/rest pose — 0 deg at rest, deviating only as the foot
+    yaws — NOT an absolute joint angle. (The IK-driven link2/link3 are
+    already absolute: `_read_bone_angles` recovers the constraint-solved
+    angle for those.) But the export pipeline downstream
+    (`_scale_from_neutral`, `_frame_to_servo`) and the firmware
+    `translateToServo` both assume raw == NEUTRAL at the standing pose,
+    so that servo 90 = shoulder outward for every leg. Reading link1 as
+    delta therefore mis-anchored every shoulder (servo ~60 on fr/br,
+    clamped past [38,142] on the +/-135 legs fl/bl) — collapsing the
+    robot on playback in BOTH sim and firmware.
+
+    Fix: absolute = NEUTRAL + sign*delta, where NEUTRAL anchors the rest pose
+    (servo 90) and the per-leg sign (_LINK1_DELTA_SIGN) flips fl so all four
+    shoulders yaw the same servo direction. Shoulders only — link2/link3 are
+    already absolute. See docs/CLIP_SHOULDER_CONVENTION.md.
+
+    Mutates and returns `angles` ({bone_name: deg}). Degrees throughout
+    (`_read_bone_angles` and `neutral_joint_deg` are both degrees)."""
+    neutral = convention["neutral_joint_deg"]
+    for leg in _LEGS:
+        key = f"{leg}_link1"
+        if key in angles:
+            angles[key] = neutral[leg][0] + _LINK1_DELTA_SIGN[leg] * angles[key]
+    return angles
+
+
 def bake_clip(clip_name, context):
     """Step through every frame of `clip_name`, evaluate the depsgraph and
     read the IK-solved joint angles. Returns a list of row dicts:
@@ -1657,8 +1996,12 @@ def bake_clip(clip_name, context):
         [{"frame": 1, "time_ms": 0, "fl_link1": 0.0, "fl_link2": 0.0, ...},
          ...]
 
-    Pure data extraction — knows nothing about servos, scaling or
-    channels. Raises ValueError if the rig/clip is not exportable."""
+    Binds `clip_name`'s Actions onto the rig BEFORE sampling so the
+    depsgraph reflects this clip's motion — not whatever clip happens to
+    be active (the multi-clip "Export Selected" mislabel bug). Restores
+    the previously-active clip + frame afterward. Pure data extraction —
+    knows nothing about servos, scaling or channels. Raises ValueError if
+    the rig/clip is not exportable."""
     scene = context.scene
     arm_obj = _find_arm_obj()
     if arm_obj is None:
@@ -1667,25 +2010,60 @@ def bake_clip(clip_name, context):
     if action is None:
         raise ValueError(f"No body_ctrl action for clip '{clip_name}'")
 
-    frame_start = int(action.frame_range[0])
-    frame_end = int(action.frame_range[1])
+    # Bind the target clip so the depsgraph samples ITS motion. Autocomplete
+    # first (mirrors FH_OT_apply_clip) so a clip missing a target doesn't
+    # inherit the previous clip's Action on that target. view_layer.update()
+    # forces the IK constraint stack to re-solve to the rebind before frame 0.
+    prev_clip = active_clip()
+    _autocomplete_clip(clip_name, context)
+    _assigned, missing = assign_clip(clip_name)
+    if missing:
+        raise ValueError(
+            f"Clip '{clip_name}' incomplete — missing: {', '.join(missing)}"
+        )
+    context.view_layer.update()
+
+    # Bake the clip's export range: the body_ctrl custom range if "Custom range"
+    # is enabled (the per-clip section selector), else the full clip span (union
+    # of all five actions — a clip can key the body at a single frame while the
+    # feet carry the motion, e.g. fallingRobot, so body_ctrl alone would truncate
+    # the export to one frame).
+    span = _clip_export_range(clip_name)
+    if span is None:
+        raise ValueError(f"Clip '{clip_name}' has no actions to bake")
+    frame_start, frame_end = span
     fps = scene.render.fps / scene.render.fps_base
+    if fps > RECOMMENDED_MAX_FPS:
+        print(
+            f"WARNING: scene fps is {fps:.0f}; consider lowering to "
+            f"{RECOMMENDED_MAX_FPS} in Output Properties for robot export "
+            f"(fewer WebSocket packets, same motion)."
+        )
 
     original_frame = scene.frame_current
+    convention = _load_convention()
     rows = []
     for frame in range(frame_start, frame_end + 1):
         scene.frame_set(frame)
         depsgraph = bpy.context.evaluated_depsgraph_get()
         arm_eval = arm_obj.evaluated_get(depsgraph)
-        angles = _read_bone_angles(arm_eval)
+        angles = _link1_delta_to_absolute(_read_bone_angles(arm_eval), convention)
         time_ms = round((frame - frame_start) / fps * 1000)
         rows.append({"frame": frame, "time_ms": time_ms, **angles})
     scene.frame_set(original_frame)
+
+    # Restore whatever clip was active before, so baking doesn't leave the
+    # rig rebound to the last-baked clip (matters for "Export Selected").
+    if prev_clip is not None and prev_clip != clip_name:
+        _autocomplete_clip(prev_clip, context)
+        assign_clip(prev_clip)
+        context.view_layer.update()
+    _warn_frame_deltas(rows)
     return rows
 
 
 # ---------------------------------------------------------------------------
-# LAYER 2 — converters: baked rows -> animation/exported_gaits/<clip>/
+# LAYER 2 — converters: baked rows -> animation/exported_clips/<clip>/
 # ---------------------------------------------------------------------------
 
 _LEGS = ("fr", "fl", "br", "bl")  # firmware LegId order: FR=0, FL=1, BR=2, BL=3
@@ -1702,7 +2080,7 @@ _LEG_ID = {"fr": 0, "fl": 1, "br": 2, "bl": 3}
 
 def to_csv(frames, clip_name):
     """Raw bone angles, one row per frame (unchanged legacy format)."""
-    path = os.path.join(_exported_gaits_dir(clip_name), f"{clip_name}.csv")
+    path = os.path.join(_exported_clips_dir(clip_name), f"{clip_name}.csv")
     fieldnames = ["frame", "time_ms"] + JOINT_BONES
     with open(path, "w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
@@ -1723,7 +2101,7 @@ def to_c_header(frames, clip_name, convention):
     the firmware header intentionally stays raw — hardware conversion is
     the JS layer's job, not the C array's."""
     del convention  # intentionally unused — header stays raw
-    path = os.path.join(_exported_gaits_dir(clip_name), f"{clip_name}.h")
+    path = os.path.join(_exported_clips_dir(clip_name), f"{clip_name}.h")
     safe = clip_name.upper().replace("-", "_").replace(" ", "_")
     guard = f"FH_CLIP_{safe}_H"
     c_sym = f"fh_clip_{clip_name.lower().replace('-', '_').replace(' ', '_')}"
@@ -1753,7 +2131,7 @@ def to_c_header(frames, clip_name, convention):
     return path
 
 
-def _frame_to_servo(row, convention):
+def _frame_to_servo(row, convention, warn=True):
     """One baked row -> {leg: [hip, thigh, knee] ints} where the per-leg
     list index IS the firmware `servo_id` (0=hip, 1=thigh, 2=knee —
     matching LEG_SERVO_CHANNEL[leg_id][servo_id] in
@@ -1777,19 +2155,78 @@ def _frame_to_servo(row, convention):
         sh, th, kn = (n[j] + (raw[j] - n[j]) * scale for j in range(3))
         # 2. translateToServo (mirror/offset per leg side)
         if leg == "fl":
-            servo = [sh, 90 + th, 90 - kn]
+            # Change B: FL shoulder regularized to 90 + (sh - 135) so servo 90 = outward,
+            # matching fr/bl/br. Byte-identical to firmware motion_math.cpp FL branch.
+            servo = [90 + (sh - 135), 90 + th, 90 - kn]
         elif leg == "fr":
             servo = [90 + (sh - 45), 90 - th, 90 + kn]
         elif leg == "bl":
             servo = [90 + (sh + 135), 90 - th, 90 + kn]
         else:  # br
-            servo = [90 - (sh + 45), 90 + th, 90 - kn]
-        # 3. integer servo degrees
+            # BR shoulder un-mirrored (2026-05-25): +sh = +servo like fr/fl/bl
+            # (identical motor, yaw shaft on the same vertical axis). Kept
+            # byte-identical to firmware translateToServo by test_servo_parity.
+            servo = [90 + (sh + 45), 90 + th, 90 - kn]
+        # 3. clamp to the servo range, surfacing authoring errors at export
+        # time rather than relying on the JS / firmware clamp as the only
+        # backstop (the FRAME_DELTA_WARN_DEG warning's range companion).
+        for i, v in enumerate(servo):
+            if v < 0 or v > 180:
+                if warn:
+                    bone_name = ["shoulder", "hip", "knee"][i]
+                    print(
+                        f"WARNING: {leg} {bone_name} servo {v:.1f} out of range "
+                        f"[0-180] at frame {row.get('frame', '?')} — clamped"
+                    )
+                servo[i] = max(0, min(180, v))
+        # 4. integer servo degrees
         out[leg] = [round(v) for v in servo]
     return out
 
 
-def to_js(frames, clip_name, convention, loop=False, dry_run=False):
+def _current_servo_angles(context):
+    """Live servo degrees for the CURRENT rig pose, per leg, via the exact
+    export pipeline (link1 delta->absolute, scale-from-NEUTRAL, translateToServo)
+    so the numbers match what would be baked/flashed. Returns
+    {leg: [shoulder, thigh, knee]} (ints) or None if the rig/convention isn't
+    available. warn=False so a panel redraw never spams the clamp warning."""
+    arm = _find_arm_obj()
+    if arm is None:
+        return None
+    try:
+        convention = _load_convention()
+        dg = context.evaluated_depsgraph_get()
+        angles = _link1_delta_to_absolute(
+            _read_bone_angles(arm.evaluated_get(dg)), convention
+        )
+        return _frame_to_servo(angles, convention, warn=False)
+    except Exception:
+        return None
+
+
+def _clip_frame_ms(frames):
+    """Playback wall-clock period for a baked clip: the median delta between
+    consecutive `time_ms` values = the authored scene's frame period (~42 ms at
+    24 fps). Falls back to 33 ms (~30 fps) for clips with fewer than 2 frames.
+    Shared by the .js player and the app bundle so both play at authored speed."""
+    if len(frames) >= 2:
+        deltas = sorted(
+            frames[i + 1]["time_ms"] - frames[i]["time_ms"]
+            for i in range(len(frames) - 1)
+        )
+        return deltas[len(deltas) // 2]
+    return 33
+
+
+def to_js(
+    frames,
+    clip_name,
+    convention,
+    loop=False,
+    dry_run=False,
+    write=True,
+    esp_ip="192.168.4.1",
+):
     """Self-contained browser-console JS that plays the clip.
 
     Spec: doc/animation-pipeline/onboard-clip-player-design.md
@@ -1804,6 +2241,16 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False):
     semantics, hold-at-end behaviour, and the clamp are identical to
     the live version.
 
+    `write=False` returns the generated JS string without touching the
+    filesystem (useful for tests/validation). Default (`write=True`) writes
+    the file to `animation/exported_clips/<clip_name>/` and returns its path.
+
+    `esp_ip` is the robot's address baked into the WebSocket URL
+    (`ws://<esp_ip>:81`) and the HOW-TO-RUN comment. The board IP can change
+    (AP-mode default 192.168.4.1, or a DHCP lease on a shared network), so the
+    animator sets it at export time. Empty/blank falls back to 192.168.4.1.
+    Port 81 is fixed (see code/API_SPEC.md). Ignored in dry-run (no socket).
+
     Math: applies the full hardware conversion (scale-from-NEUTRAL +
     per-leg translateToServo + round) at bake time via
     `_frame_to_servo`. N/SCALE come from convention.json (the single
@@ -1813,8 +2260,11 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False):
     {T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}. Firmware maps to
     PCA channel via LEG_SERVO_CHANNEL[id][servo_id] (config.h:64);
     convention.json's `channels` is no longer on the wire."""
-    path = os.path.join(_exported_gaits_dir(clip_name), f"{clip_name}.js")
+    path = os.path.join(_exported_clips_dir(clip_name), f"{clip_name}.js")
     today = datetime.date.today().isoformat()
+    # Blank IP -> AP-mode default; no strict regex so mDNS names
+    # (facehugger.local) stay valid too.
+    esp_ip = (esp_ip or "").strip() or "192.168.4.1"
 
     # Derive the playback wall-clock period from the baked time_ms
     # column — the median delta between consecutive frames gives the
@@ -1824,14 +2274,7 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False):
     # source-frame period keeps playback wall-clock = authored
     # wall-clock. Falls back to 33 ms (~30 fps) if the clip has fewer
     # than 2 frames.
-    if len(frames) >= 2:
-        deltas = sorted(
-            frames[i + 1]["time_ms"] - frames[i]["time_ms"]
-            for i in range(len(frames) - 1)
-        )
-        frame_ms = deltas[len(deltas) // 2]
-    else:
-        frame_ms = 33
+    frame_ms = _clip_frame_ms(frames)
 
     clip_lines = []
     for row in frames:
@@ -1869,7 +2312,7 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False):
     else:
         header_block = (
             "// HOW TO RUN (browser):\n"
-            "//   1. Join the robot Wi-Fi (FaceHugger_Net); robot at 192.168.4.1.\n"
+            f"//   1. Join the robot Wi-Fi (FaceHugger_Net); robot at {esp_ip}.\n"
             "//   2. Open a console on a NON-HTTPS page (http://, file://, or\n"
             "//      about:blank). ws:// is BLOCKED from https:// (mixed content)\n"
             '//      — the #1 reason "nothing happens".\n'
@@ -1879,7 +2322,7 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False):
             "//   {T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}\n"
             "// Firmware does PCA-channel mapping via LEG_SERVO_CHANNEL."
         )
-        transport_decl = 'const ws = new WebSocket("ws://192.168.4.1:81");'
+        transport_decl = f'const ws = new WebSocket("ws://{esp_ip}:81");'
         open_guard = "if (ws.readyState !== WebSocket.OPEN) return;"
         send_call = "ws.send(JSON.stringify(msg));"
         stop_close = "try { ws.close(); } catch (e) {}"
@@ -1890,12 +2333,11 @@ def to_js(frames, clip_name, convention, loop=False, dry_run=False):
             ' call fhStop() when done.");\n'
             "  _timer = setInterval(playFrame, FRAME_MS);\n"
             "};\n"
-            "ws.onerror = (e) => {\n"
-            '  console.error("FaceHugger: WebSocket error. On the robot '
-            "Wi-Fi (FaceHugger_Net, ws://192.168.4.1:81)? Is this page http:// "
-            '(NOT https:// — ws:// is blocked from https pages)?", e);\n'
+            "ws.onerror = () => {\n"
+            '  alert("FaceHugger: could not connect to " + ws.url +\n'
+            '        " - check the robot IP / Wi-Fi network and reload.");\n'
             "};\n"
-            'ws.onclose = () => { fhStop(); console.log("FaceHugger: socket closed."); };'
+            'ws.onclose = (e) => { if (!e.wasClean) console.warn("FaceHugger WS closed", e.code); };'
         )
 
     js = f"""// FaceHugger clip: {clip_name}
@@ -1934,6 +2376,12 @@ const CLIP = [
 // convention can push the converted angle out of range).
 const clamp = (v) => Math.max(0, Math.min(180, v | 0));
 
+// Delta-encode: only emit a channel when its value changed since the last
+// frame. Cuts redundant traffic and ends the hold-at-end resend flood
+// (a held pose = unchanged angles = nothing sent). Reset to {{}} on restart
+// so the first frame after a (re)start always sends all 12 channels.
+let _last = {{}};
+
 let _i = 0;
 let _timer = null;
 {transport_decl}
@@ -1949,14 +2397,23 @@ function playFrame() {{
   // End of clip: in LOOP mode wrap to the start; otherwise clamp to
   // the last frame and keep re-sending it (hold-at-end per spec §3.1).
   if (_i >= CLIP.length) {{
-    _i = LOOP ? 0 : (CLIP.length - 1);
+    if (LOOP) {{
+      _i = 0;
+      _last = {{}};  // reset delta cache so loop restart re-sends all channels
+    }} else {{
+      _i = CLIP.length - 1;
+    }}
   }}
   const frame = CLIP[_i++];
   {open_guard}
   for (const leg of ["fr", "fl", "br", "bl"]) {{
     const angles = frame[leg];
     for (let j = 0; j < 3; j++) {{
-      const msg = {{ "T": 4, "id": LEG_IDS[leg], "servo_id": j, "a": clamp(angles[j]) }};
+      const a = clamp(angles[j]);
+      const key = leg + ":" + j;
+      if (_last[key] === a) continue;
+      _last[key] = a;
+      const msg = {{ "T": 4, "id": LEG_IDS[leg], "servo_id": j, "a": a }};
       {send_call}
     }}
   }}
@@ -1964,9 +2421,196 @@ function playFrame() {{
 
 {starter}
 """
+    if not write:
+        return js
     with open(path, "w") as fh:
         fh.write(js)
     return path
+
+
+def _scale_from_neutral(row, convention):
+    """One baked row -> {leg: [sh, th, kn]} math-space degrees with the
+    2/3 scale-from-NEUTRAL applied (the SAME step-1 math as
+    _frame_to_servo, but WITHOUT translateToServo / round). The clip
+    header is math-space; the firmware applies translateToServo at
+    runtime, so this must NOT pre-apply it (plan §0)."""
+    neutral = convention["neutral_joint_deg"]
+    scale = convention["scale"]
+    out = {}
+    for leg in _LEGS:
+        n = neutral[leg]
+        raw = [row[f"{leg}_link1"], row[f"{leg}_link2"], row[f"{leg}_link3"]]
+        out[leg] = [n[j] + (raw[j] - n[j]) * scale for j in range(3)]
+    return out
+
+
+def _c_sym(clip_name):
+    return "fh_clip_" + clip_name.lower().replace("-", "_").replace(" ", "_")
+
+
+def to_clips_header(clips, convention, write=True, out_dir=None):
+    """Bundle every clip into one clips_all.h + a clips_manifest.json.
+
+    `clips` is an ORDERED dict {clip_name: baked_rows} (insertion order =
+    clip id = FH_CLIPS[] index). Each clip's a[12] is math-space degrees,
+    scale-from-NEUTRAL applied ONCE, in firmware LegId order (FR,FL,RR,RL)
+    × (shoulder, thigh, knee). Firmware applies ONLY translateToServo at
+    runtime — see plan §0 / onboard-clip-player-design.md §5.
+
+    Returns (header_str, manifest_json_str). When write=True also writes
+    them to out_dir (default animation/exported_clips/)."""
+    names = list(clips.keys())
+    seen_syms = {}
+    for name in names:
+        sym = _c_sym(name)
+        if sym in seen_syms:
+            raise ValueError(
+                f"Clip names '{seen_syms[sym]}' and '{name}' both map to C "
+                f"symbol '{sym}'; rename one (duplicate symbol won't compile)"
+            )
+        seen_syms[sym] = name
+    lines = [
+        "#ifndef FH_CLIPS_ALL_H",
+        "#define FH_CLIPS_ALL_H",
+        "#include <stdint.h>",
+        "",
+        "/* Auto-generated by FH Clip Panel (to_clips_header) - do not edit.",
+        " * a[12] = PRE-SCALED math-space joint degrees: the 2/3",
+        " * scale-from-NEUTRAL is already applied; firmware NEVER re-scales.",
+        " * Order is firmware LegId: FR,FL,RR,RL, each (shoulder,thigh,knee).",
+        " * Firmware applies ONLY translateToServo() at runtime. */",
+        "",
+        "typedef struct { uint16_t t_ms; float a[12]; } FhClipFrame;",
+        "typedef struct {",
+        "    const char*        name;",
+        "    const FhClipFrame* frames;",
+        "    uint16_t           frame_count;",
+        "    uint16_t           duration_ms;",
+        "} FhClip;",
+        "",
+        f"#define FH_CLIP_COUNT {len(names)}",
+    ]
+    manifest = {"clips": []}
+    for cid, name in enumerate(names):
+        rows = clips[name]
+        if not rows:
+            raise ValueError(f"Clip '{name}' has no frames; refusing to emit")
+        prev_t = None
+        for r in rows:
+            t = int(r["time_ms"])
+            if t > 65535:
+                raise ValueError(
+                    f"Clip '{name}' t_ms {t} exceeds uint16_t (65535 ms); "
+                    f"clip too long for the header timeline type"
+                )
+            if prev_t is not None and t <= prev_t:
+                raise ValueError(
+                    f"Clip '{name}' t_ms not strictly increasing "
+                    f"({prev_t} -> {t}); firmware bracket search requires it"
+                )
+            prev_t = t
+        sym = _c_sym(name)
+        lines.append(f"static const FhClipFrame {sym}[] = {{")
+        for row in rows:
+            s = _scale_from_neutral(row, convention)
+            a = []
+            for leg in _LEGS:  # ("fr","fl","br","bl") == LegId order
+                a += [f"{v:.4f}f" for v in s[leg]]
+            t_ms = int(row["time_ms"])
+            lines.append(f"    {{ {t_ms:5d}, {{ {', '.join(a)} }} }},")
+        lines.append("};")
+        frame_count = len(rows)
+        duration_ms = int(rows[-1]["time_ms"]) if rows else 0
+        manifest["clips"].append(
+            {
+                "id": cid,
+                "name": name,
+                "frame_count": frame_count,
+                "duration_ms": duration_ms,
+            }
+        )
+    lines.append("")
+    lines.append("static const FhClip FH_CLIPS[FH_CLIP_COUNT] = {")
+    for cid, name in enumerate(names):
+        rows = clips[name]
+        sym = _c_sym(name)
+        dur = int(rows[-1]["time_ms"]) if rows else 0
+        lines.append(f"    {{ {json.dumps(name)}, {sym}, {len(rows)}, {dur} }},")
+    lines.append("};")
+    lines.append("#endif /* FH_CLIPS_ALL_H */")
+    lines.append("")
+    header = "\n".join(lines)
+    manifest_str = json.dumps(manifest, indent=2) + "\n"
+
+    if write:
+        base = out_dir or os.path.join(_animation_dir(), "exported_clips")
+        os.makedirs(base, exist_ok=True)
+        with open(os.path.join(base, "clips_all.h"), "w") as fh:
+            fh.write(header)
+        with open(os.path.join(base, "clips_manifest.json"), "w") as fh:
+            fh.write(manifest_str)
+
+        # Post-export consistency gate — warns loudly but does not block
+        try:
+            import sys as _sys
+
+            _sys.path.insert(
+                0, os.path.join(os.path.dirname(__file__), "..", "scripts")
+            )
+            from check_export_consistency import check_all_clips as _check
+
+            if not _check(Path(base)):
+                print(
+                    "WARNING: export consistency check FAILED — review output above before flashing"
+                )
+        except Exception as _e:
+            print(f"WARNING: consistency check could not run: {_e}")
+
+    return header, manifest_str
+
+
+def to_clips_extra_json(clips, convention, write=True, out_dir=None):
+    """Bundle clips into clips_extra.json — the format the remote-control app
+    streams client-side (no flash). Unlike clips_all.h (math-space, scaled; the
+    firmware applies translateToServo at runtime), this stores the FINAL per-leg
+    servo degrees [hip, thigh, knee] via _frame_to_servo — the exact wire values
+    the app sends as CMD_CALIBRATE (T:4), identical to what the .js players emit.
+
+    `clips` is an ORDERED dict {clip_name: baked_rows}. Returns the JSON string;
+    when write=True also writes clips_extra.json to out_dir (default
+    animation/exported_clips/)."""
+    out = {"clips": []}
+    for name, rows in clips.items():
+        if not rows:
+            raise ValueError(f"Clip '{name}' has no frames; refusing to emit")
+        frames = []
+        for row in rows:
+            s = _frame_to_servo(row, convention)
+            frames.append(
+                {
+                    "t": int(row["time_ms"]),
+                    "fr": s["fr"],
+                    "fl": s["fl"],
+                    "br": s["br"],
+                    "bl": s["bl"],
+                }
+            )
+        out["clips"].append(
+            {
+                "name": name,
+                "frame_ms": _clip_frame_ms(rows),
+                "duration_ms": int(rows[-1]["time_ms"]),
+                "loop": False,
+                "frames": frames,
+            }
+        )
+    s = json.dumps(out, indent=2) + "\n"
+    if write:
+        base = out_dir or os.path.join(_animation_dir(), "exported_clips")
+        os.makedirs(base, exist_ok=True)
+        with open(os.path.join(base, "clips_extra.json"), "w") as fh:
+            fh.write(s)
+    return s
 
 
 # ---------------------------------------------------------------------------
@@ -1976,7 +2620,7 @@ function playFrame() {{
 
 def _bake_and_write(clip, context, convention):
     """Bake one clip (Layer 1) then run the scene's enabled converters
-    (Layer 2) into animation/exported_gaits/<clip>/. Returns
+    (Layer 2) into animation/exported_clips/<clip>/. Returns
     (written, n_frames, max_simultaneous, warning_count). Raises
     ValueError if the clip can't be baked or yields no frames. Shared by
     Export Active Clip and Export Selected so both stay byte-identical."""
@@ -2015,14 +2659,97 @@ def _bake_and_write(clip, context, convention):
             convention,
             loop=scene.fh_export_js_loop,
             dry_run=scene.fh_export_js_dryrun,
+            esp_ip=scene.fh_esp_ip,
         )
         written.append("js-dry" if scene.fh_export_js_dryrun else "js")
     return written, len(rows), max_seen, warning_count
 
 
+def _regenerate_clips_all(context, convention, names=None):
+    """(Re)write the bundled firmware header clips_all.h + clips_manifest.json.
+
+    `names` is the set of clips to bundle; None means every clip. clips_all.h is
+    the firmware's source of truth, and the ticked export selection is what ends
+    up on the robot, so the export operators pass that selection here. Clips are
+    always emitted in list_clips() order (filtered to `names`) so clip ids stay
+    stable regardless of selection order. Bakes each clip and calls
+    to_clips_header — the same path export_all_clips.py uses. A clip that fails
+    to bake is skipped so the bundle still regenerates from the rest. Returns
+    (bundled_names, skipped_msg).
+    """
+    wanted = set(names) if names is not None else None
+    baked = {}
+    skipped = []
+    for clip in list_clips():
+        if wanted is not None and clip not in wanted:
+            continue
+        try:
+            rows = bake_clip(clip, context)
+        except ValueError as e:
+            skipped.append(f"{clip} ({e})")
+            continue
+        if rows:
+            baked[clip] = rows
+    if not baked:
+        raise ValueError("no clips could be baked for clips_all.h")
+    to_clips_header(baked, convention, write=True)
+    return list(baked.keys()), ("; ".join(skipped) if skipped else None)
+
+
+def _regenerate_clips_extra(context, convention, names=None):
+    """(Re)write clips_extra.json (the app's streamable bundle). Defaults to ALL
+    clips (names=None): clips_all.h carries only the ticked firmware subset, but
+    the app bundle deliberately includes every clip so an animation is playable
+    in the app the moment it's exported — no flash needed. Skips clips that fail
+    to bake. Returns (bundled_names, skipped_msg)."""
+    wanted = set(names) if names is not None else None
+    baked = {}
+    skipped = []
+    for clip in list_clips():
+        if wanted is not None and clip not in wanted:
+            continue
+        try:
+            rows = bake_clip(clip, context)
+        except ValueError as e:
+            skipped.append(f"{clip} ({e})")
+            continue
+        if rows:
+            baked[clip] = rows
+    if not baked:
+        raise ValueError("no clips could be baked for clips_extra.json")
+    to_clips_extra_json(baked, convention, write=True)
+    return list(baked.keys()), ("; ".join(skipped) if skipped else None)
+
+
+def _app_bundle_step(operator, scene, context, convention):
+    """Regenerate clips_extra.json (ALL clips) and optionally copy it into the
+    app, reporting warnings via `operator`. Returns a note string for the export
+    summary ("" when the app bundle is disabled). Never raises — a failed app
+    bundle must not fail the rest of the export."""
+    if not scene.fh_export_app_bundle:
+        return ""
+    note = ""
+    try:
+        xnames, xskipped = _regenerate_clips_extra(context, convention)
+        note = f" + clips_extra.json ({len(xnames)} clips)"
+        print(f"Regenerated clips_extra.json from {len(xnames)} clip(s)")
+        if xskipped:
+            operator.report({"WARNING"}, f"clips_extra.json skipped: {xskipped}")
+        if scene.fh_copy_extra_to_app:
+            try:
+                dest = _copy_extra_to_app()
+                note += " (copied to app)"
+                print(f"Copied clips_extra.json to app: {dest}")
+            except ValueError as e:
+                operator.report({"WARNING"}, f"clips_extra.json NOT copied to app: {e}")
+    except ValueError as e:
+        operator.report({"WARNING"}, f"clips_extra.json NOT regenerated: {e}")
+    return note
+
+
 class FH_OT_export_clip(bpy.types.Operator):
     """Bake the active clip once, then write the enabled outputs to
-    animation/exported_gaits/<clip>/ (.csv / .h / .js)."""
+    animation/exported_clips/<clip>/ (.csv / .h / .js)."""
 
     bl_idname = "fh.export_clip"
     bl_label = "Export Active Clip"
@@ -2038,13 +2765,18 @@ class FH_OT_export_clip(bpy.types.Operator):
         if not bpy.data.filepath:
             self.report({"ERROR"}, "Save the .blend file before exporting")
             return {"CANCELLED"}
-        if not (scene.fh_export_csv or scene.fh_export_header or scene.fh_export_js):
+        if not (
+            scene.fh_export_csv
+            or scene.fh_export_header
+            or scene.fh_export_js
+            or scene.fh_export_app_bundle
+        ):
             self.report({"WARNING"}, "No export formats enabled")
             return {"CANCELLED"}
 
         # convention only needed by the .h / .js converters
         convention = None
-        if scene.fh_export_header or scene.fh_export_js:
+        if scene.fh_export_header or scene.fh_export_js or scene.fh_export_app_bundle:
             try:
                 convention = _load_convention()
             except ValueError as e:
@@ -2059,20 +2791,56 @@ class FH_OT_export_clip(bpy.types.Operator):
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
 
-        rel = os.path.join("animation", "exported_gaits", clip)
+        rel = os.path.join("animation", "exported_clips", clip)
         print(
             f"Exported '{clip}' ({nframes} frames, {', '.join(written)}) "
             f"→ {rel}/  [max simultaneous servos: {max_seen}, "
             f"warnings: {warning_count}]"
         )
-        self.report({"INFO"}, f"Exported to {rel}/ ({', '.join(written)})")
+
+        # clips_all.h is the firmware set = the ticked export selection (the same
+        # set Export Selected bundles). Regenerate from it so an active-clip
+        # export keeps the bundle in sync without silently pulling in unticked
+        # WIP clips. With nothing ticked, leave the bundle alone rather than
+        # wiping it.
+        bundle_note = ""
+        if scene.fh_export_header:
+            chosen = _export_selected_set()
+            if not chosen:
+                self.report(
+                    {"WARNING"},
+                    "clips_all.h NOT regenerated: no clips ticked for the firmware bundle",
+                )
+            else:
+                try:
+                    names, skipped = _regenerate_clips_all(context, convention, chosen)
+                    bundle_note = f" + clips_all.h ({len(names)} clips)"
+                    print(f"Regenerated clips_all.h from {len(names)} ticked clip(s)")
+                    if skipped:
+                        self.report({"WARNING"}, f"clips_all.h skipped: {skipped}")
+                    if scene.fh_copy_to_firmware:
+                        try:
+                            dest = _copy_bundle_to_firmware()
+                            bundle_note += " (copied to firmware)"
+                            self.report({"INFO"}, f"clips_all.h copied to {dest}")
+                            print(f"Copied clips_all.h to firmware: {dest}")
+                        except ValueError as e:
+                            self.report(
+                                {"WARNING"}, f"clips_all.h NOT copied to firmware: {e}"
+                            )
+                except ValueError as e:
+                    self.report({"WARNING"}, f"clips_all.h NOT regenerated: {e}")
+
+        bundle_note += _app_bundle_step(self, scene, context, convention)
+
+        self.report({"INFO"}, f"Exported to {rel}/ ({', '.join(written)}){bundle_note}")
         return {"FINISHED"}
 
 
 class FH_OT_export_selected(bpy.types.Operator):
     """Bake + export every clip ticked via the per-row checkbox in the
     Clips sub-panel (fh_export_selected_clips), each into its own
-    animation/exported_gaits/<clip>/ with the enabled formats. A clip
+    animation/exported_clips/<clip>/ with the enabled formats. A clip
     that fails to bake is skipped and reported; the rest still export."""
 
     bl_idname = "fh.export_selected"
@@ -2091,12 +2859,17 @@ class FH_OT_export_selected(bpy.types.Operator):
         if not chosen:
             self.report({"ERROR"}, "No clips ticked — select clips to export")
             return {"CANCELLED"}
-        if not (scene.fh_export_csv or scene.fh_export_header or scene.fh_export_js):
+        if not (
+            scene.fh_export_csv
+            or scene.fh_export_header
+            or scene.fh_export_js
+            or scene.fh_export_app_bundle
+        ):
             self.report({"ERROR"}, "No export formats enabled")
             return {"CANCELLED"}
 
         convention = None
-        if scene.fh_export_header or scene.fh_export_js:
+        if scene.fh_export_header or scene.fh_export_js or scene.fh_export_app_bundle:
             try:
                 convention = _load_convention()
             except ValueError as e:
@@ -2121,18 +2894,101 @@ class FH_OT_export_selected(bpy.types.Operator):
         if not ok:
             self.report({"ERROR"}, f"Exported nothing — {'; '.join(failed)}")
             return {"CANCELLED"}
+
+        # The firmware bundle clips_all.h is exactly the ticked selection, so the
+        # robot gets the curated set. Regenerate it from `chosen` (not every
+        # clip), which replaces the previous bundle.
+        bundle_note = ""
+        if scene.fh_export_header:
+            try:
+                names, skipped = _regenerate_clips_all(context, convention, chosen)
+                bundle_note = f" + clips_all.h ({len(names)} clips)"
+                print(f"Regenerated clips_all.h from {len(names)} ticked clip(s)")
+                if skipped:
+                    self.report({"WARNING"}, f"clips_all.h skipped: {skipped}")
+                if scene.fh_copy_to_firmware:
+                    try:
+                        dest = _copy_bundle_to_firmware()
+                        bundle_note += " (copied to firmware)"
+                        self.report({"INFO"}, f"clips_all.h copied to {dest}")
+                        print(f"Copied clips_all.h to firmware: {dest}")
+                    except ValueError as e:
+                        self.report(
+                            {"WARNING"}, f"clips_all.h NOT copied to firmware: {e}"
+                        )
+            except ValueError as e:
+                self.report({"WARNING"}, f"clips_all.h NOT regenerated: {e}")
+
+        bundle_note += _app_bundle_step(self, scene, context, convention)
+
         if failed:
             self.report(
                 {"WARNING"},
-                f"Exported {len(ok)}/{len(chosen)} ({', '.join(ok)}) → "
-                f"animation/exported_gaits/ | failed: {'; '.join(failed)}",
+                f"Exported {len(ok)}/{len(chosen)} ({', '.join(ok)}){bundle_note} → "
+                f"animation/exported_clips/ | failed: {'; '.join(failed)}",
             )
         else:
             self.report(
                 {"INFO"},
-                f"Exported {len(ok)} clip(s) ({', '.join(ok)}) → "
-                "animation/exported_gaits/",
+                f"Exported {len(ok)} clip(s) ({', '.join(ok)}){bundle_note} → "
+                "animation/exported_clips/",
             )
+        return {"FINISHED"}
+
+
+class FH_OT_open_export_dir(bpy.types.Operator):
+    """Open animation/exported_clips/ in the OS file browser."""
+
+    bl_idname = "fh.open_export_dir"
+    bl_label = "Open Exports Folder"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        path = _exported_clips_root()
+        if not os.path.isdir(path):
+            self.report({"WARNING"}, f"Folder does not exist yet: {path}")
+            return {"CANCELLED"}
+        bpy.ops.wm.path_open(filepath=path)
+        return {"FINISHED"}
+
+
+class FH_OT_open_firmware_dir(bpy.types.Operator):
+    """Open the firmware clips folder (code/firmware/src/nervous_system/) in
+    the OS file browser, where the copied clips_all.h lands."""
+
+    bl_idname = "fh.open_firmware_dir"
+    bl_label = "Open Firmware Folder"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        path = _firmware_clips_dir()
+        if not os.path.isdir(path):
+            self.report(
+                {"WARNING"}, f"Firmware dir not found ({path}); not in a repo checkout?"
+            )
+            return {"CANCELLED"}
+        bpy.ops.wm.path_open(filepath=path)
+        return {"FINISHED"}
+
+
+class FH_OT_open_app_dir(bpy.types.Operator):
+    """Open the remote-control app's assets folder
+    (code/remote-control-app/MyApp/assets/) in the OS file browser, where the
+    copied clips_extra.json lands."""
+
+    bl_idname = "fh.open_app_dir"
+    bl_label = "Open App Folder"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        path = _app_clips_dir()
+        if not os.path.isdir(path):
+            self.report(
+                {"WARNING"},
+                f"App assets dir not found ({path}); not in a repo checkout?",
+            )
+            return {"CANCELLED"}
+        bpy.ops.wm.path_open(filepath=path)
         return {"FINISHED"}
 
 
@@ -2275,6 +3131,49 @@ class FH_PT_clips(_FH_PT_child, bpy.types.Panel):
         row.operator(FH_OT_duplicate_clip.bl_idname, icon="DUPLICATE")
         row.operator(FH_OT_rename_clip.bl_idname, icon="FONT_DATA")
 
+        # Toggle the active clip's keyframe interpolation between BEZIER
+        # (authoring) and LINEAR (what the robot plays). Non-destructive:
+        # Bezier handles are preserved so toggling back restores the curves.
+        # The button reflects the active clip's CURRENT mode (read live from
+        # the f-curves) so you can always see which one you're in: depressed
+        # + "LINEAR" when previewing robot motion, raised + "BEZIER" when
+        # authoring.
+        layout.separator()
+        mode = _clip_interpolation_mode(active)
+        is_linear = mode == "LINEAR"
+        if mode is None:
+            label, icon = "Preview Robot Motion", "PREVIEW_RANGE"
+        elif is_linear:
+            label, icon = "Preview Robot Motion: LINEAR", "IPO_LINEAR"
+        else:
+            label, icon = "Preview Robot Motion: BEZIER", "IPO_BEZIER"
+        preview_row = layout.row()
+        preview_row.enabled = bool(active)
+        preview_row.operator(
+            FH_OT_toggle_preview.bl_idname, text=label, icon=icon, depress=is_linear
+        )
+
+        # Frame range of the active clip. Drives the scene timeline: switching
+        # clips and edits here sync scene.frame_start/end (via apply-clip,
+        # the msgbus live-sync, and the Apply to Scene button).
+        action = clip_action(active, "body_ctrl") if active else None
+        if action is not None:
+            layout.separator()
+            box = layout.column(align=True)
+            box.label(text="Frame Range", icon="TIME")
+            box.prop(action, "use_frame_range", text="Custom range")
+            if action.use_frame_range:
+                rng = box.row(align=True)
+                rng.prop(action, "frame_start", text="Start")
+                rng.prop(action, "frame_end", text="End")
+            else:
+                # Clip-wide span (union of all actions), not body_ctrl alone —
+                # body_ctrl can be single-keyed while the feet carry the motion.
+                span = _clip_frame_span(active)
+                if span is not None:
+                    box.label(text=f"Keyframes: {span[0]}–{span[1]}")
+            box.operator(FH_OT_sync_frame_range.bl_idname, icon="PREVIEW_RANGE")
+
 
 class FH_PT_selection(_FH_PT_child, bpy.types.Panel):
     bl_idname = "VIEW3D_PT_fh_selection"
@@ -2320,14 +3219,38 @@ class FH_PT_export(_FH_PT_child, bpy.types.Panel):
         col = layout.column(align=True)
         col.prop(context.scene, "fh_export_csv", text="CSV (raw angles)")
         col.prop(context.scene, "fh_export_header", text="C header (.h)")
+        if context.scene.fh_export_header:
+            sub = col.column(align=True)
+            crow = sub.row(align=True)
+            crow.separator()
+            crow.prop(
+                context.scene,
+                "fh_copy_to_firmware",
+                text="Copy clips_all.h to firmware",
+            )
         col.prop(context.scene, "fh_export_js", text="Browser JS (.js)")
         if context.scene.fh_export_js:
             sub = col.column(align=True)
             sub.active = True
+            iprow = sub.row(align=True)
+            iprow.separator()
+            iprow.prop(context.scene, "fh_esp_ip", text="ESP IP")
             jsrow = sub.row(align=True)
             jsrow.separator()
             jsrow.prop(context.scene, "fh_export_js_dryrun", text="Dry run")
             jsrow.prop(context.scene, "fh_export_js_loop", text="Loop")
+        col.prop(
+            context.scene, "fh_export_app_bundle", text="App clips (clips_extra.json)"
+        )
+        if context.scene.fh_export_app_bundle:
+            sub = col.column(align=True)
+            arow = sub.row(align=True)
+            arow.separator()
+            arow.prop(
+                context.scene,
+                "fh_copy_extra_to_app",
+                text="Copy clips_extra.json to app",
+            )
 
         row = layout.row()
         row.enabled = bool(active)
@@ -2348,6 +3271,17 @@ class FH_PT_export(_FH_PT_child, bpy.types.Panel):
                 icon="EXPORT",
             )
 
+        # Jump to the relevant folders in the OS file browser.
+        layout.separator()
+        frow = layout.row(align=True)
+        frow.operator(
+            FH_OT_open_export_dir.bl_idname, text="Exports", icon="FILE_FOLDER"
+        )
+        frow.operator(
+            FH_OT_open_firmware_dir.bl_idname, text="Firmware", icon="FILE_FOLDER"
+        )
+        frow.operator(FH_OT_open_app_dir.bl_idname, text="App", icon="FILE_FOLDER")
+
 
 class FH_PT_display(_FH_PT_child, bpy.types.Panel):
     bl_idname = "VIEW3D_PT_fh_display"
@@ -2364,6 +3298,55 @@ class FH_PT_display(_FH_PT_child, bpy.types.Panel):
             toggle=True,
             icon="COLORSET_01_VEC",
         )
+
+
+# Per-joint safe servo range (= clampClipServos in the firmware / sim). A value
+# at or beyond these bounds is flagged red in the Servo Angles panel: it means
+# the joint is being driven into its mechanical stop.
+_SERVO_SAFE_RANGE = {
+    "shoulder": (38, 142),
+    "thigh": (30, 150),
+    "knee": (0, 180),
+}
+
+
+class FH_PT_servos(_FH_PT_child, bpy.types.Panel):
+    """Live read-out of the 12 servo angles for the current rig pose — the
+    exact degrees that would be exported / flashed. Updates as the animation
+    plays so you can see, frame by frame, what each leg's servos are commanded.
+    A value at/beyond its safe range is shown red (driven into the stop)."""
+
+    bl_idname = "VIEW3D_PT_fh_servos"
+    bl_label = "Servo Angles"
+    bl_order = 5
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
+        servos = _current_servo_angles(context)
+        if servos is None:
+            layout.label(text="(rig or convention.json unavailable)", icon="INFO")
+            return
+
+        layout.label(
+            text=f"Frame {context.scene.frame_current} — exported servo degrees"
+        )
+        # header
+        hdr = layout.row(align=True)
+        hdr.label(text="Leg")
+        for t in ("Shldr", "Thigh", "Knee"):
+            hdr.label(text=t)
+
+        joints = ("shoulder", "thigh", "knee")
+        col = layout.column(align=True)
+        for leg in ("fr", "fl", "br", "bl"):
+            row = col.row(align=True)
+            row.label(text=leg.upper())
+            for j, v in zip(joints, servos[leg]):
+                lo, hi = _SERVO_SAFE_RANGE[j]
+                cell = row.row(align=True)
+                cell.alert = v <= lo or v >= hi  # red when at/over the stop
+                cell.label(text=f"{v}°")
 
 
 # ---------------------------------------------------------------------------
@@ -2388,6 +3371,11 @@ CLASSES = (
     FH_OT_rename_clip,
     FH_OT_export_clip,
     FH_OT_export_selected,
+    FH_OT_open_export_dir,
+    FH_OT_open_firmware_dir,
+    FH_OT_open_app_dir,
+    FH_OT_toggle_preview,
+    FH_OT_sync_frame_range,
     # Panels: parent MUST be registered before its children so the
     # bl_parent_id link resolves.
     FH_PT_root,
@@ -2396,6 +3384,7 @@ CLASSES = (
     FH_PT_selection,
     FH_PT_export,
     FH_PT_display,
+    FH_PT_servos,
 )
 
 
@@ -2443,6 +3432,16 @@ def register():
         description="Write the static C array (.h) of raw bone angles",
         default=True,
     )
+    bpy.types.Scene.fh_copy_to_firmware = bpy.props.BoolProperty(
+        name="Copy clips_all.h to firmware",
+        description=(
+            "After writing the bundle, copy clips_all.h straight into "
+            "code/firmware/src/nervous_system/ so the firmware picks it up "
+            "without a manual copy. Assumes the add-on runs from a repo "
+            "checkout; warns (does not fail) if the firmware dir is absent"
+        ),
+        default=True,
+    )
     bpy.types.Scene.fh_export_js = bpy.props.BoolProperty(
         name="Export Browser JS",
         description=(
@@ -2467,6 +3466,36 @@ def register():
             "instead of opening a WebSocket — validate a clip without a robot"
         ),
         default=False,
+    )
+    bpy.types.Scene.fh_esp_ip = bpy.props.StringProperty(
+        name="ESP IP",
+        description=(
+            "Robot board IP baked into the exported .js WebSocket URL "
+            "(ws://<ip>:81). Change it when the board's address changes "
+            "(AP-mode default 192.168.4.1, or a DHCP lease). Blank falls back "
+            "to 192.168.4.1; port 81 is fixed (see code/API_SPEC.md)"
+        ),
+        default="192.168.4.1",
+    )
+    bpy.types.Scene.fh_export_app_bundle = bpy.props.BoolProperty(
+        name="Export App Clip Bundle",
+        description=(
+            "Write clips_extra.json — final servo-degree frames for EVERY clip "
+            "so the remote-control app can stream them (T:4) without flashing. "
+            "Independent of the firmware bundle / ticked selection: clips_all.h "
+            "stays the curated on-robot set, the app bundle is everything"
+        ),
+        default=True,
+    )
+    bpy.types.Scene.fh_copy_extra_to_app = bpy.props.BoolProperty(
+        name="Copy clips_extra.json to app",
+        description=(
+            "After writing it, copy clips_extra.json into the app's assets "
+            "(code/remote-control-app/MyApp/assets/) so the app bundles it on "
+            "the next build. Assumes a repo checkout; warns (does not fail) if "
+            "the app dir is absent"
+        ),
+        default=True,
     )
     bpy.types.Scene.fh_export_selected_clips = bpy.props.StringProperty(
         name="Selected clips for export",
@@ -2507,8 +3536,13 @@ def register():
     if _on_load_post not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(_on_load_post)
 
+    # Live-sync the scene range when the active clip's Action range props are
+    # edited in the panel (built-in props can't carry an update= callback).
+    _subscribe_frame_range_msgbus()
+
 
 def unregister():
+    _unsubscribe_frame_range_msgbus()
     # Clean up heatmap state before class removal.
     handlers = bpy.app.handlers.frame_change_post
     if _heatmap_handler in handlers:
@@ -2532,9 +3566,13 @@ def unregister():
         "fh_max_simultaneous_servos",
         "fh_export_csv",
         "fh_export_header",
+        "fh_copy_to_firmware",
         "fh_export_js",
         "fh_export_js_loop",
         "fh_export_js_dryrun",
+        "fh_esp_ip",
+        "fh_export_app_bundle",
+        "fh_copy_extra_to_app",
         "fh_export_selected_clips",
         "fh_heatmap_active",
     ):

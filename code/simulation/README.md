@@ -14,10 +14,18 @@ fusion_export.json    (CAD tree + mesh_files manifest)
 fusion_export.txt     (human-readable tree)
 exported_meshes/*.stl (8 files: chassis + per-side L/R brackets + per-side L/R shoulder + shared upper/lower + servo)
    │
-   └── generate_urdf.py ──► facehugger.urdf ──┬─► simulate.py  (PyBullet)
-                                              │
-                                              └─► visualize_urdf.py  (Blender 5.x)
+   └── urdf_gen/generate_urdf.py ──► facehugger.urdf ──┬─► pybullet_sim/  (PyBullet sim + clip interpreter)
+                                                       │
+                                                       └─► visualize_urdf.py  (Blender 5.x)
 ```
+
+The code is split into packages: **`pybullet_sim/`** (the runtime — `simulate`,
+`gaits`, `kinematics`, `helpers`, `constants`, `sim_monitor`), **`firmware_port/`**
+(the firmware-faithful clip re-port — `servo_convention`, `clip_loader`,
+`clip_player`; the Python fallback / parity reference), and **`urdf_gen/`**
+(`generate_urdf`, `verify_export_parity`). `facehugger.py` + `facehugger_config.yaml`
++ `generated/` stay at the top. Run modules with `python -m pybullet_sim.simulate`
+from `code/simulation/`, not by path.
 
 ## Prerequisites
 
@@ -39,21 +47,22 @@ Re-runs preserve user edits to `mesh_files._servo_role_assignment` in the JSON.
 
 ## Driving the pipeline — `facehugger.py`
 
-[facehugger.py](facehugger.py) is the single CLI entry point. Each subcommand wraps one of the underlying scripts:
+[../facehugger.py](../facehugger.py) is the single CLI entry point. It lives at `code/facehugger.py` and resolves its own paths, so run it from the repo root (it shells into this `code/simulation/` package for you). Each subcommand wraps one of the underlying scripts:
 
 ```bash
-cd code/simulation
-
-python facehugger.py urdf                 # regenerate generated/facehugger.urdf
-python facehugger.py sim                  # GUI, standing pose
-python facehugger.py sim --walk           # walk gait
-python facehugger.py sim --trot           # trot gait
-python facehugger.py sim --headless       # no GUI — CI smoke-check
-python facehugger.py blender                          # URDF in Blender, placement-only
-python facehugger.py blender --rigged                 # animator-facing rig (armature + IK)
-python facehugger.py blender --blender-version 5.2    # specific Blender version
-python facehugger.py blender --headless --save /tmp/scene.blend
-python facehugger.py all                  # urdf → sim
+python code/facehugger.py urdf                 # regenerate generated/facehugger.urdf
+python code/facehugger.py sim                  # GUI, standing pose
+python code/facehugger.py sim --walk           # walk gait (EXACT firmware tickGait, via the SIL)
+python code/facehugger.py sim --trot           # trot gait (EXACT firmware tickTrot, via the SIL)
+python code/facehugger.py sim --trot --python  # the Python IK gait instead (no C++ toolchain)
+python code/facehugger.py sim --headless       # no GUI — CI smoke-check
+python code/facehugger.py sim --clip "wave" --headless   # play a baked clip via the interpreter
+python code/facehugger.py blender                          # URDF in Blender, placement-only
+python code/facehugger.py blender --rigged                 # animator-facing rig (armature + IK)
+python code/facehugger.py blender --blender-version 5.2    # specific Blender version
+python code/facehugger.py blender --headless --save /tmp/scene.blend
+python code/facehugger.py sim --app            # sim + WebSocket API + Expo web app
+python code/facehugger.py flash                # build + upload the firmware
 ```
 
 ### `blender` subcommand
@@ -62,8 +71,8 @@ Loads `generated/facehugger.urdf` into Blender. Requires **Blender 5.0+**. Two m
 
 | Mode | Wrapped script | What you get | When to use |
 |---|---|---|---|
-| **placement-only** (default) | [animation/pipeline/visualize_urdf.py](../../animation/pipeline/visualize_urdf.py) | Walks the joint chain at rest pose (the same math PyBullet uses on `loadURDF`) and places each of the 29 STL visuals at `link_world @ visual_origin`. No armature, no Empties, no parenting. | Cross-check: does the URDF chain reproduce PyBullet's `loadURDF` rest pose? Spot bad joint origins / axes visually. |
-| **rigged** (`--rigged`) | [animation/pipeline/urdf_to_blender_rigged.py](../../animation/pipeline/urdf_to_blender_rigged.py) | Real Armature: 13 bones, FK shoulder + IK on hip+knee, foot-target Empties parented to each `link1`. URDF `<limit>` clamps applied per bone. Matches the placement-only baseline within 0.5 mm at zero pose. | Animator workflow — pose the rig in pose mode, drag foot targets, bake clips. |
+| **placement-only** (default) | [animation/scripts/visualize_urdf.py](../../animation/scripts/visualize_urdf.py) | Walks the joint chain at rest pose (the same math PyBullet uses on `loadURDF`) and places each of the 29 STL visuals at `link_world @ visual_origin`. No armature, no Empties, no parenting. | Cross-check: does the URDF chain reproduce PyBullet's `loadURDF` rest pose? Spot bad joint origins / axes visually. |
+| **rigged** (`--rigged`) | [animation/scripts/urdf_to_blender_rigged.py](../../animation/scripts/urdf_to_blender_rigged.py) | Real Armature: 13 bones, FK shoulder + IK on hip+knee, foot-target Empties parented to each `link1`. URDF `<limit>` clamps applied per bone. Matches the placement-only baseline within 0.5 mm at zero pose. | Animator workflow — pose the rig in pose mode, drag foot targets, bake clips. |
 
 | Flag | Default | What it does |
 |---|---|---|
@@ -97,7 +106,7 @@ Common pitfalls:
 
 - **"Could not locate Blender 5.1"** — your install path isn't in the `/Applications` candidates. Set `BLENDER_BIN` or pass `--blender-version` matching what you actually have installed.
 - **STL imports silently fail in `--background`** — make sure you're on Blender 5.0+. The placement-only script's `clear_scene` works around a `wm.read_factory_settings(use_empty=True)` quirk that bricked STL import on older versions.
-- **Rigged scene drifts from placement baseline** — at all-zero pose the two should match within 0.5 mm. If they don't, the rig is composing transforms wrong; open both `.blend` outputs and overlay. See [animation/pipeline/README.md](../../animation/pipeline/README.md) for the rig-build details.
+- **Rigged scene drifts from placement baseline** — at all-zero pose the two should match within 0.5 mm. If they don't, the rig is composing transforms wrong; open both `.blend` outputs and overlay. See [animation/scripts/README.md](../../animation/scripts/README.md) for the rig-build details.
 
 The `sim` simulator reads geometry from the URDF + `facehugger_config.yaml`; no hardcoded leg lengths or stances in Python.
 
@@ -131,28 +140,27 @@ Angles are in degrees in the yaml; `generate_urdf.py` converts to the URDF's rad
 
 ```
 code/simulation/
-  facehugger.py                 CLI entry point — wraps the scripts below
+  facehugger.py                 CLI entry point — runs the packages below via `python -m`
   facehugger_config.yaml        semantic config (hand-edited)
   README.md                     this file
-  urdf_pipeline/
-    generate_urdf.py            URDF generator
-  sim/
-    simulate.py                 PyBullet simulator
-    kinematics.py               FK/IK + RobotConfig
-    gaits.py                    gait registry + foot trajectories
-    helpers.py                  shared utilities
-    constants.py                shared path + physics constants
   docs/                         pipeline docs (PIPELINE_SPEC, ASSEMBLY_HIERARCHY, …)
+  pybullet_sim/                 runtime package
+    simulate.py                 PyBullet simulator front-end (constants/helpers/kinematics/gaits)
+    gaits.py kinematics.py helpers.py constants.py sim_monitor.py
+  firmware_port/                firmware-faithful clip re-port (Python fallback / parity ref)
+    servo_convention.py clip_loader.py clip_player.py gait_interpreter.py (+ tests/)
+  urdf_gen/                     build package
+    generate_urdf.py            URDF generator
+    verify_export_parity.py     sim↔firmware export parity check
   generated/                    artifacts produced by the Fusion add-in / generator
     fusion_export.json          CAD tree (do not edit)
     fusion_export.txt           human-readable tree
     exported_meshes/*.stl       generated STLs (do not edit)
     facehugger.urdf             generated URDF (do not edit)
 
-../../animation/pipeline/
+../../animation/scripts/
   visualize_urdf.py             Blender 5.x scene builder (URDF → placement + joint markers)
   visualize_fusion_export.py    Blender 5.x scene builder (fusion_export.json → meshes + landmarks)
-  urdf_to_blender_rigged.py     Blender 5.x scene builder (URDF → armature + IK rig)
 ```
 
 ## Design notes

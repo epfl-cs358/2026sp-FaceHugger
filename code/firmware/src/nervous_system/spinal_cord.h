@@ -6,6 +6,7 @@
 #include <cstdint>
 #include "leg.h"
 #include "movements.h"
+#include "motion_math.h"
 #include "face.h"
 #include "../shared/data.h"
 
@@ -16,6 +17,7 @@ class SpinalCord{
         void walk();
         void rest();
         void relax();
+        void stand();
         void wallFlip();
         void update();
         void invertRobot();
@@ -23,7 +25,9 @@ class SpinalCord{
         void setGait(GaitType g);
         GaitType currentGait() const;
         void processCommand(String dir);
-
+        void playClip(uint8_t id, bool loop = false);
+        void setClipSmoothing(float alpha);   // T:11 runtime smoothing knob
+        void setInverted(bool flag);
         Face& getFace() { return face; }
 
         // POD bundle of read-only state for the diagnostics CSV logger.
@@ -52,6 +56,16 @@ class SpinalCord{
         GaitType currentGait_;
         uint32_t gaitPhaseStartMs_;
 
+        ClipState clipState_;   // pure lifecycle state (see motion_math.h)
+        float clipSmoothed_[LEG_COUNT][3];  // per-channel EMA state for clip playback;
+                                            // seeded from frame 0 on playClip()
+        uint32_t clipPrerollUntilMs_ = 0;   // playClip eases the live pose into frame 0
+                                            // until this time; real playback starts after
+        bool clipLoop_ = false;             // when set, the clip replays from frame 0 at
+                                            // its end instead of easing back to neutral
+        float clipEmaAlpha_ = 0.75f;        // clip-playback EMA smoothing; boot default,
+                                            // runtime-tunable via setClipSmoothing (T:11)
+
         // Vector timing and state
         float targetX;
         float targetY;
@@ -62,10 +76,30 @@ class SpinalCord{
         bool isMovingRequested;
         bool isInverted;
         uint32_t lastCommandMs;
+        uint32_t lastInvertMs_;   // timestamp of the last accepted T:6 toggle (debounce)
+        bool     hasInverted_;    // false until the first invert, so it is never debounced away
 
         void tickGait();
         void tickTrot();
         void tickYawRotation();
+        void tickClip();
+
+        // Invert-aware "hold neutral" helpers. Unlike Leg::returnToDefaultAngles*
+        // (which write the UPRIGHT defaults raw and bypass the pitch mirror), these
+        // route through the mirror so an inverted robot holds the inverted neutral.
+        void goToNeutral();              // instant
+        void easeToNeutral(uint32_t ms); // non-blocking ease (clip return)
+
+        // Mirror the pose the robot is CURRENTLY holding, in place and eased
+        // (180 - angle on thigh/knee, shoulder unchanged). Called on an invert
+        // toggle so the flip applies to the live pose instead of snapping to
+        // neutral or waiting for the next motion tick.
+        void flipPoseInPlace(uint32_t ms);
+
+        // Single invert choke point: writes a leg's servo triple, mirroring the
+        // pitch joints (thigh, knee) about 90 when isInverted. Every motion source
+        // (gaits, clips, stand) routes through this so invert is applied uniformly.
+        void applyServos(Leg* leg, ServoTriple s);
 };
 
 #endif
