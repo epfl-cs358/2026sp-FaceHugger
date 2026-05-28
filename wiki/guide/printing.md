@@ -117,6 +117,13 @@ Do not forget to add supports on every surface facing the printing board, includ
 
 ![The shell in Prusa-slicer](../assets/img/printing/ShellPrint.jpg)
 
+``LipoCage.stl` :
+
+Print with supports in the empty side slots. Do not forget the supports for the arms and hooks.
+
+![The lipo cage in Prusa-slicer](../assets/img/printing/LipoCagePrint.png)
+
+
 ## Leg parts
 
 The leg `.3mf` files are pre-plated with the correct orientation already set, so open them in PrusaSlicer directly without adjusting anything.
