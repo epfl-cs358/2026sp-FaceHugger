@@ -221,7 +221,12 @@ EXPORT_RULES = [
                 "body": "BehindBridge",
             },
             {"occurrence": "FlexibleSkeleton:1/LipoCage:1", "body": "LipoCage"},
-            {"occurrence": "FlexibleSkeleton:1/Shell:1", "body": "Shell"},
+            # Shell is an xref'd component; its bRepBody name comes through as
+            # the underlying auto-name (e.g. "Body26"), not the display "Shell"
+            # shown in the Browser. Use "*" to grab the (single) body regardless
+            # of name. If the xref ever grows multiple bodies, this picks the
+            # first one — switch back to an explicit name then.
+            {"occurrence": "FlexibleSkeleton:1/Shell:1", "body": "*"},
         ],
     },
     # Brackets. Combined-rule (single part each) so the output is in
