@@ -3022,11 +3022,17 @@ class FH_OT_reload_panel(bpy.types.Operator):
 
     bl_idname = "fh.reload_panel"
     bl_label = "Reload Add-on"
-    bl_options = {"REGISTER"}
+    bl_description = "Re-read fh_clip_panel.py from disk and re-register (use after editing the add-on source)"
 
     def execute(self, context):
         mod = sys.modules.get("fh_clip_panel")
-        if mod is not None:
+        if mod is None:
+            # No prior import in sys.modules — nothing to reload. Surfaces
+            # if the button is clicked before the start-up script has run,
+            # which shouldn't happen in normal use.
+            self.report({"WARNING"}, "fh_clip_panel not loaded; nothing to reload")
+            return {"CANCELLED"}
+        try:
             try:
                 mod.unregister()
             except Exception:
@@ -3036,6 +3042,12 @@ class FH_OT_reload_panel(bpy.types.Operator):
                 pass
             mod = importlib.reload(mod)
             mod.register()
+        except Exception as e:
+            # The whole point of this button is rapid iteration on possibly-
+            # broken source; surface the actual exception in the info bar
+            # instead of letting Blender swallow it into "script failed".
+            self.report({"ERROR"}, f"reload failed: {e}")
+            return {"CANCELLED"}
         self.report({"INFO"}, "FaceHugger add-on reloaded")
         return {"FINISHED"}
 
