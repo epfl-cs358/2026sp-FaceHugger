@@ -23,6 +23,15 @@ mesh_dir: exported_meshes/
 base_link:
   name: base_link
   mesh: QuadrupedBody.stl
+  # Mass not modelled in Fusion (treated as visuals there):
+  #   - electronics 0.239 kg (ESP32, PCA9685, I2C mux, IMU, ToF×5, OLED,
+  #     LiPo 2S 1000mAh, buck, BMS, XT60×4, switch, wiring)
+  #   - 4 shoulder servos × 0.060 kg = 0.240 kg (placed symmetrically at the
+  #     4 leg corners, COM ≈ chassis centroid → no COM shift needed)
+  # Total +0.479 kg on top of the Fusion base_link mass. The 8 leg servos
+  # are NOT included here; Fusion may already account for them inside each
+  # leg's link masses — separate audit if it turns out it doesn't.
+  extra_mass_kg: 0.479
 
 # ---------------------------------------------------------------------------
 # Leg template: shared structure for all 4 legs.
@@ -93,8 +102,8 @@ legs:
 # visual.
 # ---------------------------------------------------------------------------
 servo:
-  mass_kg: 0.060        # DFRobot SER0038 spec
-  effort_nm: 2.94       # 30 kg·cm to N·m
+  mass_kg: 0.300        # QYRC DSS-230MG — heavy metal-gear servo; placeholder, not yet weighed
+  effort_nm: 2.94       # QYRC DSS-230MG — 30 kg·cm stall torque to N·m
   velocity_rad_s: 5.0
 
   # Uniform mesh-local rotation applied to every chassis-fixed shoulder

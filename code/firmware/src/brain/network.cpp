@@ -6,6 +6,8 @@
 #include "shared/config.h"
 #include "../nervous_system/spinal_cord.h"
 #include "../nervous_system/movements.h"
+#include "clip_list_serializer.h"
+#include "../nervous_system/clips_all.h"
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 extern SpinalCord spinalCord;
@@ -49,7 +51,7 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t leng
 
         case WStype_TEXT:
             Serial.printf("[%u] 📩 Received Text: %s\n", num, payload);
-            handleParsedMessage(payload);
+            handleParsedMessage(num, payload);
             break;
 
         case WStype_ERROR:
@@ -62,7 +64,7 @@ void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t leng
     }
 }
 
-void handleParsedMessage(uint8_t * payload) {
+void handleParsedMessage(uint8_t num, uint8_t * payload) {
     JsonDocument doc; // ArduinoJson 7 syntax
     DeserializationError error = deserializeJson(doc, payload);
 
@@ -77,29 +79,39 @@ void handleParsedMessage(uint8_t * payload) {
         case CMD_STATE:
             if(doc.containsKey("s")){
                 int newState = doc["s"];
-                if(newState >= STATE_IDLE && newState <= STATE_FAILSAFE){
+                if(isValidStateCommand(newState)){
                     switch(newState){
                         case STATE_IDLE: spinalCord.rest(); break;
                         case STATE_WALK: spinalCord.walk(); break;
                         case STATE_ACTION: spinalCord.wallFlip(); break;
-                        default: break;
+                        case STATE_REST: spinalCord.relax(); break;   // flat / all-90 calibration
+                        case STATE_STAND: spinalCord.stand(); break;  // standing / neutral
+                        default: break;                               // FAILSAFE: no-op (unchanged)
                     }
                 }
             }
             break;
-        case CMD_CALIBRATE: { 
+        case CMD_CALIBRATE: {
             if(doc.containsKey("id") && doc.containsKey("servo_id") && doc.containsKey("a")){
                 int id = doc["id"];
                 int servoId = doc["servo_id"];
                 int angle = doc["a"];
+                // Reject out-of-range indices before touching LEG_SERVO_CHANNEL[4][3] —
+                // a malformed packet (id:7, servo_id:9, negatives) would otherwise read OOB.
+                if (!isValidServoIndex(id, servoId)) {
+                    Serial.printf("[WARN] T:4 ignored: id=%d servo_id=%d out of range\n",
+                                  id, servoId);
+                    break;
+                }
                 //create a mapping between the channels and leg servo id
                 uint8_t channel = LEG_SERVO_CHANNEL[id][servoId];
                 spinalCord.applyCalibration(channel, angle);
                 Serial.printf("Calibrating servo %d to %d", channel, angle);
-                break;
             }
+            break;  // always break the case — a malformed calibrate is a no-op,
+                    // NOT a fall-through into CMD_MOVE (which would start walking).
         }
-        
+
         case CMD_MOVE: {
             // Extract the direction string
             String dir = doc["dir"] | "";
@@ -131,6 +143,40 @@ void handleParsedMessage(uint8_t * payload) {
                 if(a == INVERT_ROBOT){
                     spinalCord.invertRobot();
                 }
+            }
+            break;
+        }
+        case CMD_SET_INVERT: {
+            if (!doc["inverted"].is<bool>()) {
+                Serial.println("[WARN] T:9 ignored: 'inverted' key missing or not bool");
+                break;
+            }
+            spinalCord.setInverted(doc["inverted"].as<bool>());
+            break;
+        }
+        case CMD_PLAY_CLIP: {
+            if (doc["c"].is<int>()) {
+                int c = doc["c"];
+                // Optional "loop": true replays the clip until another motion
+                // command preempts it (default false = play once).
+                bool loop = doc["loop"].is<bool>() && doc["loop"].as<bool>();
+                if (c >= 0 && c < 256) {
+                    spinalCord.playClip((uint8_t)c, loop);
+                }
+            }
+            break;
+        }
+        case CMD_LIST_CLIPS: {
+            char buf[512];
+            buildClipListJson(FH_CLIPS, FH_CLIP_COUNT, buf, sizeof(buf));
+            webSocket.sendTXT(num, buf);
+            break;
+        }
+        case CMD_SET_SMOOTHING: {
+            // {T:11, a:<0..1>} — runtime clip-playback smoothing (EMA alpha).
+            // Higher = smoother but laggier; firmware clamps to a safe range.
+            if (doc["a"].is<float>()) {
+                spinalCord.setClipSmoothing(doc["a"].as<float>());
             }
             break;
         }

@@ -48,6 +48,11 @@ Requests a change in high-level behavior.
 | **1** | **WALK** | Gait engine active.                            |
 | **2** | **ACTION** | Triggers Wall-Flip / Specialized maneuvers.    |
 | **3** | **FAILSAFE**| Emergency software interrupt.                  |
+| **4** | **REST** | Flat / all-servos-90 calibration pose; clears the invert flag. Safe to power off. |
+| **5** | **STAND** | Standing / neutral pose (per-leg `NEUTRAL[]`); the gait launch reference. |
+
+Out-of-range `s` is ignored. State 4 (REST) is the pose to assume when physically
+calibrating the robot: all servos go to mid-travel and you mount the links to match.
 
 ---
 
@@ -86,6 +91,67 @@ Gait mode change
 | 'a' | int  | Action ID | 0,1,2...|
 **Example:** '{"T": 6, "a": 1}'
 
+### 9. Set Invert Flag (`T: 9`)
+Set the robot's invert flag without triggering any servo movement or pose change.
+The mirror is applied transparently on the next motion tick (gait, clip, or stand)
+via `applyServos`. Use this when you want to arm or disarm invert mid-animation
+without interrupting clip playback.
+
+| Key        | Type | Description                              |
+| :--------- | :--- | :--------------------------------------- |
+| `inverted` | bool | `true` = inverted (upside-down), `false` = upright |
+
+Missing or non-bool `inverted` key → silent no-op with Serial warning.
+
+**Example:** `{"T": 9, "inverted": true}` *(arm invert; next motion tick applies the mirror)*
+
+---
+
+### 11. Set Clip Smoothing (`T: 11`)
+Set the clip-playback smoothing factor (per-channel EMA alpha) at runtime — no
+reflash. Lower = snappy, follows the baked frames exactly; higher = smoother but
+laggier. The firmware clamps to a safe range so playback can never stall. Affects
+clip playback only (not gaits or calibration).
+
+| Key | Type  | Description | Range |
+| :-- | :---- | :---------- | :---- |
+| `a` | float | EMA alpha (smoothing amount) | 0.0–0.95 (clamped); boot default 0.75 |
+
+**Example:** `{"T": 11, "a": 0.5}` *(less smoothing — snappier clips)*
+
+---
+
+### 7. Play Clip ('T: 7')
+Play a bundled animation clip by id. By default the robot plays the clip once on
+its baked timeline, then auto-returns to the neutral standing pose over 500 ms
+and enters IDLE. With `loop: true` it replays from the start at each end instead
+of returning, until another motion command (gait / `T: 2` / a new clip) preempts
+it. Clip ids/names come from `clips_manifest.json` (generated with `clips_all.h`).
+| Key    | Type | Description | Range |
+| :----- | :--- | :---------- | :---- |
+| 'c'    | int  | Clip id (index into FH_CLIPS[]) | 0..N-1 |
+| 'loop' | bool | Replay continuously instead of playing once (optional) | default false |
+
+**Example:** `{"T": 7, "c": 0}` *(play clip 0 once; out-of-range ids are ignored)*
+**Example:** `{"T": 7, "c": 0, "loop": true}` *(loop clip 0 until preempted)*
+
+---
+
+### 8. List Clips (`T: 8`)
+Query firmware for all compiled-in clips. The robot replies immediately over the
+same WebSocket connection with the clip registry built from `FH_CLIPS[]` at runtime.
+No parameters required.
+
+**Example request:** `{"T": 8}`
+
+**Example response:**
+```json
+{"clips":[{"id":0,"name":"lie down and stand up","ms":3000},
+           {"id":1,"name":"one leg lift","ms":2042},
+           {"id":2,"name":"tiny wiggle","ms":3000},
+           {"id":3,"name":"wave","ms":1208},
+           {"id":4,"name":"wiggle","ms":3000}]}
+```
 
 ---
 

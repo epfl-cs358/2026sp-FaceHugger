@@ -1,5 +1,4 @@
-import { webSocketIP } from "../config/config";
-import { connect, sendCommand, ws } from "../services/socket";
+import { sendCommand } from "../services/socket";
 import { ActionPacket, ActionTypes, DirectionVector, GaitIntegration, GaitMode, ManualMovement, ServoCalibration } from "./api-types";
 
 //Movement packets
@@ -20,16 +19,41 @@ export const CrabGaitPacket = {T: 5, g: GaitMode.CRAB} as GaitIntegration;
 //Action packets
 export const InvertRobotPacket = {T: 6, a: ActionTypes.INVERT_ROBOT} as ActionPacket;
 
+export const requestClipList = () =>
+    sendCommand(JSON.stringify({ T: 8 }));
+
+export const playClip = (id: number, loop: boolean = false) =>
+    sendCommand(JSON.stringify(loop ? { T: 7, c: id, loop: true } : { T: 7, c: id }));
+
+// Stop a (looping) firmware clip by preempting STATE_ACTION with an IDLE state.
+// The robot holds its last commanded pose; follow with Neutral stance to reset.
+export const stopClipPlayback = () =>
+    sendCommand(JSON.stringify({ T: 2, s: 0 }));
+
+// Runtime clip-playback smoothing (T:11): a in [0, 0.95]. Low = snappy.
+export const setClipSmoothing = (alpha: number) =>
+    sendCommand(JSON.stringify({ T: 11, a: alpha }));
+
 //Calibration packets
 export const calibrationPacket = (leg: number, servo: number, angle: number) =>
     ({T: 4, id: leg, servo_id: servo, a: angle} as ServoCalibration);
 
+// Pitch-only mirror, matching firmware applyInvert: thigh (servo 1) and knee
+// (servo 2) become 180 - angle, hip (servo 0) unchanged. T:4 carries absolute
+// angles the firmware invert flag can't touch, so any app-sent pose must mirror
+// itself to stay consistent with a flipped robot (same reason the clip streamer
+// mirrors its frames).
+const mirrorPacket = (pkt: ServoCalibration, inverted: boolean): ServoCalibration =>
+    inverted && (pkt.servo_id === 1 || pkt.servo_id === 2)
+        ? { ...pkt, a: 180 - pkt.a }
+        : pkt;
+
 // One CMD_CALIBRATE per (leg 0-3, servo 0-2) at 90° — resets every servo.
-export const restAllServosPackets = (angle: number = 90) => {
+export const restAllServosPackets = (angle: number = 90, inverted: boolean = false) => {
     const packets: ServoCalibration[] = [];
     for (let leg = 0; leg < 4; leg++) {
         for (let servo = 0; servo < 3; servo++) {
-            packets.push(calibrationPacket(leg, servo, angle));
+            packets.push(mirrorPacket(calibrationPacket(leg, servo, angle), inverted));
         }
     }
     return packets;
@@ -46,11 +70,11 @@ const NEUTRAL_STANCE_ANGLES: number[][] = [
 ];
 
 // One CMD_CALIBRATE per joint to drive every servo to the neutral stance.
-export const neutralStancePackets = () => {
+export const neutralStancePackets = (inverted: boolean = false) => {
     const packets: ServoCalibration[] = [];
     NEUTRAL_STANCE_ANGLES.forEach((servos, leg) => {
         servos.forEach((angle, servo) => {
-            packets.push(calibrationPacket(leg, servo, angle));
+            packets.push(mirrorPacket(calibrationPacket(leg, servo, angle), inverted));
         });
     });
     return packets;

@@ -1,0 +1,22 @@
+# One-shot conda environment for the FaceHugger simulation + the facehugger.py CLI.
+# Recommended on macOS: pybullet has no PyPI wheel there, and conda-forge ships a
+# prebuilt binary. Run it from THIS directory so the pip `-r requirements.txt`
+# resolves:
+#
+#   cd code/simulation
+#   conda env create -f environment.yml
+#   conda activate facehugger
+#
+# Linux / CI can skip conda and `pip install -r requirements.txt` instead. The
+# firmware SIL build additionally needs a C++17 compiler (system clang / gcc).
+name: facehugger
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pybullet>=3.2 # no PyPI wheel on macOS; conda-forge provides it
+  - pybind11>=2.10 # firmware SIL build (CMake find_package)
+  - cmake>=3.15 # firmware SIL build
+  - pip
+  - pip:
+      - -r requirements.txt # the single pip source of truth (pybullet/pybind11 already satisfied)

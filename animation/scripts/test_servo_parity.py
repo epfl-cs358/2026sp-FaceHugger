@@ -23,7 +23,9 @@ import sys
 import types
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SCRIPT = os.path.join(REPO_ROOT, "animation/scripts/fh_clip_panel.py")
+SCRIPT = os.path.join(
+    REPO_ROOT, "animation/addons/fh_clip_panel.py"
+)  # moved scripts/->addons/ (2f627a1)
 CONV_PATH = os.path.join(REPO_ROOT, "animation/convention.json")
 
 
@@ -75,9 +77,12 @@ def _firmware_translate(leg: str, sh: float, th: float, kn: float) -> list[float
     if leg == "fr":  # LEG_FR (LegId 0)
         return [90.0 + (sh - 45.0), 90.0 - th, 90.0 + kn]
     if leg == "fl":  # LEG_FL (LegId 1)
-        return [sh, 90.0 + th, 90.0 - kn]
+        # Change B: regularized to 90 + (sh - 135) (was `sh`) so servo 90 = outward.
+        return [90.0 + (sh - 135.0), 90.0 + th, 90.0 - kn]
     if leg == "br":  # LEG_RR (LegId 2) — Blender 'br' ↔ firmware 'RR'
-        return [90.0 - (sh + 45.0), 90.0 + th, 90.0 - kn]
+        # BR shoulder un-mirrored (2026-05-25): +sh = +servo like the other
+        # three (identical motor, yaw shaft on the same vertical axis).
+        return [90.0 + (sh + 45.0), 90.0 + th, 90.0 - kn]
     if leg == "bl":  # LEG_RL (LegId 3) — Blender 'bl' ↔ firmware 'RL'
         return [90.0 + (sh + 135.0), 90.0 - th, 90.0 + kn]
     raise ValueError(leg)
