@@ -43,6 +43,11 @@ pybind11_add_module(fh_sim
     "${FW}/nervous_system/face.cpp"      # OLED eyes; no-op against the hal/ display stubs
     "${FW}/brain/network.cpp"            # the EXACT T: command dispatch
     "${FW}/brain/clip_list_serializer.cpp"
+    # brain/sensors.cpp is INTENTIONALLY excluded — the production version talks
+    # to a real MPU6050 over Wire. We substitute hal/sensors_sil.cpp instead
+    # (same API surface from brain/sensors.h, but state comes from PyBullet via
+    # fh_sim::imu_upside_down / pitch_deg / roll_deg, written by the bridge).
+    hal/sensors_sil.cpp
 )
 
 # hal/ FIRST so its Arduino.h / Wire.h / Adafruit_PWMServoDriver.h / WiFi.h /

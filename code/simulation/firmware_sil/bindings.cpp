@@ -20,6 +20,7 @@
 #include "nervous_system/clips_all.h"     // FH_CLIPS[] / FH_CLIP_COUNT
 #include "shared/config.h"                // ADDR_SERVO_DRIVER
 #include "brain/network.h"                // handleParsedMessage (real T: dispatch)
+#include "brain/sensors.h"                // imuIsInverted accessor (SIL-backed)
 
 namespace py = pybind11;
 
@@ -102,6 +103,17 @@ class FirmwareControl {
 
     uint8_t robot_state() const { return spinalCord.snapshot().robot_state; }
 
+    // IMU SIL surface. The production firmware polls the MPU6050 in tickImu();
+    // on the host the bridge computes the upside-down state from PyBullet's
+    // body orientation (with the same hysteresis as the firmware) and writes
+    // it here. imu_is_inverted() reads back through the firmware's own
+    // sensors.h accessor so tests can assert on the same surface main.cpp
+    // would see on hardware.
+    void set_imu_upside_down(bool v) { fh_sim::imu_upside_down = v; }
+    void set_imu_pitch_deg(float v)  { fh_sim::pitch_deg = v; }
+    void set_imu_roll_deg(float v)   { fh_sim::roll_deg = v; }
+    bool imu_is_inverted() const     { return imuIsInverted(); }
+
     // Drain the firmware's captured Serial output (complete lines since the last
     // call) and clear it. The firmware's own out-of-range guard prints
     // "[OOR] servo <ch> requested <deg>"; the SIL surfaces those by reading here.
@@ -146,5 +158,9 @@ PYBIND11_MODULE(fh_sim, m) {
         .def("servo_angles", &FirmwareControl::servo_angles)
         .def("robot_state", &FirmwareControl::robot_state)
         .def("drain_serial", &FirmwareControl::drain_serial)
-        .def("servo_channels", &FirmwareControl::servo_channels);
+        .def("servo_channels", &FirmwareControl::servo_channels)
+        .def("set_imu_upside_down", &FirmwareControl::set_imu_upside_down, py::arg("v"))
+        .def("set_imu_pitch_deg", &FirmwareControl::set_imu_pitch_deg, py::arg("v"))
+        .def("set_imu_roll_deg", &FirmwareControl::set_imu_roll_deg, py::arg("v"))
+        .def("imu_is_inverted", &FirmwareControl::imu_is_inverted);
 }

@@ -18,6 +18,7 @@ export const useRobotConnection = () => {
   const setErrorMessage = useRobotStore((s) => s.setErrorMessage);
   const setClips = useRobotStore((s) => s.setClips);
   const setClipPlaying = useRobotStore((s) => s.setClipPlaying);
+  const setOrientation = useRobotStore((s) => s.setOrientation);
 
   const chosenFsmState = useRobotStore((s) => s.chosenFsmState);
   const chosenGaitMode = useRobotStore((s) => s.chosenGaitMode);
@@ -54,6 +55,14 @@ export const useRobotConnection = () => {
             setGaitMode(status.g as GaitMode);
             setMovementProgress(status.pc);
             setErrorMessage(status.e ?? null);
+            // Orientation fields (pitch_deg/roll_deg/upside_down) are optional
+            // — pre-IMU firmware omits them, so pass null through to the store
+            // and the tile will render a "—" placeholder.
+            setOrientation(
+              typeof status.pitch_deg === 'number' ? status.pitch_deg : null,
+              typeof status.roll_deg === 'number' ? status.roll_deg : null,
+              typeof status.upside_down === 'boolean' ? status.upside_down : null,
+            );
             break;
           }
         }

@@ -29,13 +29,13 @@ type RobotStore = {
     setClips: (clips: ClipInfo[]) => void,
     clipPlaying: boolean,
     setClipPlaying: (playing: boolean) => void,
-    // App-side mirror of the firmware invert flag. The robot flips its own
-    // motion (gaits/flashed clips) from the T:6/T:9 flag, but app-streamed clips
-    // are raw absolute T:4 writes that bypass that flag — so the streamer mirrors
-    // each frame by this same flag. Kept in sync with the firmware via the
-    // Actions invert button (toggles this AND sends T:6).
-    inverted: boolean,
-    setInverted: (inverted: boolean) => void,
+    // IMU orientation (T:10 broadcast). pitch/roll in deg, upsideDown latched
+    // with hysteresis firmware-side. Optional fields land as `undefined` on
+    // pre-IMU firmware — the UI renders a placeholder in that case.
+    pitchDeg: number | null,
+    rollDeg: number | null,
+    upsideDown: boolean | null,
+    setOrientation: (pitchDeg: number | null, rollDeg: number | null, upsideDown: boolean | null) => void,
 };
 
 export const useRobotStore = create<RobotStore>((set) => ({
@@ -65,6 +65,8 @@ export const useRobotStore = create<RobotStore>((set) => ({
     setClips: (clips) => set({ clips }),
     clipPlaying: false,
     setClipPlaying: (clipPlaying) => set({ clipPlaying }),
-    inverted: false,
-    setInverted: (inverted) => set({ inverted }),
+    pitchDeg: null,
+    rollDeg: null,
+    upsideDown: null,
+    setOrientation: (pitchDeg, rollDeg, upsideDown) => set({ pitchDeg, rollDeg, upsideDown }),
 }));

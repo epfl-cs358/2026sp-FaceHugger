@@ -1,7 +1,7 @@
 import { sendCommand } from "../services/socket";
 import { stopStream } from "../services/clipStreamer";
 import { POSE_EASE_MS } from "../config/config";
-import { ActionPacket, ActionTypes, DirectionVector, GaitIntegration, GaitMode, ManualMovement, ServoCalibration } from "./api-types";
+import { DirectionVector, GaitIntegration, GaitMode, ManualMovement, ServoCalibration } from "./api-types";
 
 //Movement packets
 export const FWMovementPacket    = {T: 1, dir: DirectionVector.FW}   as ManualMovement;
@@ -18,8 +18,10 @@ export const STOP                = {T: 1, dir: DirectionVector.STOP} as ManualMo
 export const TrotGaitPacket = {T: 5, g: GaitMode.TROT} as GaitIntegration;
 export const CrabGaitPacket = {T: 5, g: GaitMode.CRAB} as GaitIntegration;
 
-//Action packets
-export const InvertRobotPacket = {T: 6, a: ActionTypes.INVERT_ROBOT} as ActionPacket;
+// T:6 (manual invert) was removed once the firmware switched to IMU auto-detect:
+// the MPU6050 + hysteresis owns invert state, so the app no longer needs to send
+// it. The robot still mirrors gaits/clips post-flip; main.cpp gates the latch on
+// STATE_IDLE so it won't fire mid-motion.
 
 export const requestClipList = () =>
     sendCommand(JSON.stringify({ T: 8 }));

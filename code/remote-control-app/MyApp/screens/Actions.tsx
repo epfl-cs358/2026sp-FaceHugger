@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { Modal, Pressable, StyleSheet, TouchableOpacity, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { IndividualSelectionButton } from "../components/IndividualSelectionButton/IndividualSelectionButton";
 import { AppText } from "../components/text/AppText";
 import { ClipList } from "../components/ClipList";
-import { sendCommand } from "../services/socket";
 import { useRobotStore } from "../store/robotStore";
-import { orangeColor } from "../colors/colors";
-import { InvertRobotPacket, sendRestPose, sendNeutralStance, setClipSmoothing, stopMotion } from "../api/api-messages";
+import { sendRestPose, sendNeutralStance, setClipSmoothing, stopMotion } from "../api/api-messages";
+import { formatPitch, formatRoll, formatOrientationState } from "../api/orientation";
 
 // Clip-playback smoothing presets (T:11 EMA alpha): snappy follows the raw
 // frames, smooth lags and rounds the motion.
@@ -17,10 +16,15 @@ const SMOOTHING_PRESETS: { label: string; alpha: number }[] = [
 ];
 
 export function Actions() {
-    const [pendingInvert, setPendingInvert] = useState(false);
     const [smoothing, setSmoothing] = useState(0.75);
-    const inverted = useRobotStore((s) => s.inverted);
-    const setInverted = useRobotStore((s) => s.setInverted);
+
+    // Orientation tile is driven from the T:10 broadcast (~10 Hz) that the
+    // connection hook already consumes — no polling fetch is added here, the
+    // store re-renders us when the firmware pushes a new frame. Fields may be
+    // null on pre-IMU firmware; the formatters render "—" in that case.
+    const pitchDeg = useRobotStore((s) => s.pitchDeg);
+    const rollDeg = useRobotStore((s) => s.rollDeg);
+    const upsideDown = useRobotStore((s) => s.upsideDown);
 
     // Pager swaps pages by unmount, so the cleanup fires on blur. Send IDLE
     // so any in-flight firmware clip (T:7) stops when leaving the page, and
@@ -32,30 +36,25 @@ export function Actions() {
         setClipSmoothing(alpha);
     };
 
-    // Flip the robot. T:6 mirrors firmware-driven motion (gaits, flashed clips);
-    // the app-side flag mirrors app-streamed clips, which send raw T:4 angles
-    // the firmware flag can't touch. Toggle both so invert is consistent
-    // whichever way a clip is playing.
-    const onConfirmInvert = () => {
-        sendCommand(JSON.stringify(InvertRobotPacket));
-        setInverted(!inverted);
-        setPendingInvert(false);
-    };
-
-    // Pose buttons: one T:2 with dur_ms so the firmware eases the pose. REST is
-    // the flat / all-90 calibration pose (clears invert); NEUTRAL is the
-    // standing pose the gait engine launches from. invert-aware ease lives on
-    // the firmware side (easeToNeutral routes through applyInvert).
+    // Pose buttons (Task #11). Both REST (flat / all-90 calibration) and NEUTRAL
+    // (standing) are firmware-side states; the firmware owns the pose values and
+    // the ease. invert-aware ease lives on the firmware side (easeToNeutral
+    // routes through applyInvert + the IMU latch).
     const onRestPose = () => sendRestPose();
     const onNeutralStance = () => sendNeutralStance();
 
     return (
         <View style={styles.mainContainer}>
-            <View style={styles.actionRow}>
-                <IndividualSelectionButton
-                    selected={inverted}
-                    title={inverted ? "Inverted (tap to flip back)" : "Invert robot"}
-                    onClick={() => setPendingInvert(true)}
+            <View style={styles.orientationTile}>
+                <AppText text="Orientation" size={13} color="#aaa" />
+                <View style={styles.orientationRow}>
+                    <AppText text={formatPitch(pitchDeg)} size={15} color="#ffffff" />
+                    <AppText text={formatRoll(rollDeg)} size={15} color="#ffffff" />
+                </View>
+                <AppText
+                    text={formatOrientationState(upsideDown)}
+                    size={14}
+                    color={upsideDown === true ? "#ff9966" : "#a0d8a0"}
                 />
             </View>
             <View style={styles.actionRow}>
@@ -87,32 +86,6 @@ export function Actions() {
             </View>
 
             <ClipList />
-
-            {/* Confirm as a bottom sheet so it doesn't reflow the action list. */}
-            <Modal
-                visible={pendingInvert}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setPendingInvert(false)}
-            >
-                <Pressable style={styles.backdrop} onPress={() => setPendingInvert(false)}>
-                    <Pressable style={styles.sheet} onPress={() => { /* swallow taps inside the sheet */ }}>
-                        <AppText
-                            text={inverted ? "Flip the robot back upright?" : "Invert the robot?"}
-                            size={16}
-                            color="#ffffff"
-                        />
-                        <View style={styles.sheetButtons}>
-                            <TouchableOpacity style={styles.cancelBtn} onPress={() => setPendingInvert(false)}>
-                                <AppText text="Cancel" size={15} color="#ffffff" />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.confirmBtn} onPress={onConfirmInvert}>
-                                <AppText text={inverted ? "Flip back" : "Invert"} size={15} color="#121212" />
-                            </TouchableOpacity>
-                        </View>
-                    </Pressable>
-                </Pressable>
-            </Modal>
         </View>
     );
 }
@@ -125,6 +98,18 @@ const styles = StyleSheet.create({
         gap: 16,
         alignItems: 'flex-start',
     },
+    orientationTile: {
+        alignSelf: 'stretch',
+        backgroundColor: '#1a1a2e',
+        borderRadius: 10,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        gap: 6,
+    },
+    orientationRow: {
+        flexDirection: 'row',
+        gap: 16,
+    },
     actionRow: {
         gap: 12,
         alignItems: 'flex-start',
@@ -136,36 +121,5 @@ const styles = StyleSheet.create({
     smoothingButtons: {
         flexDirection: 'row',
         gap: 8,
-    },
-    backdrop: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'flex-end',
-    },
-    sheet: {
-        backgroundColor: '#1a1a2e',
-        paddingHorizontal: 20,
-        paddingTop: 20,
-        paddingBottom: 32,
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
-        gap: 16,
-    },
-    sheetButtons: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: 12,
-    },
-    cancelBtn: {
-        paddingVertical: 10,
-        paddingHorizontal: 20,
-        borderRadius: 10,
-        backgroundColor: '#2a2a2a',
-    },
-    confirmBtn: {
-        paddingVertical: 10,
-        paddingHorizontal: 20,
-        borderRadius: 10,
-        backgroundColor: orangeColor,
     },
 });

@@ -57,14 +57,10 @@ export type GaitIntegration = PacketType & {
     g: number
 }
 
-export enum ActionTypes {
-    INVERT_ROBOT = 0
-}
-
-export type ActionPacket = PacketType & {
-    a: number
-}
-
+// T:10 telemetry payload. Sent by the firmware ~10 Hz; the orientation fields
+// (pitch_deg / roll_deg / upside_down) piggyback on the existing status packet
+// so old firmware that doesn't include them still parses (we mark them
+// optional and the UI renders a "—" placeholder where they're absent).
 export type SystemStatus = PacketType & { //T10
     s: number, // current fsm state
     d: Array<number>, //tof distance readings
@@ -72,6 +68,9 @@ export type SystemStatus = PacketType & { //T10
     g: number, //current gait mode of the robot
     pc: number, //current percentage of the movement gait accomplished
     e: string //error message
+    pitch_deg?: number, // signed pitch, deg; absent on pre-IMU firmware
+    roll_deg?: number,  // signed roll, deg; absent on pre-IMU firmware
+    upside_down?: boolean, // latched IMU upside-down state (hysteresis applied firmware-side)
 }
 
 export type ClipInfo = {

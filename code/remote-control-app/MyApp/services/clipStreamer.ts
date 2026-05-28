@@ -10,7 +10,6 @@
 // unflashed animation, not a substitute for flashing.
 import { sendCommand } from "./socket";
 import { StreamClip } from "../api/streamClips";
-import { useRobotStore } from "../store/robotStore";
 
 const LEGS = ["fr", "fl", "br", "bl"] as const;
 const LEG_IDS: Record<(typeof LEGS)[number], number> = { fr: 0, fl: 1, br: 2, bl: 3 };
@@ -50,17 +49,15 @@ export const streamClip = (
       }
     }
     const frame = frames[i++];
-    // T:4 carries absolute servo angles, so the firmware invert flag can't act
-    // on a streamed clip (it only mirrors firmware-driven motion). Apply the
-    // same pitch-only mirror here — thigh/knee = 180 - angle, hip unchanged
-    // (== firmware applyInvert) — read live so a mid-clip invert takes effect
-    // on the next frame.
-    const inverted = useRobotStore.getState().inverted;
+    // T:4 carries absolute servo angles. The firmware now owns invert for ALL
+    // motion paths (applyInvert at the servo write point, gated by IMU
+    // auto-detect from main.cpp's tickImu/imuIsInverted) so the app no longer
+    // applies a pitch mirror here — let the raw clip angles through and the
+    // firmware handles it the same way it handles gait / flashed-clip output.
     for (const leg of LEGS) {
       const raw = frame[leg];
-      const angles = inverted ? [raw[0], 180 - raw[1], 180 - raw[2]] : raw;
       for (let j = 0; j < 3; j++) {
-        const a = clamp(angles[j]);
+        const a = clamp(raw[j]);
         const key = leg + ":" + j;
         if (last[key] === a) continue;
         last[key] = a;
