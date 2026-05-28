@@ -1,6 +1,7 @@
+import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import Joystick, { JoystickAction, JoystickProps } from "../components/joystick/Joystick";
-import { BLMovementPacket, BRMovementPacket, BWMovementPacket, CrabGaitPacket, FLMovementPacket, FRMovementPacket, FWMovementPacket, LeftMovementPacket, RightMovementPacket, TrotGaitPacket } from "../api/api-messages";
+import { BLMovementPacket, BRMovementPacket, BWMovementPacket, CrabGaitPacket, FLMovementPacket, FRMovementPacket, FWMovementPacket, LeftMovementPacket, RightMovementPacket, TrotGaitPacket, stopMotion } from "../api/api-messages";
 import { GaitIntegration, GaitMode } from "../api/api-types";
 import { DropDownMenu, DropDownMenuElement, DropDownMenuProps } from "../components/dropdown/DropdownMenu";
 import { useRobotStore } from "../store/robotStore";
@@ -8,6 +9,11 @@ import { sendCommand } from "../services/socket";
 
 export default function GaitControl(){
     const setChosenGaitMode = useRobotStore((s) => s.setChosenGaitMode);
+
+    // Pager swaps pages by unmount, so the cleanup fires on blur. Send IDLE
+    // so a gait started here doesn't keep walking after the user navigates
+    // away (no in-screen stop button on this page).
+    useEffect(() => () => stopMotion(), []);
 
     const actionRight = {
         minAngle: -15,

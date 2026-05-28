@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, TouchableOpacity, View } from "react-native";
 import { IndividualSelectionButton } from "../components/IndividualSelectionButton/IndividualSelectionButton";
 import { AppText } from "../components/text/AppText";
@@ -6,7 +6,7 @@ import { ClipList } from "../components/ClipList";
 import { sendCommand } from "../services/socket";
 import { useRobotStore } from "../store/robotStore";
 import { orangeColor } from "../colors/colors";
-import { InvertRobotPacket, restAllServosPackets, neutralStancePackets, setClipSmoothing } from "../api/api-messages";
+import { InvertRobotPacket, restAllServosPackets, neutralStancePackets, setClipSmoothing, stopMotion } from "../api/api-messages";
 
 // Clip-playback smoothing presets (T:11 EMA alpha): snappy follows the raw
 // frames, smooth lags and rounds the motion.
@@ -21,6 +21,11 @@ export function Actions() {
     const [smoothing, setSmoothing] = useState(0.75);
     const inverted = useRobotStore((s) => s.inverted);
     const setInverted = useRobotStore((s) => s.setInverted);
+
+    // Pager swaps pages by unmount, so the cleanup fires on blur. Send IDLE
+    // so any in-flight firmware clip (T:7) stops when leaving the page, and
+    // tear down the JS clip streamer if it happened to be running.
+    useEffect(() => () => stopMotion(), []);
 
     const onSmoothing = (alpha: number) => {
         setSmoothing(alpha);

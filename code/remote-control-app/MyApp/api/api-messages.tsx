@@ -1,4 +1,5 @@
 import { sendCommand } from "../services/socket";
+import { stopStream } from "../services/clipStreamer";
 import { ActionPacket, ActionTypes, DirectionVector, GaitIntegration, GaitMode, ManualMovement, ServoCalibration } from "./api-types";
 
 //Movement packets
@@ -29,6 +30,16 @@ export const playClip = (id: number, loop: boolean = false) =>
 // The robot holds its last commanded pose; follow with Neutral stance to reset.
 export const stopClipPlayback = () =>
     sendCommand(JSON.stringify({ T: 2, s: 0 }));
+
+// Page-change / unmount cleanup. Send STATE_IDLE so the firmware drops any
+// in-flight gait (T:1/T:5) or firmware clip (T:7), and also clear the JS
+// clip streamer's interval in case it was running (no-op when idle). Wired
+// from the screen useEffect cleanups in GaitControl and Actions so that
+// swapping pages on the Pager stops in-flight motion.
+export const stopMotion = () => {
+    stopClipPlayback();
+    stopStream();
+};
 
 // Runtime clip-playback smoothing (T:11): a in [0, 0.95]. Low = snappy.
 export const setClipSmoothing = (alpha: number) =>
