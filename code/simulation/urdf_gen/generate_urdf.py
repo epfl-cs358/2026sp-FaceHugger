@@ -30,15 +30,10 @@ except ImportError:
 # Defaults
 # ---------------------------------------------------------------------------
 
-<<<<<<<< HEAD:code/simulation/urdf_pipeline/generate_urdf.py
-SCRIPT_DIR = Path(__file__).resolve().parent.parent
-GENERATED_DIR = SCRIPT_DIR / "generated"
-========
 # This module lives in urdf_gen/; generated/ and the config yaml sit one level
 # up in code/simulation/ (shared with the pybullet_sim runtime).
 SIM_ROOT = Path(__file__).resolve().parent.parent
 GENERATED_DIR = SIM_ROOT / "generated"
->>>>>>>> ced61ca (Animation-flow integration: Full pipeline for playing Blender-created animations and simulating firmware faithfully (#102)):code/simulation/urdf_gen/generate_urdf.py
 DEFAULT_JSON = GENERATED_DIR / "fusion_export.json"
 DEFAULT_CFG = SIM_ROOT / "facehugger_config.yaml"
 DEFAULT_OUT = GENERATED_DIR / "facehugger.urdf"
