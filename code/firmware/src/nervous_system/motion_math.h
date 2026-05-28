@@ -34,11 +34,12 @@ double easeFraction(uint32_t elapsed_ms, uint32_t dur_ms);
 float emaStep(float prev, float target, float alpha);
 
 /* Robot-invert mirror, applied once at the servo write point (Change D). When
- * inverted, mirror the pitch joints (thigh, knee) about 90 — shoulder untouched.
- * For a pitch servo (translateToServo emits 90±angle) this equals negating the
- * math-space angle, so routing gait output through it is bit-for-bit identical
- * to the old math-space th=-th/kn=-kn. Pure, host-tested. */
-ServoTriple applyInvert(ServoTriple s, bool inverted);
+ * inverted, mirror the pitch joints (thigh, knee) about each joint's CALIB
+ * (per-leg zero-flat in servo space) — shoulder untouched. The mirror equals
+ * math-space negation regardless of horn-mounting tolerance, so routing gait
+ * output through it stays bit-for-bit identical to th=-th / kn=-kn. legId is
+ * the firmware LegId (0=FR, 1=FL, 2=RR/BR, 3=RL/BL). Pure, host-tested. */
+ServoTriple applyInvert(uint8_t legId, ServoTriple s, bool inverted);
 
 /* FhClipFrame is defined in clips_all.h (generated header / test fixture),
  * which uses an anonymous-struct typedef and so cannot be tag-forward-

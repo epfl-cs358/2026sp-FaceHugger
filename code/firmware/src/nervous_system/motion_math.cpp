@@ -1,4 +1,5 @@
 #include "motion_math.h"
+#include "../shared/config.h"  // CALIB_* per-servo zero-point calibration
 #include "clips_all.h"
 
 double easeFraction(uint32_t elapsed_ms, uint32_t dur_ms) {
@@ -21,10 +22,14 @@ float emaStep(float prev, float target, float alpha) {
     return alpha * prev + (1.0f - alpha) * target;
 }
 
-ServoTriple applyInvert(ServoTriple s, bool inverted) {
+ServoTriple applyInvert(uint8_t legId, ServoTriple s, bool inverted) {
     if (inverted) {
-        s.thigh = 180.0 - s.thigh;
-        s.knee  = 180.0 - s.knee;
+        // Mirror about CALIB (= flat in servo space) per joint, so mirror equals
+        // math-space negation. Pre-calibration this was (180 - s) because flat was
+        // assumed to be servo 90 uniformly. With per-joint CALIB the mirror axis
+        // is 2*CALIB - s; reduces to 180 - s exactly when CALIB == 90.
+        s.thigh = 2.0 * CALIB_THIGH_BY_LEG[legId] - s.thigh;
+        s.knee  = 2.0 * CALIB_KNEE_BY_LEG[legId]  - s.knee;
     }
     return s;
 }
@@ -34,14 +39,14 @@ ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn) {
     switch (legId) {
         case 0:  // LEG_FR
             out.hip   = 90.0 + (sh - 45.0);
-            out.thigh = 90.0 - th;
-            out.knee  = 90.0 + kn;
+            out.thigh = CALIB_FR_THIGH - th;
+            out.knee  = CALIB_FR_KNEE  + kn;
             break;
         case 1:  // LEG_FL
             out.hip   = 90.0 + (sh - 135.0);  // Change B: regularized so servo 90 = outward (+135),
                                               // matching FR/BR/BL. Requires FL horn remount on hardware.
-            out.thigh = 90.0 + th;
-            out.knee  = 90.0 - kn;
+            out.thigh = CALIB_FL_THIGH + th;
+            out.knee  = CALIB_FL_KNEE  - kn;
             break;
         case 2:  // LEG_RR / BR
             // BR shoulder un-mirrored (2026-05-25): identical motor, yaw shaft
@@ -50,13 +55,13 @@ ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn) {
             // flipped in tandem so gait servo output is unchanged. See
             // docs/.work/convention-docs/DRAFT-delta-conventions.md §3.
             out.hip   = 90.0 + (sh + 45.0);  // was 90.0 - (sh + 45.0)
-            out.thigh = 90.0 + th;
-            out.knee  = 90.0 - kn;
+            out.thigh = CALIB_BR_THIGH + th;
+            out.knee  = CALIB_BR_KNEE  - kn;
             break;
         case 3:  // LEG_RL / BL
             out.hip   = 90.0 + (sh + 135.0);
-            out.thigh = 90.0 - th;
-            out.knee  = 90.0 + kn;
+            out.thigh = CALIB_BL_THIGH - th;
+            out.knee  = CALIB_BL_KNEE  + kn;
             break;
         default:
             break;

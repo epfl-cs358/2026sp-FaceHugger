@@ -2131,15 +2131,24 @@ def to_c_header(frames, clip_name, convention):
     return path
 
 
+# Per-servo zero-point calibration: servo angle when the joint is at math 0°
+# (thigh/knee flat). Mirror of CALIB_* in code/firmware/src/shared/config.h.
+# Hip is uncalibrated (stays 90). Keep in sync with firmware whenever CALIB
+# values change (and re-export every clip so the bake-time servo angles match
+# the runtime). Pre-calibration these were all 90.
+_CALIB_THIGH = {"fr": 84, "fl": 87, "br": 103, "bl": 84}
+_CALIB_KNEE = {"fr": 95, "fl": 82, "br": 80, "bl": 87}
+
+
 def _frame_to_servo(row, convention, warn=True):
     """One baked row -> {leg: [hip, thigh, knee] ints} where the per-leg
     list index IS the firmware `servo_id` (0=hip, 1=thigh, 2=knee —
     matching LEG_SERVO_CHANNEL[leg_id][servo_id] in
     code/firmware/src/shared/config.h on origin/main).
 
-    Applies (1) scale-from-NEUTRAL, (2) per-leg translateToServo —
-    byte-identical to the firmware tickGait switch, locked by
-    test_servo_parity.py — and (3) rounds to int.
+    Applies (1) scale-from-NEUTRAL, (2) per-leg translateToServo with
+    per-joint CALIB zero-points — byte-identical to the firmware
+    translateToServo, locked by test_clip_parity — and (3) rounds to int.
 
     Wire shape consumed by to_js: {T:4, id:_LEG_ID[leg], servo_id:j,
     a:result[leg][j]}. The firmware does the PCA-channel mapping;
@@ -2153,20 +2162,22 @@ def _frame_to_servo(row, convention, warn=True):
         raw = [row[f"{leg}_link1"], row[f"{leg}_link2"], row[f"{leg}_link3"]]
         # 1. compress movement toward N
         sh, th, kn = (n[j] + (raw[j] - n[j]) * scale for j in range(3))
-        # 2. translateToServo (mirror/offset per leg side)
+        # 2. translateToServo: shoulder uses literal 90 (uncalibrated), thigh/knee
+        #    use per-leg CALIB (the servo angle at math 0 / flat).
+        ct, ck = _CALIB_THIGH[leg], _CALIB_KNEE[leg]
         if leg == "fl":
             # Change B: FL shoulder regularized to 90 + (sh - 135) so servo 90 = outward,
             # matching fr/bl/br. Byte-identical to firmware motion_math.cpp FL branch.
-            servo = [90 + (sh - 135), 90 + th, 90 - kn]
+            servo = [90 + (sh - 135), ct + th, ck - kn]
         elif leg == "fr":
-            servo = [90 + (sh - 45), 90 - th, 90 + kn]
+            servo = [90 + (sh - 45), ct - th, ck + kn]
         elif leg == "bl":
-            servo = [90 + (sh + 135), 90 - th, 90 + kn]
+            servo = [90 + (sh + 135), ct - th, ck + kn]
         else:  # br
             # BR shoulder un-mirrored (2026-05-25): +sh = +servo like fr/fl/bl
             # (identical motor, yaw shaft on the same vertical axis). Kept
-            # byte-identical to firmware translateToServo by test_servo_parity.
-            servo = [90 + (sh + 45), 90 + th, 90 - kn]
+            # byte-identical to firmware translateToServo by test_clip_parity.
+            servo = [90 + (sh + 45), ct + th, ck - kn]
         # 3. clamp to the servo range, surfacing authoring errors at export
         # time rather than relying on the JS / firmware clamp as the only
         # backstop (the FRAME_DELTA_WARN_DEG warning's range companion).
