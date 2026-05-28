@@ -551,7 +551,7 @@ void SpinalCord::playClip(uint8_t id, bool loop) {
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
         ServoTriple f0 = applyInvert(
             i,
-            clampClipServos(translateToServo(i,
+            clampClipServos(i, translateToServo(i,
                 FH_CLIPS[id].frames[0].a[i * 3 + 0],
                 FH_CLIPS[id].frames[0].a[i * 3 + 1],
                 FH_CLIPS[id].frames[0].a[i * 3 + 2])),
@@ -593,7 +593,7 @@ void SpinalCord::tickClip() {
                 // EMA smooths the math-space angle; clampClipServos keeps the clip
                 // off each leg's mechanical stop (clip path only); invert (if any)
                 // applied last at the write point.
-                applyServos(legs[i], clampClipServos(
+                applyServos(legs[i], clampClipServos(i,
                     translateToServo(i, clipSmoothed_[i][0],
                                      clipSmoothed_[i][1],
                                      clipSmoothed_[i][2])));

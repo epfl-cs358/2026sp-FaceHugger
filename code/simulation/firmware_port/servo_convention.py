@@ -137,25 +137,47 @@ def translate_to_servo(leg_id: int, sh: float, th: float, kn: float) -> ServoTri
     return out
 
 
-def clamp_clip_servos(s: ServoTriple) -> ServoTriple:
-    """Clamp servo angles to safe hardware ranges for clip playback.
+# Clip-playback servo-clamp half-widths, derived from the URDF joint limits.
+# Mirror of HIP_CLAMP_FROM_NINETY / THIGH_CLAMP_FROM_CALIB / KNEE_CLAMP_FROM_CALIB
+# in code/firmware/src/shared/config.h — keep in sync.
+HIP_CLAMP_FROM_NINETY = 52
+THIGH_CLAMP_FROM_CALIB = 60
+KNEE_CLAMP_FROM_CALIB = 90
 
-    Mirrors firmware clampClipServos() in
-    code/firmware/src/nervous_system/motion_math.cpp:10-18.
 
-    Ranges:
-      hip (shoulder): [38, 142]  — 90 ± 52 (tightest side of each leg)
-      thigh:          [30, 150]  — 90 ± 60
-      knee:           [0,  180]  — full travel
+def clamp_clip_servos(leg_id: int, s: ServoTriple) -> ServoTriple:
+    """Clamp servo angles for one leg to its safe envelope on the clip path.
+
+    Per-leg, CALIB-relative — mirrors firmware clampClipServos() in
+    code/firmware/src/nervous_system/motion_math.cpp.
+
+    Envelope (derived from URDF joint limits):
+      hip   uniform 90 ± HIP_CLAMP_FROM_NINETY  (every leg's tight shoulder side)
+      thigh CALIB_THIGH[leg_id] ± THIGH_CLAMP_FROM_CALIB  (URDF ±60° symmetric)
+      knee  CALIB_KNEE[leg_id]  ± KNEE_CLAMP_FROM_CALIB   (URDF ±90° symmetric)
+
+    Raises ValueError for unknown leg_id.
     """
+    if leg_id not in CALIB_THIGH:
+        raise ValueError(f"unknown leg_id {leg_id!r}")
 
     def cl(v: float, lo: float, hi: float) -> float:
         return lo if v < lo else (hi if v > hi else v)
 
+    thigh_center = CALIB_THIGH[leg_id]
+    knee_center = CALIB_KNEE[leg_id]
     return ServoTriple(
-        hip=cl(s.hip, 38.0, 142.0),
-        thigh=cl(s.thigh, 30.0, 150.0),
-        knee=cl(s.knee, 0.0, 180.0),
+        hip=cl(s.hip, 90.0 - HIP_CLAMP_FROM_NINETY, 90.0 + HIP_CLAMP_FROM_NINETY),
+        thigh=cl(
+            s.thigh,
+            thigh_center - THIGH_CLAMP_FROM_CALIB,
+            thigh_center + THIGH_CLAMP_FROM_CALIB,
+        ),
+        knee=cl(
+            s.knee,
+            knee_center - KNEE_CLAMP_FROM_CALIB,
+            knee_center + KNEE_CLAMP_FROM_CALIB,
+        ),
     )
 
 

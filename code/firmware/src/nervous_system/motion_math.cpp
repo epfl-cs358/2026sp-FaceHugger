@@ -14,13 +14,24 @@ double easeFraction(uint32_t elapsed_ms, uint32_t dur_ms) {
     return t * t * (3.0 - 2.0 * t);  // smoothstep
 }
 
-ServoTriple clampClipServos(ServoTriple s) {
+ServoTriple clampClipServos(uint8_t legId, ServoTriple s) {
     auto cl = [](double v, double lo, double hi) {
         return v < lo ? lo : (v > hi ? hi : v);
     };
-    s.hip   = cl(s.hip,   38.0, 142.0);  // shoulder: 90 +/- 52 (every leg's tight side)
-    s.thigh = cl(s.thigh, 30.0, 150.0);  // 90 +/- 60
-    s.knee  = cl(s.knee,   0.0, 180.0);  // 90 +/- 90
+    // Hip: uniform across legs. The tight side of every URDF shoulder is 52°,
+    // so 90 ± 52 is inside every leg's reach regardless of left/right.
+    const double hip_lo = 90.0 - (double)HIP_CLAMP_FROM_NINETY;
+    const double hip_hi = 90.0 + (double)HIP_CLAMP_FROM_NINETY;
+    // Thigh + knee: CALIB-relative per leg. Bounds-guard legId so a junk caller
+    // can't read past the [4] arrays; out-of-range legs fall back to the old
+    // uniform 90-centered envelope.
+    const double thigh_center = (legId < 4) ? (double)CALIB_THIGH_BY_LEG[legId] : 90.0;
+    const double knee_center  = (legId < 4) ? (double)CALIB_KNEE_BY_LEG[legId]  : 90.0;
+    s.hip   = cl(s.hip,   hip_lo, hip_hi);
+    s.thigh = cl(s.thigh, thigh_center - (double)THIGH_CLAMP_FROM_CALIB,
+                          thigh_center + (double)THIGH_CLAMP_FROM_CALIB);
+    s.knee  = cl(s.knee,  knee_center  - (double)KNEE_CLAMP_FROM_CALIB,
+                          knee_center  + (double)KNEE_CLAMP_FROM_CALIB);
     return s;
 }
 
