@@ -23,6 +23,12 @@ mesh_dir: exported_meshes/
 base_link:
   name: base_link
   mesh: QuadrupedBody.stl
+  # Electronics not modelled in Fusion (ESP32, PCA9685, I2C mux, IMU, ToF×5,
+  # OLED, LiPo 2S 1000mAh, buck, BMS, XT60×4, switch, wiring). 0.239 kg by
+  # BOM tally. Added on top of the Fusion base_link mass so the SIL torque
+  # picture matches the real robot. Shoulder servos are still missing from
+  # the URDF mass budget (Fusion treats them as visuals) — separate fix.
+  extra_mass_kg: 0.239
 
 # ---------------------------------------------------------------------------
 # Leg template: shared structure for all 4 legs.

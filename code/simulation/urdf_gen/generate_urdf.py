@@ -829,6 +829,14 @@ def generate(export: dict, cfg: dict, out_path: Path):
     base_cfg = cfg["base_link"]
     base_occ = find_occurrence(occs, "FlexibleSkeleton:1")
     mass, com, inertia = get_physics(base_occ, fallback_mass=0.5)
+    # Fusion only knows about the printed chassis; the electronics live in
+    # config (see base_link.extra_mass_kg). COM/inertia stay Fusion's: the
+    # electronics are roughly co-located with the chassis centroid, so the
+    # static-torque error from skipping a COM shift is negligible for the
+    # standstill check this is sized for.
+    extra_mass_kg = float(base_cfg.get("extra_mass_kg", 0.0) or 0.0)
+    if extra_mass_kg:
+        mass = mass + extra_mass_kg
 
     # base_link gets two kinds of chassis-fixed visuals per leg, both
     # placed at the leg's LegMountPointXX in body frame:
