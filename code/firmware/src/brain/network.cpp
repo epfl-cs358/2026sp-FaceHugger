@@ -166,13 +166,16 @@ void handleParsedMessage(uint8_t num, uint8_t * payload) {
             }
             break;
         }
-        case CMD_ACTION_SELECTION: {
-            if(doc.containsKey("a")){
-                int a = doc["a"];
-                if(a == INVERT_ROBOT){
-                    spinalCord.invertRobot();
-                }
+        case CMD_SET_AUTO_INVERT: {
+            // {T:6, enabled:<bool>} — toggles whether main.cpp's auto-flip loop
+            // is allowed to push the IMU latch into setInverted(). Missing or
+            // non-bool field is a no-op (firmware default is ON; this lets the
+            // app probe the current value without changing it).
+            if (!doc["enabled"].is<bool>()) {
+                Serial.println("[WARN] T:6 ignored: 'enabled' key missing or not bool");
+                break;
             }
+            spinalCord.setAutoInvertEnabled(doc["enabled"].as<bool>());
             break;
         }
         case CMD_SET_INVERT: {
@@ -257,6 +260,9 @@ void updateNetwork() {
         doc["pitch_deg"]   = imuPitchDeg();
         doc["roll_deg"]    = imuRollDeg();
         doc["upside_down"] = imuIsInverted();
+        // Auto-flip toggle (T:6 setter) mirrored back so the app's switch stays
+        // in sync with firmware state across reconnects.
+        doc["auto_invert_enabled"] = spinalCord.isAutoInvertEnabled();
 
         char buf[384];
         size_t n = serializeJson(doc, buf, sizeof(buf));

@@ -19,6 +19,7 @@ export const useRobotConnection = () => {
   const setClips = useRobotStore((s) => s.setClips);
   const setClipPlaying = useRobotStore((s) => s.setClipPlaying);
   const setOrientation = useRobotStore((s) => s.setOrientation);
+  const setAutoFlipEnabled = useRobotStore((s) => s.setAutoFlipEnabled);
 
   const chosenFsmState = useRobotStore((s) => s.chosenFsmState);
   const chosenGaitMode = useRobotStore((s) => s.chosenGaitMode);
@@ -63,6 +64,12 @@ export const useRobotConnection = () => {
               typeof status.roll_deg === 'number' ? status.roll_deg : null,
               typeof status.upside_down === 'boolean' ? status.upside_down : null,
             );
+            // T:6 auto-flip mirror — only push to the store when the firmware
+            // sends it. Older firmware omits the field; leave the local value
+            // alone in that case so the user's last choice persists.
+            if (typeof status.auto_invert_enabled === 'boolean') {
+              setAutoFlipEnabled(status.auto_invert_enabled);
+            }
             break;
           }
         }

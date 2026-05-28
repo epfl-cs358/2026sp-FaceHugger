@@ -36,6 +36,11 @@ type RobotStore = {
     rollDeg: number | null,
     upsideDown: boolean | null,
     setOrientation: (pitchDeg: number | null, rollDeg: number | null, upsideDown: boolean | null) => void,
+    // T:6 auto-flip toggle. Default true — matches the firmware default so the
+    // UI shows the correct state before the first T:10 reaches us. The hook
+    // overwrites this from each T:10 broadcast (auto_invert_enabled field).
+    autoFlipEnabled: boolean,
+    setAutoFlipEnabled: (value: boolean) => void,
 };
 
 export const useRobotStore = create<RobotStore>((set) => ({
@@ -69,4 +74,6 @@ export const useRobotStore = create<RobotStore>((set) => ({
     rollDeg: null,
     upsideDown: null,
     setOrientation: (pitchDeg, rollDeg, upsideDown) => set({ pitchDeg, rollDeg, upsideDown }),
+    autoFlipEnabled: true,
+    setAutoFlipEnabled: (autoFlipEnabled) => set({ autoFlipEnabled }),
 }));

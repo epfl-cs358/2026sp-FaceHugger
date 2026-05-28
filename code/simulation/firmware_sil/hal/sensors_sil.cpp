@@ -19,9 +19,11 @@
 #include "brain/sensors.h"
 #include <Arduino.h>  // brings in fh_sim::imu_upside_down etc.
 
-void initSensors() {
+void initSensors(SpinalCord& /*sc*/) {
     // No hardware to bring up — leave the fh_sim::* defaults (false / 0) and
-    // let the bridge start writing on the first tick.
+    // let the bridge start writing on the first tick. The SpinalCord arg is
+    // unused: the production sensors.cpp uses it to setInverted(true) when
+    // booting upside-down; in SIL the bridge owns the IMU latch path.
 }
 
 void tickImu() {

@@ -36,9 +36,16 @@ class SpinalCord{
         void stopClipPlayback();
         void setClipSmoothing(float alpha);   // T:11 runtime smoothing knob
         void setInverted(bool flag);
-        // Accessor for the auto-flip gate in main.cpp: only call setInverted()
-        // off the IMU when the FSM is idle, so an in-flight gait/clip is never
-        // mid-motion-interrupted.
+        // Auto-invert toggle: gates whether main.cpp is allowed to forward the
+        // IMU-derived `isInverted` boolean to setInverted(). Defaults ON so the
+        // robot "just works" when flipped; the app exposes a T:6 setter so the
+        // user can freeze invert state at its current value (e.g. while
+        // calibrating on its back). Toggling off does NOT clear isInverted —
+        // it stays at whatever it was, frozen, until either auto-invert is
+        // re-enabled or a manual T:9 (CMD_SET_INVERT) overrides it.
+        void setAutoInvertEnabled(bool enabled);
+        bool isAutoInvertEnabled() const { return autoInvertEnabled_; }
+        // Accessor used elsewhere (e.g. telemetry / diagnostics CSV).
         uint8_t getRobotState() const { return (uint8_t)robotState; }
         Face& getFace() { return face; }
 
@@ -87,6 +94,7 @@ class SpinalCord{
         float activeYaw;
         bool isMovingRequested;
         bool isInverted;
+        bool autoInvertEnabled_ = true;   // default ON; togglable via T:6
         uint32_t lastCommandMs;
         uint32_t lastInvertMs_;   // timestamp of the last accepted T:6 toggle (debounce)
         bool     hasInverted_;    // false until the first invert, so it is never debounced away

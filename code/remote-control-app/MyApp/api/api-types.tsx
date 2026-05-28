@@ -71,6 +71,7 @@ export type SystemStatus = PacketType & { //T10
     pitch_deg?: number, // signed pitch, deg; absent on pre-IMU firmware
     roll_deg?: number,  // signed roll, deg; absent on pre-IMU firmware
     upside_down?: boolean, // latched IMU upside-down state (hysteresis applied firmware-side)
+    auto_invert_enabled?: boolean, // T:6 setter mirror; absent on pre-toggle firmware
 }
 
 export type ClipInfo = {

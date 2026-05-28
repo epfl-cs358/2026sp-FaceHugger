@@ -8,7 +8,12 @@ enum CommandType {
     CMD_POSE = 3,
     CMD_CALIBRATE = 4,
     CMD_GAIT_MODE = 5,
-    CMD_ACTION_SELECTION = 6,
+    // Repurposed: was CMD_ACTION_SELECTION (manual "invert robot" button),
+    // dropped from the app once IMU auto-flip landed. Now sets whether the
+    // firmware is allowed to drive isInverted off the IMU latch.
+    //   Payload: {"T":6, "enabled": bool}
+    //   Missing/non-bool field → no-op.
+    CMD_SET_AUTO_INVERT = 6,
     CMD_PLAY_CLIP   = 7,
     CMD_LIST_CLIPS  = 8,
     CMD_SET_INVERT  = 9,

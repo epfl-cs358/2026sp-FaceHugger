@@ -24,10 +24,6 @@ The gait mode the robot is currently in
 - **CRAB (id 1):** Crab gait mode
 - **CRAWL (id 2):** Crawl gait mode
 
-## Action Mode Type
-The action mode type
-- **INVERT ROBOT (id 0):** Send a message to invert the robot 
-
 ## 📥 Dashboard -> Robot (Commands)
 
 ### 1. Manual Movement (`T: 1`)
@@ -97,12 +93,29 @@ Gait mode change
 | 'g' | int  | Gait mode ID | 0,1,2...|
 **Example:** '{"T": 5, "g": 1}' *(This is needed in order to avoid sending the gait each time with the T: 1 packets as well as have a separation of concern as to what the robot should do when changing gait)*
 
-### 6. Action phase ('T: 6')
+### 6. Set Auto-Invert (`T: 6`) — `CMD_SET_AUTO_INVERT`
 
-| Key | Type | Description | Range |
-| :-- | :---- | :----------------------- | :------------- |
-| 'a' | int  | Action ID | 0,1,2...|
-**Example:** '{"T": 6, "a": 1}'
+Sets whether the firmware is allowed to drive its `isInverted` flag off the
+MPU6050 upside-down latch (`tickImu`). When enabled, `main.cpp` forwards the
+hysteresed latch to `spinalCord.setInverted(...)` on every change. When
+disabled, the IMU loop is ignored and `isInverted` is frozen at its current
+value — useful, for example, while bench-calibrating the robot upside-down
+without making the firmware mirror gaits.
+
+Replaces the older `CMD_ACTION_SELECTION` carrier (manual "invert robot"
+button, removed from the app once IMU auto-flip landed).
+
+| Key       | Type | Description                                              |
+| :-------- | :--- | :------------------------------------------------------- |
+| `enabled` | bool | `true` = allow IMU to flip `isInverted`; `false` = freeze |
+
+Firmware default is **ON** (`true`). Missing or non-bool `enabled` key → silent
+no-op (lets a probe packet `{T:6}` be sent without changing state). The current
+value is mirrored back on every `T:10` broadcast as `auto_invert_enabled` so
+the UI can re-sync on reconnect.
+
+**Example:** `{"T": 6, "enabled": false}` *(freeze invert; the IMU will keep
+running and report `upside_down` in telemetry, but the FSM won't react)*
 
 ### 9. Set Invert Flag (`T: 9`)
 Set the robot's invert flag without triggering any servo movement or pose change.
@@ -181,9 +194,10 @@ No parameters required.
 | `e` | string or null | Error message observed (if any)         |
 | `pitch_deg`   | float | Signed pitch tilt in degrees (nose up = positive), MPU6050 accel-derived |
 | `roll_deg`    | float | Signed roll tilt in degrees (right-side-down = positive), MPU6050 accel-derived |
-| `upside_down` | bool  | Latched upside-down flag with hysteresis (flip > 150°, clear < 30°); the same boolean the firmware uses to auto-`setInverted` when idle |
+| `upside_down` | bool  | Latched upside-down flag with hysteresis (flip > 150°, clear < 30°); the same boolean the firmware uses to auto-`setInverted` |
+| `auto_invert_enabled` | bool | Current value of the `T:6` setter — `true` if the firmware is allowed to drive `isInverted` off the IMU. Mirrored so the app's toggle re-syncs on reconnect. |
 
-**Example:** `{"T": 10, "s": 0, "d": [200, 200, 200, 200, 150], "a": [0.6, 50, 90, 15], "g": 1, "pc": 0.7, "e": null, "pitch_deg": 1.2, "roll_deg": -0.5, "upside_down": false}`
+**Example:** `{"T": 10, "s": 0, "d": [200, 200, 200, 200, 150], "a": [0.6, 50, 90, 15], "g": 1, "pc": 0.7, "e": null, "pitch_deg": 1.2, "roll_deg": -0.5, "upside_down": false, "auto_invert_enabled": true}`
 **Note:** Broadcast every 100 ms (10 Hz) to every connected WebSocket client. The three IMU fields piggyback on this packet rather than running a separate stream — keeps connection bandwidth low.
 
 ---

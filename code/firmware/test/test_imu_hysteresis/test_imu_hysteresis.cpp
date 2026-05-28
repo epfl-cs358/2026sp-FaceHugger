@@ -1,5 +1,6 @@
 #include <unity.h>
 #include "../../src/brain/imu_hysteresis.h"
+#include "../../src/brain/boot_orientation.h"
 #include "../../src/shared/data.h"
 
 // Minimal stand-in for SpinalCord so we can verify the public getRobotState()
@@ -77,6 +78,60 @@ void test_get_robot_state_reflects_field(void) {
     TEST_ASSERT_EQUAL_UINT8(STATE_ACTION, sc.getRobotState());
 }
 
+// ---------------------------------------------------------------------------
+// Boot-orientation decision helper (sensors.cpp initSensors()).
+//
+// Pure helper: given the dot product of the current unit gravity vector
+// against the hardcoded UPRIGHT reference, classify the boot orientation.
+// Replaces the old "average 50 samples => use as upright reference" logic,
+// which only worked when the robot booted upright.
+//
+//   dot >  +0.7 → upright   (BOOT_UPRIGHT)
+//   dot <  -0.7 → inverted  (BOOT_INVERTED)
+//   otherwise   → unknown/on-its-side; default upright is safe
+//                                                    (BOOT_UPRIGHT)
+//
+// 0.7 ≈ cos(45°). A robot tilted further than 45° from upright is treated as
+// "not standing", and the safe default is to assume upright (caller does
+// nothing — isInverted stays at its default false).
+
+void test_boot_orientation_upright_dot_one(void) {
+    TEST_ASSERT_EQUAL_INT(BOOT_UPRIGHT, classifyBootOrientation(1.0f));
+}
+
+void test_boot_orientation_upright_above_threshold(void) {
+    // dot=0.8 → upright (above +0.7).
+    TEST_ASSERT_EQUAL_INT(BOOT_UPRIGHT, classifyBootOrientation(0.8f));
+}
+
+void test_boot_orientation_inverted_dot_minus_one(void) {
+    TEST_ASSERT_EQUAL_INT(BOOT_INVERTED, classifyBootOrientation(-1.0f));
+}
+
+void test_boot_orientation_inverted_below_threshold(void) {
+    // dot=-0.8 → inverted (below -0.7).
+    TEST_ASSERT_EQUAL_INT(BOOT_INVERTED, classifyBootOrientation(-0.8f));
+}
+
+void test_boot_orientation_dead_zone_defaults_upright(void) {
+    // Robot on its side (-0.7..+0.7) → default upright.
+    TEST_ASSERT_EQUAL_INT(BOOT_UPRIGHT, classifyBootOrientation(0.0f));
+    TEST_ASSERT_EQUAL_INT(BOOT_UPRIGHT, classifyBootOrientation(0.5f));
+    TEST_ASSERT_EQUAL_INT(BOOT_UPRIGHT, classifyBootOrientation(-0.5f));
+}
+
+void test_boot_orientation_dot_unit_helper_normalizes(void) {
+    // dotUpright(ax, ay, az) computes (normalized accel) · UPRIGHT_REF.
+    // UPRIGHT_REF = (0, 0, -1): gravity reads as -Z when robot is upright
+    // (chassis +Z points up; MPU senses gravity along -Z body axis).
+    // Accel (0, 0, -9.8) (upright) → unit (0,0,-1) → dot with (0,0,-1) = +1.
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 1.0f, dotUpright(0.0f, 0.0f, -9.8f));
+    // Accel (0, 0, +9.8) (upside-down) → dot = -1.
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, -1.0f, dotUpright(0.0f, 0.0f, 9.8f));
+    // Accel (9.8, 0, 0) (on side) → dot = 0.
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 0.0f, dotUpright(9.8f, 0.0f, 0.0f));
+}
+
 int main(int, char **) {
     UNITY_BEGIN();
     RUN_TEST(test_upright_below_threshold_stays_upright);
@@ -89,5 +144,11 @@ int main(int, char **) {
     RUN_TEST(test_inverted_at_180_stays_inverted);
     RUN_TEST(test_get_robot_state_returns_idle);
     RUN_TEST(test_get_robot_state_reflects_field);
+    RUN_TEST(test_boot_orientation_upright_dot_one);
+    RUN_TEST(test_boot_orientation_upright_above_threshold);
+    RUN_TEST(test_boot_orientation_inverted_dot_minus_one);
+    RUN_TEST(test_boot_orientation_inverted_below_threshold);
+    RUN_TEST(test_boot_orientation_dead_zone_defaults_upright);
+    RUN_TEST(test_boot_orientation_dot_unit_helper_normalizes);
     return UNITY_END();
 }

@@ -18,10 +18,12 @@ export const STOP                = {T: 1, dir: DirectionVector.STOP} as ManualMo
 export const TrotGaitPacket = {T: 5, g: GaitMode.TROT} as GaitIntegration;
 export const CrabGaitPacket = {T: 5, g: GaitMode.CRAB} as GaitIntegration;
 
-// T:6 (manual invert) was removed once the firmware switched to IMU auto-detect:
-// the MPU6050 + hysteresis owns invert state, so the app no longer needs to send
-// it. The robot still mirrors gaits/clips post-flip; main.cpp gates the latch on
-// STATE_IDLE so it won't fire mid-motion.
+// T:6 is now CMD_SET_AUTO_INVERT — sets whether the firmware is allowed to
+// drive `isInverted` off the MPU6050 latch. Default ON; toggling off freezes
+// `isInverted` at its current value. The firmware mirrors the value back on
+// the next T:10 broadcast so the UI stays in sync across reconnects.
+export const sendSetAutoInvert = (enabled: boolean) =>
+    sendCommand(JSON.stringify({ T: 6, enabled }));
 
 export const requestClipList = () =>
     sendCommand(JSON.stringify({ T: 8 }));

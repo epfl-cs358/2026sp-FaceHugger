@@ -4,7 +4,7 @@ import { IndividualSelectionButton } from "../components/IndividualSelectionButt
 import { AppText } from "../components/text/AppText";
 import { ClipList } from "../components/ClipList";
 import { useRobotStore } from "../store/robotStore";
-import { sendRestPose, sendNeutralStance, setClipSmoothing, stopMotion } from "../api/api-messages";
+import { sendRestPose, sendNeutralStance, sendSetAutoInvert, setClipSmoothing, stopMotion } from "../api/api-messages";
 import { formatPitch, formatRoll, formatOrientationState } from "../api/orientation";
 
 // Clip-playback smoothing presets (T:11 EMA alpha): snappy follows the raw
@@ -25,6 +25,8 @@ export function Actions() {
     const pitchDeg = useRobotStore((s) => s.pitchDeg);
     const rollDeg = useRobotStore((s) => s.rollDeg);
     const upsideDown = useRobotStore((s) => s.upsideDown);
+    const autoFlipEnabled = useRobotStore((s) => s.autoFlipEnabled);
+    const setAutoFlipEnabled = useRobotStore((s) => s.setAutoFlipEnabled);
 
     // Pager swaps pages by unmount, so the cleanup fires on blur. Send IDLE
     // so any in-flight firmware clip (T:7) stops when leaving the page, and
@@ -42,6 +44,15 @@ export function Actions() {
     // routes through applyInvert + the IMU latch).
     const onRestPose = () => sendRestPose();
     const onNeutralStance = () => sendNeutralStance();
+
+    // Auto-flip (IMU) toggle. The store update is optimistic so the UI feels
+    // responsive; the next T:10 frame will reconcile (firmware mirrors the
+    // setter back via auto_invert_enabled).
+    const onToggleAutoFlip = () => {
+        const next = !autoFlipEnabled;
+        setAutoFlipEnabled(next);
+        sendSetAutoInvert(next);
+    };
 
     return (
         <View style={styles.mainContainer}>
@@ -69,6 +80,13 @@ export function Actions() {
                     selected={false}
                     title="Neutral stance"
                     onClick={onNeutralStance}
+                />
+            </View>
+            <View style={styles.actionRow}>
+                <IndividualSelectionButton
+                    selected={autoFlipEnabled}
+                    title={autoFlipEnabled ? "Auto-flip (IMU): ON" : "Auto-flip (IMU): OFF"}
+                    onClick={onToggleAutoFlip}
                 />
             </View>
             <View style={styles.smoothingRow}>

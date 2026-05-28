@@ -663,6 +663,14 @@ void SpinalCord::setInverted(bool flag) {
     flipPoseInPlace(INVERT_EASE_MS);  // T:9: mirror the live pose in place
 }
 
+void SpinalCord::setAutoInvertEnabled(bool enabled) {
+    // No-op when unchanged; pose is NOT touched either way. Disabling freezes
+    // isInverted at its current value (main.cpp's loop will simply skip the
+    // setInverted() call). Enabling re-arms the gate; the IMU latch will catch
+    // up on the next state-change loop tick.
+    autoInvertEnabled_ = enabled;
+}
+
 void SpinalCord::invertRobot() {
     // Debounce a duplicated/retried T:6 so it can't double-flip (the first invert
     // is always honoured; only a SECOND within the window is dropped).

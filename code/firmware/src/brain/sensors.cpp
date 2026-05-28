@@ -1,5 +1,6 @@
 #include "sensors.h"
 #include "imu_hysteresis.h"
+#include "boot_orientation.h"
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -14,7 +15,9 @@
 static Adafruit_MPU6050 s_mpu;
 static bool   s_ready          = false;
 static bool   s_inverted       = false;
-static float  s_ref[3]         = {0.0f, 0.0f, 1.0f};   // unit gravity at boot
+// Hardcoded "world-up" reference in the IMU's body frame. See boot_orientation.h
+// for the assumption (chip mounted Z-up; gravity pulls along -Z when upright).
+static const float s_ref[3]    = {UPRIGHT_REF_X, UPRIGHT_REF_Y, UPRIGHT_REF_Z};
 static float  s_tilt_deg       = 0.0f;
 static float  s_pitch_deg      = 0.0f;
 static float  s_roll_deg       = 0.0f;
@@ -33,7 +36,7 @@ static bool readAccelUnit(float out[3]) {
     return true;
 }
 
-void initSensors() {
+void initSensors(SpinalCord& sc) {
     Serial.println("Sensors: Initializing MPU6050 on shared I2C bus...");
     Wire.begin();
     if (!s_mpu.begin(0x68)) {
@@ -47,31 +50,27 @@ void initSensors() {
     s_mpu.setGyroRange(MPU6050_RANGE_250_DEG);
     s_mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
 
-    // Average ~50 samples to seed the upright reference. Robot is expected to
-    // be still at power-up; a noisy seed just biases the dot product by a few
-    // mdeg and never matters for the 150 / 30 thresholds.
-    float sum[3] = {0.0f, 0.0f, 0.0f};
-    int   ok     = 0;
-    for (int i = 0; i < 50; ++i) {
-        float u[3];
-        if (readAccelUnit(u)) {
-            sum[0] += u[0]; sum[1] += u[1]; sum[2] += u[2];
-            ++ok;
-        }
-        delay(5);
-    }
-    if (ok == 0) {
-        Serial.println("[WARN] MPU6050 present but no samples — IMU disabled.");
+    // Boot-orientation: read ONE accel sample (after a brief settle), classify
+    // it against the hardcoded UPRIGHT_REF using the pure host-tested helper,
+    // and arm setInverted(true) if the robot booted upside-down — before the
+    // first servo writes leave the rest pose. No more averaging-50-samples-
+    // as-the-reference; that scheme silently assumed the robot was upright.
+    delay(50);
+    float u[3];
+    if (!readAccelUnit(u)) {
+        Serial.println("[WARN] MPU6050 present but no sample — IMU disabled.");
         s_ready = false;
         return;
     }
-    float n = sqrtf(sum[0]*sum[0] + sum[1]*sum[1] + sum[2]*sum[2]);
-    s_ref[0] = sum[0] / n;
-    s_ref[1] = sum[1] / n;
-    s_ref[2] = sum[2] / n;
+    float dot = u[0]*s_ref[0] + u[1]*s_ref[1] + u[2]*s_ref[2];
+    BootOrientation boot = classifyBootOrientation(dot);
+    if (boot == BOOT_INVERTED) {
+        Serial.printf("Sensors: boot orientation = INVERTED (dot=%.2f). Arming setInverted(true).\n", dot);
+        sc.setInverted(true);
+    } else {
+        Serial.printf("Sensors: boot orientation = UPRIGHT (dot=%.2f).\n", dot);
+    }
     s_ready  = true;
-    Serial.printf("Sensors: IMU ready. Upright ref = (%.3f, %.3f, %.3f)\n",
-                  s_ref[0], s_ref[1], s_ref[2]);
 }
 
 void tickImu() {
