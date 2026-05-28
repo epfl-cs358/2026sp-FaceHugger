@@ -7,13 +7,13 @@ FaceHugger was built by six Computer Science students at EPFL for the *Making In
 
 <div class="grid cards" markdown>
 
--   __Name__
+-   Ferdinand Chiu
 
     ---
 
     **Worked on:** body and chassis 3D design, and assembly.
 
-    [GitHub](#) · [LinkedIn](#)
+    [GitHub](https://github.com/FerdinandGomerChiu) · [LinkedIn](https://www.linkedin.com/in/ferdinand-chiu-ab99242b3/)
 
 -   __Name__
 
