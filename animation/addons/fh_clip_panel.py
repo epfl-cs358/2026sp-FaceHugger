@@ -48,9 +48,11 @@ bl_info = {
 
 import csv
 import datetime
+import importlib
 import json
 import math
 import os
+import sys
 from pathlib import Path
 
 import bpy
@@ -3003,6 +3005,31 @@ class FH_OT_open_app_dir(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class FH_OT_reload_panel(bpy.types.Operator):
+    """Re-read fh_clip_panel.py from disk and re-register the add-on
+    in-place. Lets animators iterate on the add-on source without
+    closing and relaunching Blender."""
+
+    bl_idname = "fh.reload_panel"
+    bl_label = "Reload Add-on"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        mod = sys.modules.get("fh_clip_panel")
+        if mod is not None:
+            try:
+                mod.unregister()
+            except Exception:
+                # Best-effort: a partially-registered state shouldn't block
+                # the reload — the importlib.reload() below replaces the
+                # module object anyway.
+                pass
+            mod = importlib.reload(mod)
+            mod.register()
+        self.report({"INFO"}, "FaceHugger add-on reloaded")
+        return {"FINISHED"}
+
+
 # ---------------------------------------------------------------------------
 # Panel
 # ---------------------------------------------------------------------------
@@ -3026,6 +3053,10 @@ class FH_PT_root(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         active = active_clip()
+
+        # Reload-from-disk button — sits at the top as the obvious
+        # "I just edited fh_clip_panel.py, pick up my changes" affordance.
+        layout.operator(FH_OT_reload_panel.bl_idname, icon="FILE_REFRESH")
 
         header = layout.box()
         header.label(text=f"Active clip: {active or '<none>'}", icon="ACTION")
@@ -3385,6 +3416,7 @@ CLASSES = (
     FH_OT_open_export_dir,
     FH_OT_open_firmware_dir,
     FH_OT_open_app_dir,
+    FH_OT_reload_panel,
     FH_OT_toggle_preview,
     FH_OT_sync_frame_range,
     # Panels: parent MUST be registered before its children so the
