@@ -137,6 +137,12 @@ out[j] = lo.a[j] + (hi.a[j] - lo.a[j]) * f;
 
 Clip data is pre-scaled to 2/3 magnitude in the Blender exporter and baked into the frame data. The firmware reads the scaled values directly and never re-scales.
 
+### URDF clip-clamp envelope
+
+Clips authored in Blender used to occasionally overshoot what the physical leg can do — a thigh keyframe a few degrees past its mechanical stop made it onto the wire and the servo would stall against the joint. Inside `tickClip`, every per-frame pose now passes through `clampClipServos(legId, ...)` (`motion_math.cpp`) before reaching `applyServos`. The envelope is derived from the URDF joint limits (shoulder tight side ±52°, thigh ±60°, knee ±90°) and centred on each joint's per-leg `CALIB` so a post-calibration NEUTRAL sits on the window edge instead of being clipped by a uniform `[30, 150]`. The half-widths are macros in `shared/config.h` (`HIP_CLAMP_FROM_NINETY`, `THIGH_CLAMP_FROM_CALIB`, `KNEE_CLAMP_FROM_CALIB`).
+
+The clamp applies on the clip path only — gait and calibration output stay bit-for-bit. When a frame requests an angle outside the envelope, the underlying `Servo::setServoAngle` also emits an `[OOR] servo <ch> requested <deg>` line on the serial monitor (and into the SIL telemetry's `pre_clamp_deg`), so the boundary failure is visible instead of silent.
+
 ### Return-to-stand
 
 When the clip reaches its last frame, the player triggers a non-blocking ease back to NEUTRAL over 500 ms:
@@ -167,6 +173,12 @@ The point of the single choke is that the upside-down pitch mirror is applied ce
 The choke point above is *where* the mirror happens; `setInverted` is *what* flips it. When the IMU latches upside-down (or the user sends T:9), `setInverted` flips the `isInverted` flag and calls `flipPoseInPlace(INVERT_EASE_MS)`, which reads each leg's current servo angles and eases them to their mirrored values (`applyInvert(legId, current, true)`) over ~300 ms. The next motion tick naturally produces the mirrored pose anyway — every gait/clip frame already runs through `applyServos` — so `flipPoseInPlace` exists for the *quiet* states: standing, idle, holding a clip's end frame. Without it, an inverted-while-standing robot would just sit in the upright pose until the user sent the next move.
 
 The edge-triggered gate that decides when to call `setInverted` from the IMU lives on `SpinalCord::tickAutoInvert(bool imuInverted)`. It uses an instance-member latch (`prevImuInverted_`) so the call fires once per flip, respects a user-controlled `autoInvertEnabled_` flag (T:6), and is invoked from both `main.cpp::loop()` and the SIL's `bindings.cpp::tick()` so hardware and simulation behave identically. See [Orientation and auto-flip](orientation.md) for the full IMU pipeline.
+
+## Eased pose transitions (T:2 `dur_ms`)
+
+Snapping a four-legged robot from a clip's end pose to the calibration-flat REST is jarring and can overshoot, especially if the user is holding the chassis or another motion is mid-ease. The `CMD_SET_STATE` (T:2) command therefore accepts an optional `dur_ms` field for the pose states `STATE_REST` and `STATE_STAND`: when present and > 0, the firmware eases every joint to its target over that many milliseconds instead of snapping. Non-pose states (WALK, ACTION, IDLE) ignore the field.
+
+The handler in `brain/network.cpp` runs the wire value through `clampPoseEaseMs` so any value outside `[0, POSE_EASE_MS_MAX]` (5000 ms) is clamped — a buggy or malicious app cannot park the robot in an arbitrarily long ease during which the user can't take control back. Inside `SpinalCord`, `relax(ms)` and `stand(ms)` use `setJointAnglesTimed` / `easeToNeutral(ms)` for the timed path. `easeToNeutral` itself routes through `applyServos`, so an inverted robot eases to the *inverted* neutral instead of un-inverting halfway through the move.
 
 ## Motion architecture summary
 

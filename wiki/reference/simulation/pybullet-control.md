@@ -31,6 +31,14 @@ Because the SIL compiles `shared/config.h` directly, it picks up the same per-se
 
 The rebuild happens **at launch**: a long-running process loads `fh_sim` once and a compiled extension is not hot-reloaded. So after re-exporting or re-flashing clips you must **restart** a running `sim` for the new clips to appear; otherwise the old in-memory module keeps serving the previous clip set.
 
+### IMU emulation in PyBullet
+
+The host has no MPU6050, but the firmware's auto-flip path is part of what we want to verify in the sim. So the bridge synthesises an IMU sample from PyBullet's body orientation each step. `update_imu_from_pybullet` (`firmware_sil/sil_bridge.py`) reads the base quaternion, derives the body-frame gravity vector, applies the same 150°/30° hysteresis the firmware uses (`imu_hysteresis_step` mirrors `imu_hysteresis.h` exactly, including the strict inequalities), computes pitch and roll with the firmware's accel-only formula (`pitch = atan2(ay, sqrt(ax² + az²))`, `roll = atan2(-ax, az)`), and pushes all three through `fc.set_imu_upside_down` / `set_imu_pitch_deg` / `set_imu_roll_deg` so `imuIsInverted()`, `imuPitchDeg()`, and `imuRollDeg()` return the same values the chip would have read on hardware. The latched state is threaded across ticks by the caller (`ws_sim.py::step` and the gait/clip drivers in `sil_bridge.py`).
+
+With `--gui` you can grab the chassis and roll it past 150° to see the auto-flip latch fire (Ctrl-drag rotates the selected body in PyBullet's window). The robot's pose mirrors in place, just like on hardware.
+
+The crucial sequencing detail lives in `bindings.cpp::tick`: it calls `spinalCord.tickAutoInvert(imuIsInverted())` *before* `spinalCord.update()`, mirroring the order `main.cpp::loop()` runs on the ESP32. Earlier the gate lived inline in `main.cpp::loop()` and the SIL `tick` skipped it entirely, so the simulator saw the IMU but never auto-flipped from it; moving the gate onto `SpinalCord` and calling it from both entry points fixed that and is what makes the two paths behave identically. See [Firmware → Orientation and auto-flip](../firmware/orientation.md).
+
 ## Stand, gaits, and clips
 
 - **Stand** (no mode flag): the robot holds the `NEUTRAL[]` pose. Quasi-static; the per-joint hold torque is small (peak ≈ 0.24 N·m, ~8 % of stall).
