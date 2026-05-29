@@ -42,5 +42,14 @@ class WebSocketsServer {
     void loop() {}
     void sendTXT(uint8_t, const char* payload) { fh_sim::ws_last_txt = payload; }
     void sendTXT(uint8_t, const std::string& payload) { fh_sim::ws_last_txt = payload; }
+    // broadcastTXT — used by network.cpp's T:10 telemetry broadcast. The Python
+    // ws_sim layer publishes telemetry differently; here we just capture the
+    // payload (overwriting ws_last_txt) so the firmware's broadcast call
+    // compiles and tests can introspect what it would have sent.
+    void broadcastTXT(const char* payload, size_t n) {
+        fh_sim::ws_last_txt.assign(payload, n);
+    }
+    void broadcastTXT(const char* payload) { fh_sim::ws_last_txt = payload; }
+    void broadcastTXT(const std::string& payload) { fh_sim::ws_last_txt = payload; }
     IPAddress remoteIP(uint8_t) { return IPAddress(); }
 };

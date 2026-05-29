@@ -6,8 +6,16 @@
 #include "shared/config.h"
 #include "../nervous_system/spinal_cord.h"
 #include "../nervous_system/movements.h"
+#include "../nervous_system/motion_math.h"   // clampPoseEaseMs (T:2 dur_ms)
 #include "clip_list_serializer.h"
+#include "sensors.h"                          // IMU pitch/roll/upside_down for T:10
 #include "../nervous_system/clips_all.h"
+
+// T:10 telemetry broadcast cadence. 10 Hz keeps the connection cost low — the
+// IMU fields add ~50 bytes per packet, negligible at this rate. Bumping this
+// frequency is the cheapest way to overload the connection; don't, per the
+// "be careful we don't overload the connection" constraint.
+static constexpr uint32_t TELEMETRY_INTERVAL_MS = 100;
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 extern SpinalCord spinalCord;
@@ -80,13 +88,34 @@ void handleParsedMessage(uint8_t num, uint8_t * payload) {
             if(doc.containsKey("s")){
                 int newState = doc["s"];
                 if(isValidStateCommand(newState)){
+                    // Optional `dur_ms`: when present and > 0 on a pose state
+                    // (REST/STAND), the firmware eases the pose over that many
+                    // ms instead of snapping. Clamped to [0, POSE_EASE_MS_MAX]
+                    // so a bad value can't park the robot in a multi-minute
+                    // ease. Non-pose states ignore `dur_ms`.
+                    uint32_t ease = doc["dur_ms"].is<uint32_t>()
+                        ? clampPoseEaseMs(doc["dur_ms"].as<uint32_t>()) : 0u;
                     switch(newState){
-                        case STATE_IDLE: spinalCord.rest(); break;
+                        case STATE_IDLE:
+                            spinalCord.rest();
+                            // Also clear any in-flight clip loop. The FSM
+                            // transition alone left clipLoop_ + clipState_.phase
+                            // alive; the app's page-blur stopMotion() would ease
+                            // to neutral but the loop would resume on the next
+                            // re-entry into STATE_ACTION.
+                            spinalCord.stopClipPlayback();
+                            break;
                         case STATE_WALK: spinalCord.walk(); break;
                         case STATE_ACTION: spinalCord.wallFlip(); break;
-                        case STATE_REST: spinalCord.relax(); break;   // flat / all-90 calibration
-                        case STATE_STAND: spinalCord.stand(); break;  // standing / neutral
-                        default: break;                               // FAILSAFE: no-op (unchanged)
+                        case STATE_REST:
+                            if (ease > 0) spinalCord.relax(ease);
+                            else          spinalCord.relax();   // flat / all-90 calibration
+                            break;
+                        case STATE_STAND:
+                            if (ease > 0) spinalCord.stand(ease);
+                            else          spinalCord.stand();   // standing / neutral
+                            break;
+                        default: break;                          // FAILSAFE: no-op (unchanged)
                     }
                 }
             }
@@ -137,13 +166,16 @@ void handleParsedMessage(uint8_t num, uint8_t * payload) {
             }
             break;
         }
-        case CMD_ACTION_SELECTION: {
-            if(doc.containsKey("a")){
-                int a = doc["a"];
-                if(a == INVERT_ROBOT){
-                    spinalCord.invertRobot();
-                }
+        case CMD_SET_AUTO_INVERT: {
+            // {T:6, enabled:<bool>} — toggles whether main.cpp's auto-flip loop
+            // is allowed to push the IMU latch into setInverted(). Missing or
+            // non-bool field is a no-op (firmware default is ON; this lets the
+            // app probe the current value without changing it).
+            if (!doc["enabled"].is<bool>()) {
+                Serial.println("[WARN] T:6 ignored: 'enabled' key missing or not bool");
+                break;
             }
+            spinalCord.setAutoInvertEnabled(doc["enabled"].as<bool>());
             break;
         }
         case CMD_SET_INVERT: {
@@ -201,4 +233,41 @@ void handleParsedMessage(uint8_t num, uint8_t * payload) {
 
 void updateNetwork() {
     webSocket.loop();
+
+    // T:10 telemetry broadcast at TELEMETRY_INTERVAL_MS (10 Hz). Single shared
+    // packet sent to every connected client via broadcastTXT — no fan-out cost.
+    // The three IMU fields (pitch_deg, roll_deg, upside_down) piggyback on the
+    // existing payload rather than a separate stream, to keep the connection
+    // budget low.
+    static uint32_t lastTelemetryMs = 0;
+    uint32_t now = millis();
+    if (now - lastTelemetryMs >= TELEMETRY_INTERVAL_MS) {
+        lastTelemetryMs = now;
+
+        JsonDocument doc;
+        doc["T"] = CMD_TELEMETRY;            // 10
+        doc["s"] = (int)spinalCord.getRobotState();
+        doc["g"] = (int)spinalCord.currentGait();
+        // ToF + AMU are still stubs upstream; keep their slots so the on-wire
+        // shape matches API_SPEC.md while the real wiring lands.
+        JsonArray d = doc["d"].to<JsonArray>();
+        for (int i = 0; i < 5; ++i) d.add(getDistance());
+        JsonArray a = doc["a"].to<JsonArray>();
+        a.add(0.0f); a.add(0.0f); a.add(0.0f); a.add(0.0f);
+        doc["pc"] = 0.0f;
+        doc["e"]  = nullptr;
+        // IMU extensions (this PR):
+        doc["pitch_deg"]   = imuPitchDeg();
+        doc["roll_deg"]    = imuRollDeg();
+        doc["upside_down"] = imuIsInverted();
+        // Auto-flip toggle (T:6 setter) mirrored back so the app's switch stays
+        // in sync with firmware state across reconnects.
+        doc["auto_invert_enabled"] = spinalCord.isAutoInvertEnabled();
+
+        char buf[384];
+        size_t n = serializeJson(doc, buf, sizeof(buf));
+        if (n > 0 && n < sizeof(buf)) {
+            webSocket.broadcastTXT(buf, n);
+        }
+    }
 }

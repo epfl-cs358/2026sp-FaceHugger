@@ -1,45 +1,108 @@
 #include <unity.h>
 #include "../../src/nervous_system/motion_math.h"
+#include "../../src/shared/config.h"
 
-// clampClipServos(): conservative per-joint servo clamp applied ONLY on the clip
-// playback path (temporary safeguard, see tickClip). servo 90 = outward for every
-// leg (confirmed on hardware via the flat pose). Each leg's URDF shoulder range is
-// asymmetric (one side 52°, the other 90°), so 90±52 = [38,142] is guaranteed
-// inside EVERY leg's reach regardless of which side — no leg can be driven past its
-// mechanical stop. Thigh = 90±60 = [30,150]; knee = 90±90 = [0,180].
+// clampClipServos(legId, s): conservative per-joint servo clamp applied ONLY on
+// the clip playback path (temporary safeguard, see tickClip). The envelope is
+// centered on each joint's per-leg CALIB (the servo angle that = mechanical zero
+// post-calibration), sized from the URDF joint limits:
+//   hip   uniform [90 - HIP_CLAMP_FROM_NINETY, 90 + HIP_CLAMP_FROM_NINETY]
+//         = [38, 142] — tight side of every URDF shoulder, safe on every leg.
+//   thigh [CALIB_THIGH_BY_LEG[leg] ± THIGH_CLAMP_FROM_CALIB] (URDF ±60° symmetric)
+//   knee  [CALIB_KNEE_BY_LEG[leg]  ± KNEE_CLAMP_FROM_CALIB ] (URDF ±90° symmetric)
 static const double TOL = 1e-9;
 
 void setUp(void) {}
 void tearDown(void) {}
 
+// ─── Hip clamp (uniform across legs) ────────────────────────────────────────
+
 void test_in_range_passthrough(void) {
-    ServoTriple s = clampClipServos({90.0, 90.0, 90.0});
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 90.0, s.hip);
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 90.0, s.thigh);
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 90.0, s.knee);
+    // Mid-range (90,90,90) sits inside every leg's thigh/knee window since
+    // each CALIB is within ±60/±90 of 90. Pass-through expected.
+    for (uint8_t leg = 0; leg < 4; ++leg) {
+        ServoTriple s = clampClipServos(leg, {90.0, 90.0, 90.0});
+        TEST_ASSERT_DOUBLE_WITHIN(TOL, 90.0, s.hip);
+        TEST_ASSERT_DOUBLE_WITHIN(TOL, 90.0, s.thigh);
+        TEST_ASSERT_DOUBLE_WITHIN(TOL, 90.0, s.knee);
+    }
 }
 
-void test_shoulder_clamped_to_38_142(void) {
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 142.0, clampClipServos({187.5, 90, 90}).hip);  // the BL railing case
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 38.0,  clampClipServos({ 15.0, 90, 90}).hip);  // FL jammed-low case
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 120.0, clampClipServos({120.0, 90, 90}).hip);  // inside -> untouched
+void test_hip_clamped_to_38_142_every_leg(void) {
+    // Hip envelope is uniform: 90 ± HIP_CLAMP_FROM_NINETY. Verify on every leg.
+    for (uint8_t leg = 0; leg < 4; ++leg) {
+        TEST_ASSERT_DOUBLE_WITHIN(TOL, 142.0, clampClipServos(leg, {187.5, 90, 90}).hip);
+        TEST_ASSERT_DOUBLE_WITHIN(TOL,  38.0, clampClipServos(leg, { 15.0, 90, 90}).hip);
+        TEST_ASSERT_DOUBLE_WITHIN(TOL, 120.0, clampClipServos(leg, {120.0, 90, 90}).hip);
+    }
 }
 
-void test_thigh_clamped_to_30_150(void) {
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 150.0, clampClipServos({90, 175.0, 90}).thigh);
-    TEST_ASSERT_DOUBLE_WITHIN(TOL,  30.0, clampClipServos({90,  10.0, 90}).thigh);
+// ─── Thigh clamp (per-leg, CALIB ± THIGH_CLAMP_FROM_CALIB) ──────────────────
+
+void test_thigh_FR_window(void) {
+    // CALIB_FR_THIGH = 84 → window [24, 144]. 24 is the lower edge.
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 24.0, clampClipServos(0, {90, 24.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 24.0, clampClipServos(0, {90, 23.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 144.0, clampClipServos(0, {90, 144.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 144.0, clampClipServos(0, {90, 145.0, 90}).thigh);
 }
 
-void test_knee_full_range(void) {
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 0.0,   clampClipServos({90, 90,   0.0}).knee);
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 180.0, clampClipServos({90, 90, 180.0}).knee);
+void test_thigh_FL_neutral_27_no_longer_clipped(void) {
+    // This is the case that motivated the change. CALIB_FL_THIGH = 87 →
+    // window [27, 147]. FL NEUTRAL = 27 (servo) is exactly the lower edge:
+    // under the old uniform [30, 150] this was clipped to 30; the clip-path
+    // FL thigh now sits on its true rest pose.
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 27.0, clampClipServos(1, {90, 27.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 27.0, clampClipServos(1, {90, 26.0, 90}).thigh);
+}
+
+void test_thigh_BR_window(void) {
+    // CALIB_BR_THIGH = 103 → window [43, 163]. 163 is the upper edge.
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 163.0, clampClipServos(2, {90, 163.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 163.0, clampClipServos(2, {90, 164.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL,  43.0, clampClipServos(2, {90,  43.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL,  43.0, clampClipServos(2, {90,  42.0, 90}).thigh);
+}
+
+void test_thigh_BL_window(void) {
+    // CALIB_BL_THIGH = 84 → window [24, 144].
+    TEST_ASSERT_DOUBLE_WITHIN(TOL,  24.0, clampClipServos(3, {90,  24.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 144.0, clampClipServos(3, {90, 144.0, 90}).thigh);
+}
+
+// ─── Knee clamp (per-leg, CALIB ± KNEE_CLAMP_FROM_CALIB) ────────────────────
+
+void test_knee_FR_window(void) {
+    // CALIB_FR_KNEE = 95 → window [5, 180] (clipped against 180 hard ceiling — see note).
+    // Note: KNEE_CLAMP_FROM_CALIB = 90 is symmetric, so the upper bound is 185
+    // for FR, but servos saturate at 180. The clamp implementation uses the
+    // CALIB-relative window directly; values above 180 would still be returned
+    // up to CALIB+90. We test the window boundaries themselves.
+    TEST_ASSERT_DOUBLE_WITHIN(TOL,   5.0, clampClipServos(0, {90, 90,   5.0}).knee);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL,   5.0, clampClipServos(0, {90, 90,   4.0}).knee);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 185.0, clampClipServos(0, {90, 90, 186.0}).knee);
+}
+
+void test_knee_FL_window(void) {
+    // CALIB_FL_KNEE = 82 → window [-8, 172]. The lower bound is below 0 since
+    // the URDF window is wider than the servo's [0,180] on the negative side.
+    // The clamp itself is CALIB-relative; if a clip emits a negative servo
+    // angle below -8 it is bumped up to -8. Downstream the servo write rejects
+    // anything < 0 anyway. We test the window itself.
+    TEST_ASSERT_DOUBLE_WITHIN(TOL,  -8.0, clampClipServos(1, {90, 90,  -9.0}).knee);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 172.0, clampClipServos(1, {90, 90, 172.0}).knee);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 172.0, clampClipServos(1, {90, 90, 173.0}).knee);
 }
 
 int main(int, char **) {
     UNITY_BEGIN();
     RUN_TEST(test_in_range_passthrough);
-    RUN_TEST(test_shoulder_clamped_to_38_142);
-    RUN_TEST(test_thigh_clamped_to_30_150);
-    RUN_TEST(test_knee_full_range);
+    RUN_TEST(test_hip_clamped_to_38_142_every_leg);
+    RUN_TEST(test_thigh_FR_window);
+    RUN_TEST(test_thigh_FL_neutral_27_no_longer_clipped);
+    RUN_TEST(test_thigh_BR_window);
+    RUN_TEST(test_thigh_BL_window);
+    RUN_TEST(test_knee_FR_window);
+    RUN_TEST(test_knee_FL_window);
     return UNITY_END();
 }

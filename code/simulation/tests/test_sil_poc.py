@@ -89,7 +89,8 @@ def test_sil_matches_python_report_at_frame0():
     port = []
     for leg in (LEG_FR, LEG_FL, LEG_RR, LEG_RL):
         s = clamp_clip_servos(
-            translate_to_servo(leg, a[leg * 3], a[leg * 3 + 1], a[leg * 3 + 2])
+            leg,
+            translate_to_servo(leg, a[leg * 3], a[leg * 3 + 1], a[leg * 3 + 2]),
         )
         port += [s.hip, s.thigh, s.knee]
 

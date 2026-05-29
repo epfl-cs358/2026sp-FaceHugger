@@ -12,14 +12,23 @@ typedef struct { double hip; double thigh; double knee; } ServoTriple;
  * NOT a clamp and NOT IK. legId is the firmware LegId (0=FR,1=FL,2=RR,3=RL). */
 ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn);
 
-/* TEMPORARY conservative servo clamp for the CLIP PLAYBACK path only (see
- * tickClip). servo 90 = outward for every leg; each leg's URDF shoulder range is
- * asymmetric (52° one side, 90° the other), so 90±52 = [38,142] is inside EVERY
- * leg's reach regardless of side — a clip can never drive a shoulder past its
- * mechanical stop. Thigh 90±60 = [30,150]; knee 90±90 = [0,180]. Conservative on
- * each leg's wide (90°) side; the precise per-leg window is the future 3c work.
+/* Per-leg, CALIB-aware servo clamp for the CLIP PLAYBACK path only (see
+ * tickClip). The envelope is derived from the URDF joint limits and centered
+ * on each joint's per-leg CALIB (post-calibration servo zero):
+ *   hip   uniform 90 ± HIP_CLAMP_FROM_NINETY  (tight side of every URDF
+ *         shoulder; safe on every leg regardless of asymmetry).
+ *   thigh CALIB_THIGH_BY_LEG[legId] ± THIGH_CLAMP_FROM_CALIB  (URDF ±60°).
+ *   knee  CALIB_KNEE_BY_LEG[legId]  ± KNEE_CLAMP_FROM_CALIB   (URDF ±90°).
+ * Per-leg + CALIB-relative so post-CALIB NEUTRALs (e.g. FL thigh = 27 = CALIB_FL_THIGH - 60)
+ * sit on the window edge instead of being clipped by a uniform [30, 150].
  * NOT applied to gaits or T:4 — gait output stays bit-for-bit. */
-ServoTriple clampClipServos(ServoTriple s);
+ServoTriple clampClipServos(uint8_t legId, ServoTriple s);
+
+/* Clamp a wire-supplied T:2 `dur_ms` (pose-button ease window) into the safe
+ * range [0, POSE_EASE_MS_MAX]. 0 is "snap" (handler keeps existing instant
+ * path); any value above the ceiling is capped. Pulled out as a pure helper
+ * so it is unit-tested on the host (network.cpp is not native-buildable). */
+uint32_t clampPoseEaseMs(uint32_t dur_ms);
 
 /* Smoothstep ease-in-out fraction for a timed servo move (Servo::tickEase).
  * smoothstep(t) = t*t*(3-2t): slow at both ends, fast through the middle, and

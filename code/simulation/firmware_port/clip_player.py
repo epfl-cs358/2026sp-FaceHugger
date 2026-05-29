@@ -57,7 +57,7 @@ def frame_to_joint_targets(a: list[float]) -> dict[str, float]:
         sh = a[leg_id * 3]
         th = a[leg_id * 3 + 1]
         kn = a[leg_id * 3 + 2]
-        servo = clamp_clip_servos(translate_to_servo(leg_id, sh, th, kn))
+        servo = clamp_clip_servos(leg_id, translate_to_servo(leg_id, sh, th, kn))
         urdf_name = LEG_ID_TO_SIM_NAME[leg_id]
         axis = LEG_ID_TO_URDF_AXIS_SIGN[leg_id]  # see docstring: link1 needs it too
         targets[f"{urdf_name}_link1_joint"] = axis * servo_to_radians(servo.hip)

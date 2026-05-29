@@ -48,9 +48,11 @@ bl_info = {
 
 import csv
 import datetime
+import importlib
 import json
 import math
 import os
+import sys
 from pathlib import Path
 
 import bpy
@@ -846,11 +848,11 @@ def _seeded_pose(name):
 # sign conventions did not match the rig.
 #
 # The rig (URDF) is the kinematic source of truth (CLAUDE.md). N in
-# convention.json is in the rig's joint-angle space: Convention A makes
-# every leg uniform on bone-local Z, and Part 2's `scaled = N+(raw-N)*s`
-# means raw == N at the neutral anchor (the per-leg translateToServo
-# offsets cancel there). So the correct foot target is simply "where the
-# IK chain tip ends up when the 12 joint bones are posed at N".
+# convention.json is in the rig's joint-angle space: every leg is uniform
+# on bone-local Z, and Part 2's `scaled = N+(raw-N)*s` means raw == N at
+# the neutral anchor (the per-leg translateToServo offsets cancel there).
+# So the correct foot target is simply "where the IK chain tip ends up
+# when the 12 joint bones are posed at N".
 #
 # The IK constraint on `*_link3` uses use_tail=True targeting
 # foot_ik (== foot_target), so the IK chain tip IS the link3 bone tail.
@@ -2462,15 +2464,21 @@ def _c_sym(clip_name):
 def to_clips_header(clips, convention, write=True, out_dir=None):
     """Bundle every clip into one clips_all.h + a clips_manifest.json.
 
-    `clips` is an ORDERED dict {clip_name: baked_rows} (insertion order =
-    clip id = FH_CLIPS[] index). Each clip's a[12] is math-space degrees,
-    scale-from-NEUTRAL applied ONCE, in firmware LegId order (FR,FL,RR,RL)
-    × (shoulder, thigh, knee). Firmware applies ONLY translateToServo at
-    runtime — see plan §0 / onboard-clip-player-design.md §5.
+    `clips` is a dict {clip_name: baked_rows}. Clips are emitted **sorted
+    alphabetically by name**: index in the sorted list = clip id =
+    FH_CLIPS[] index. This is enforced inside the emitter so the on-flash
+    clip ids stay stable across exports regardless of the caller's dict
+    insertion order (Task #7 — guards the app's flashed-clip list and any
+    persisted user pinning from silent shuffles).
+
+    Each clip's a[12] is math-space degrees, scale-from-NEUTRAL applied
+    ONCE, in firmware LegId order (FR,FL,RR,RL) × (shoulder, thigh, knee).
+    Firmware applies ONLY translateToServo at runtime — see plan §0 /
+    onboard-clip-player-design.md §5.
 
     Returns (header_str, manifest_json_str). When write=True also writes
     them to out_dir (default animation/exported_clips/)."""
-    names = list(clips.keys())
+    names = sorted(clips.keys())
     seen_syms = {}
     for name in names:
         sym = _c_sym(name)
@@ -2587,11 +2595,14 @@ def to_clips_extra_json(clips, convention, write=True, out_dir=None):
     servo degrees [hip, thigh, knee] via _frame_to_servo — the exact wire values
     the app sends as CMD_CALIBRATE (T:4), identical to what the .js players emit.
 
-    `clips` is an ORDERED dict {clip_name: baked_rows}. Returns the JSON string;
+    `clips` is a dict {clip_name: baked_rows}. Clips are emitted **sorted
+    alphabetically by name** so the app-bundle order matches clips_all.h
+    and stays stable across exports (Task #7). Returns the JSON string;
     when write=True also writes clips_extra.json to out_dir (default
     animation/exported_clips/)."""
     out = {"clips": []}
-    for name, rows in clips.items():
+    for name in sorted(clips.keys()):
+        rows = clips[name]
         if not rows:
             raise ValueError(f"Clip '{name}' has no frames; refusing to emit")
         frames = []
@@ -2681,12 +2692,12 @@ def _regenerate_clips_all(context, convention, names=None):
 
     `names` is the set of clips to bundle; None means every clip. clips_all.h is
     the firmware's source of truth, and the ticked export selection is what ends
-    up on the robot, so the export operators pass that selection here. Clips are
-    always emitted in list_clips() order (filtered to `names`) so clip ids stay
-    stable regardless of selection order. Bakes each clip and calls
-    to_clips_header — the same path export_all_clips.py uses. A clip that fails
-    to bake is skipped so the bundle still regenerates from the rest. Returns
-    (bundled_names, skipped_msg).
+    up on the robot, so the export operators pass that selection here. Clip
+    ordering (and therefore clip id) is alphabetical by name — enforced by
+    to_clips_header itself, so callers cannot accidentally shuffle ids. Bakes
+    each clip and calls to_clips_header — the same path export_all_clips.py
+    uses. A clip that fails to bake is skipped so the bundle still regenerates
+    from the rest. Returns (bundled_names, skipped_msg).
     """
     wanted = set(names) if names is not None else None
     baked = {}
@@ -2711,8 +2722,9 @@ def _regenerate_clips_extra(context, convention, names=None):
     """(Re)write clips_extra.json (the app's streamable bundle). Defaults to ALL
     clips (names=None): clips_all.h carries only the ticked firmware subset, but
     the app bundle deliberately includes every clip so an animation is playable
-    in the app the moment it's exported — no flash needed. Skips clips that fail
-    to bake. Returns (bundled_names, skipped_msg)."""
+    in the app the moment it's exported — no flash needed. Clip ordering is
+    alphabetical (enforced by to_clips_extra_json). Skips clips that fail to
+    bake. Returns (bundled_names, skipped_msg)."""
     wanted = set(names) if names is not None else None
     baked = {}
     skipped = []
@@ -3003,6 +3015,43 @@ class FH_OT_open_app_dir(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class FH_OT_reload_panel(bpy.types.Operator):
+    """Re-read fh_clip_panel.py from disk and re-register the add-on
+    in-place. Lets animators iterate on the add-on source without
+    closing and relaunching Blender."""
+
+    bl_idname = "fh.reload_panel"
+    bl_label = "Reload Add-on"
+    bl_description = "Re-read fh_clip_panel.py from disk and re-register (use after editing the add-on source)"
+
+    def execute(self, context):
+        mod = sys.modules.get("fh_clip_panel")
+        if mod is None:
+            # No prior import in sys.modules — nothing to reload. Surfaces
+            # if the button is clicked before the start-up script has run,
+            # which shouldn't happen in normal use.
+            self.report({"WARNING"}, "fh_clip_panel not loaded; nothing to reload")
+            return {"CANCELLED"}
+        try:
+            try:
+                mod.unregister()
+            except Exception:
+                # Best-effort: a partially-registered state shouldn't block
+                # the reload — the importlib.reload() below replaces the
+                # module object anyway.
+                pass
+            mod = importlib.reload(mod)
+            mod.register()
+        except Exception as e:
+            # The whole point of this button is rapid iteration on possibly-
+            # broken source; surface the actual exception in the info bar
+            # instead of letting Blender swallow it into "script failed".
+            self.report({"ERROR"}, f"reload failed: {e}")
+            return {"CANCELLED"}
+        self.report({"INFO"}, "FaceHugger add-on reloaded")
+        return {"FINISHED"}
+
+
 # ---------------------------------------------------------------------------
 # Panel
 # ---------------------------------------------------------------------------
@@ -3026,6 +3075,10 @@ class FH_PT_root(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         active = active_clip()
+
+        # Reload-from-disk button — sits at the top as the obvious
+        # "I just edited fh_clip_panel.py, pick up my changes" affordance.
+        layout.operator(FH_OT_reload_panel.bl_idname, icon="FILE_REFRESH")
 
         header = layout.box()
         header.label(text=f"Active clip: {active or '<none>'}", icon="ACTION")
@@ -3385,6 +3438,7 @@ CLASSES = (
     FH_OT_open_export_dir,
     FH_OT_open_firmware_dir,
     FH_OT_open_app_dir,
+    FH_OT_reload_panel,
     FH_OT_toggle_preview,
     FH_OT_sync_frame_range,
     # Panels: parent MUST be registered before its children so the

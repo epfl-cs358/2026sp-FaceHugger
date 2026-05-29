@@ -125,6 +125,18 @@ void SpinalCord::relax() {
     leg4.setJointAngles(90, 90, 90);
 }
 
+void SpinalCord::relax(uint32_t ms) {
+    // T:2 with `dur_ms`: ease every joint to 90 over `ms`. We clear isInverted
+    // up front (same as the snap) so the ease target is unambiguous; relax goes
+    // to a calibration-flat pose where invert is meaningless anyway.
+    robotState = STATE_REST;
+    isInverted = false;
+    leg1.setJointAnglesTimed(90, 90, 90, ms);
+    leg2.setJointAnglesTimed(90, 90, 90, ms);
+    leg3.setJointAnglesTimed(90, 90, 90, ms);
+    leg4.setJointAnglesTimed(90, 90, 90, ms);
+}
+
 // Single invert choke point — see header. Mirrors the pitch joints about 90 when
 // inverted (180-x), shoulder untouched. For a pitch servo this equals negating the
 // math-space angle (translateToServo emits 90±angle, and 180-(90±x)=90∓x), so routing
@@ -139,6 +151,14 @@ void SpinalCord::stand() {
     // from and ease back to. Mirrors tickGait at zero input (sweep=lift=0).
     robotState = STATE_STAND;
     goToNeutral();
+}
+
+void SpinalCord::stand(uint32_t ms) {
+    // T:2 with `dur_ms`: ease the pose into (invert-aware) NEUTRAL over `ms`,
+    // instead of the instant snap. easeToNeutral already routes through
+    // applyInvert, so an inverted robot eases to the INVERTED neutral.
+    robotState = STATE_STAND;
+    easeToNeutral(ms);
 }
 
 void SpinalCord::goToNeutral() {
@@ -501,6 +521,16 @@ void SpinalCord::setClipSmoothing(float alpha) {
     Serial.printf("[clip] smoothing alpha = %.2f\n", clipEmaAlpha_);
 }
 
+void SpinalCord::stopClipPlayback() {
+    // Reset the clip player's lifecycle state. Without this, T:2 IDLE only
+    // changed the FSM and a `loop=true` clip would resume next time the FSM
+    // re-entered STATE_ACTION (clipLoop_ + clipState_.phase survived).
+    // Pose-easing is handled separately by the T:2 dispatch (rest()/stand()).
+    clipState_.phase       = CLIP_DONE;
+    clipLoop_              = false;
+    clipPrerollUntilMs_    = 0;
+}
+
 void SpinalCord::playClip(uint8_t id, bool loop) {
     if (id >= FH_CLIP_COUNT) {
         Serial.printf("[clip] ignored: id %u >= %u\n", id, (unsigned)FH_CLIP_COUNT);
@@ -531,7 +561,7 @@ void SpinalCord::playClip(uint8_t id, bool loop) {
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
         ServoTriple f0 = applyInvert(
             i,
-            clampClipServos(translateToServo(i,
+            clampClipServos(i, translateToServo(i,
                 FH_CLIPS[id].frames[0].a[i * 3 + 0],
                 FH_CLIPS[id].frames[0].a[i * 3 + 1],
                 FH_CLIPS[id].frames[0].a[i * 3 + 2])),
@@ -573,7 +603,7 @@ void SpinalCord::tickClip() {
                 // EMA smooths the math-space angle; clampClipServos keeps the clip
                 // off each leg's mechanical stop (clip path only); invert (if any)
                 // applied last at the write point.
-                applyServos(legs[i], clampClipServos(
+                applyServos(legs[i], clampClipServos(i,
                     translateToServo(i, clipSmoothed_[i][0],
                                      clipSmoothed_[i][1],
                                      clipSmoothed_[i][2])));
@@ -631,6 +661,25 @@ void SpinalCord::setInverted(bool flag) {
     isInverted = flag;
     face.setState(isInverted ? EYES_CONFUSED : EYES_FRONT);
     flipPoseInPlace(INVERT_EASE_MS);  // T:9: mirror the live pose in place
+}
+
+void SpinalCord::setAutoInvertEnabled(bool enabled) {
+    // No-op when unchanged; pose is NOT touched either way. Disabling freezes
+    // isInverted at its current value (main.cpp's loop will simply skip the
+    // setInverted() call). Enabling re-arms the gate; the IMU latch will catch
+    // up on the next state-change loop tick.
+    autoInvertEnabled_ = enabled;
+}
+
+void SpinalCord::tickAutoInvert(bool imuInverted) {
+    // Edge-triggered: only act when the latch flips. If auto-invert is OFF we
+    // intentionally do NOT advance prevImuInverted_, so re-enabling the toggle
+    // re-evaluates against the LAST-FORWARDED value (the IMU may have moved
+    // while we were frozen, and we want the next change to fire setInverted).
+    if (imuInverted == prevImuInverted_) return;
+    if (!autoInvertEnabled_) return;
+    setInverted(imuInverted);
+    prevImuInverted_ = imuInverted;
 }
 
 void SpinalCord::invertRobot() {
