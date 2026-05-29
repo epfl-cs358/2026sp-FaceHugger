@@ -113,6 +113,23 @@ All transformations are deterministic and invertible.
 Example (FR at NEUTRAL): math `sh=45, th=-60, kn=-37` -> servo `hip=90+(45-45)=90, thigh=90-(-60)=150, knee=90+(-37)=53`.
 Example (FL at NEUTRAL, post-B): math `sh=135, th=-60, kn=-40` -> servo `hip=90+(135-135)=90, thigh=90+(-60)=30, knee=90-(-40)=130`.
 
+The table above is written with `90`s for readability. In the live firmware, the thigh and knee `90` is replaced by the per-joint `CALIB_*_THIGH` / `CALIB_*_KNEE` from `config.h`. See [Invert mirror and CALIB](#invert-mirror-and-calib).
+
+## Invert mirror and CALIB
+
+Why per-joint, not constant 90: a spline tooth is a few degrees wide, so when a thigh or knee horn is pressed on at calibration time, "mechanical flat" rarely lands exactly on servo 90. It lands on servo 84, or 95, or 103 (the current per-leg values, measured on real hardware on 2026-05-28). The firmware records those numbers in `CALIB_FR_THIGH`, `CALIB_FR_KNEE`, ... `CALIB_BL_KNEE` (`code/firmware/src/shared/config.h`) and uses them as the per-joint zero of math-space. `translateToServo` adds and subtracts math-space deltas from `CALIB`, not from `90`, so a single horn that's two teeth off no longer biases every gait and clip on that leg.
+
+The upside-down pitch mirror has to follow the same rule. When `isInverted` is set, `applyInvert` (`motion_math.cpp`) mirrors each pitch joint **about its CALIB**:
+
+```cpp
+s.thigh = 2.0 * CALIB_THIGH_BY_LEG[legId] - s.thigh;
+s.knee  = 2.0 * CALIB_KNEE_BY_LEG[legId]  - s.knee;
+```
+
+This is exactly math-space negation in servo-space: `translateToServo` emits `CALIB ± delta`, and `2*CALIB - (CALIB ± delta) = CALIB ∓ delta`, the negated-delta pose. Pre-calibration the mirror was `180 - angle` because flat was assumed to be servo 90 uniformly; the new form reduces to `180 - angle` exactly when `CALIB == 90`, so a fully-uncalibrated robot still mirrors as before.
+
+The shoulder is not in this mirror. Inverting flips pitch, not yaw, and the shoulder stays at whatever servo angle the gait or clip is currently asking for.
+
 ## Joint Axes and URDF Conventions
 
 Joint origins are placed at the physical rotation axis (servo shaft), following the URDF convention (each joint frame sits on its rotation axis, with the child link defined relative to it). URDF is used purely as a file format here, for PyBullet and Blender; the project does not run ROS.
@@ -120,6 +137,8 @@ Joint origins are placed at the physical rotation axis (servo shaft), following 
 The **shoulder (yaw) joint** uses `+Z` (vertical up) as its axis uniformly across all four legs. At rest (theta=0 in URDF), each leg's shoulder points in its mechanical zero direction. Positive rotation is CCW viewed from above (right-hand rule along +Z).
 
 The **thigh and knee (pitch) joints** use an axis along the leg's longitudinal direction at rest. L-side legs (FL, BL) use `+Y` in the body frame; R-side legs (FR, BR) use `-Y` (mirrored mounting). This axis flip means the same positive theta lifts the foot toward the chassis on every leg. URDF limits are expressed as signed bounds in radians relative to rest; R-side limits are negated and swapped to account for the axis flip.
+
+The URDF limits also flow into the firmware as a clip-playback envelope. `clampClipServos` (`motion_math.cpp`) builds a per-leg window centred on each joint's `CALIB`: shoulder uniform `90 ± 52°` (the tight side of every URDF shoulder), thigh `CALIB_THIGH ± 60°`, knee `CALIB_KNEE ± 90°`. Half-widths live as macros in `shared/config.h` (`HIP_CLAMP_FROM_NINETY`, `THIGH_CLAMP_FROM_CALIB`, `KNEE_CLAMP_FROM_CALIB`). The clamp is *clip-only* — gait output stays bit-for-bit — and runs before `applyServos`, so an authored clip that drifts past a mechanical stop is silently brought back to the URDF-legal range instead of stalling the servo. See [Motion engine → URDF clip-clamp envelope](firmware/motion-engine.md#urdf-clip-clamp-envelope).
 
 ## Servo Channels and Hardware
 

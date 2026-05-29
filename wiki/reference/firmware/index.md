@@ -14,6 +14,10 @@ Rather than computing servo positions from inverse kinematics at runtime, most o
 
 This means the firmware does not carry a general IK solver for locomotion. The gaits are phase-based angle schedules, and clips are baked angle timelines exported from Blender. The `translateToServo()` function is a mounting-convention remap, not inverse kinematics.
 
+### Per-servo calibration (CALIB)
+
+A spline tooth is a few degrees wide, so after the assembly-time horn step each thigh and knee still rests a degree or two off mechanical flat. The eight `CALIB_*_THIGH` / `CALIB_*_KNEE` macros in `shared/config.h` record the servo angle at which each link is actually flat (e.g. `CALIB_BR_THIGH = 103`), and `translateToServo` and the upside-down mirror both work from those values instead of from a hardcoded `90`. The end-user workflow lives in the [calibration guide](../../guide/calibration.md), and the per-joint mirror formula is documented under [Invert mirror and CALIB](../conventions.md#invert-mirror-and-calib).
+
 ## Main loop
 
 The firmware runs a single-threaded, non-preemptive event loop on the ESP32. Each pass through `loop()` executes in the following order:
@@ -59,3 +63,9 @@ A sudden "forward" command therefore ramps the robot up over roughly 10 ticks (1
 | `servo.cpp/.h` | PCA9685 I2C driver, PWM pulse mapping |
 
 For the full motion pipeline (gait phases, clip interpolation, yaw rotation, and the invert pose-mirror) see [motion-engine.md](motion-engine.md). For the FSM states, transition conditions, and signal pipelines, see [fsm-states.md](fsm-states.md).
+
+## Orientation and auto-flip
+
+A single MPU6050 on the I2C bus tells the firmware which way is up. A boot-time classifier reads one accel sample so a robot powered on upside-down wakes up in the right invert mode; the running loop polls `tickImu()` and feeds the result through a 150°/30° hysteresis so the latched `isInverted` flag is decisive instead of chattering near 90°. The auto-flip gate that forwards the latch into `setInverted()` is `SpinalCord::tickAutoInvert`, called from both `main.cpp::loop()` (hardware) and the SIL — so the simulator's auto-flip behaviour is identical to the robot's by construction.
+
+The user can freeze the gate over the wire (T:6 `CMD_SET_AUTO_INVERT`) without changing the current invert state, and the T:10 telemetry frame carries `pitch_deg`, `roll_deg`, `upside_down`, and `auto_invert_enabled` so the app's orientation tile and toggle stay in sync. See [orientation.md](orientation.md) for the full walk-through.

@@ -73,11 +73,13 @@ Toggling invert mirrors whatever pose the robot is currently holding, in place: 
 
 Because `isInverted` is latching and every motion path applies the same pitch mirror, the robot keeps the mirror through gaits, clips, and standing, so it can locomote upside-down.
 
+**Auto-flip is not a state either.** The IMU-driven gate (`SpinalCord::tickAutoInvert`, called every loop tick) is a runtime mirror toggle that runs orthogonal to the FSM: an upside-down edge can fire while the robot is IDLE, WALK, ACTION, or STAND, and `isInverted` flips without `robotState` changing. T:6 (`CMD_SET_AUTO_INVERT`) freezes the gate without touching either flag. See [Orientation and auto-flip](orientation.md).
+
 ## REST
 
 REST holds all servos at 90° (mid-point of the 0-180° physical range). This is the safe-to-power-down pose: no joint is at an extreme and the robot is mechanically neutral. The `relax()` method sets all four legs to (90, 90, 90) immediately on entry.
 
-**Enter:** `CMD_FSM_STATE` (T:2, `{"s": 4}`); the `relax()` method called from a serial or BLE UI.
+**Enter:** `CMD_FSM_STATE` (T:2, `{"s": 4}`); the `relax()` method called from a serial or BLE UI. The T:2 packet may include an optional `dur_ms` field (clamped to `[0, 5000]` ms): when present and non-zero, the pose eases in over that window via `relax(ms)` instead of snapping. The same applies to STAND entry (`s:1`-equivalent pose via `stand(ms)`); see [Motion engine → Eased pose transitions](motion-engine.md#eased-pose-transitions-t2-dur_ms).
 
 **Exit:** `CMD_FSM_STATE` (T:2, s:0 or s:1) -> IDLE or WALK; `CMD_PLAY_CLIP` (T:7) -> STATE_ACTION.
 
@@ -145,6 +147,8 @@ flowchart TD
 ```
 
 The `constrain(0, 180)` clamp is the electrical safety backstop on every motion path. A flood of clamp warnings indicates a gait or clip is pushing joints out of range and amplitude should be reduced.
+
+The clip path adds a second, tighter clamp *upstream* of the electrical one: `clampClipServos` runs every clip frame through a per-leg, CALIB-relative envelope derived from the URDF joint limits before `applyServos` writes the angles. The envelope keeps a clip off each leg's mechanical stop even when the Blender authoring drifted past it. Gaits and direct calibration writes bypass this clamp (gait output is already in-envelope by construction). See [Motion engine → URDF clip-clamp envelope](motion-engine.md#urdf-clip-clamp-envelope).
 
 ## Timing constants and gait parameters
 
