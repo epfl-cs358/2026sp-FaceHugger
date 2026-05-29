@@ -6,7 +6,7 @@ CAD, firmware, simulation, and animation tooling for the FaceHugger quadruped.
 
 Project docs are a MkDocs Material wiki under [`wiki/`](wiki/).
 
-- **Live site:** _GitHub Pages URL - add once Pages is enabled (Settings -> Pages -> Source: GitHub Actions)._
+- **Live site:** _[FaceHugger Wiki](https://epfl-cs358.github.io/2026sp-FaceHugger/)_
 - **How to contribute / fill it out:** see [`wiki/README.md`](wiki/README.md) - structure, local preview,
   adding images/video/3D models/notebooks, and the per-member assignments.
 
