@@ -15,15 +15,17 @@ FaceHugger was built by six Computer Science students at EPFL for the *Making In
 
     [GitHub](https://github.com/FerdinandGomerChiu) · [LinkedIn](https://www.linkedin.com/in/ferdinand-chiu-ab99242b3/)
 
--   __Name__
+-   Marcus Hamelink
 
     ---
 
     **Worked on:** leg 3D design, the PyBullet simulation, and the animation pipeline (Blender rig and clip export).
+    Integrated a full pipeline for exporting our Fusion model to have it simulated and mimic the simulated movement in real life.
+    Blender animation was also done by me.
 
-    [GitHub](#) · [LinkedIn](#)
+    [GitHub](https://github.com/animarcus) · [LinkedIn](https://www.linkedin.com/in/marcus-hamelink/)
 
--   __Name__
+-   Antoine Reynaud
 
     ---
 
@@ -31,7 +33,7 @@ FaceHugger was built by six Computer Science students at EPFL for the *Making In
 
     [GitHub](#) · [LinkedIn](#)
 
--   __Name__
+-   Noa Duron
 
     ---
 
@@ -39,7 +41,7 @@ FaceHugger was built by six Computer Science students at EPFL for the *Making In
 
     [GitHub](#) · [LinkedIn](#)
 
--   __Name__
+-   Ilias Sokolis
 
     ---
 
