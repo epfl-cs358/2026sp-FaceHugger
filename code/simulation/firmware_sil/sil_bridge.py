@@ -197,6 +197,78 @@ def channel_to_joint(fc):
     return out
 
 
+# ── PyBullet -> firmware IMU emulation ────────────────────────────────────────
+# The host has no MPU6050. We synthesise the firmware's "upside-down" latch from
+# PyBullet's body orientation each tick and push it through the FirmwareControl
+# binding, so SpinalCord sees the same imuIsInverted() it would see on hardware.
+#
+# Hysteresis matches code/firmware/src/brain/imu_hysteresis.h:
+#   flip:  tilt > 150 deg     (body_up_z < cos(150 deg) ≈ -0.866)
+#   clear: tilt <  30 deg     (body_up_z > cos( 30 deg) ≈  0.866)
+# The tilt angle is acos(body_up_z) where body_up_z is the world-z component
+# of the body frame's local +z axis (the rotated "up"). cos is monotone
+# decreasing on [0,180] so the inequality direction reverses against the dot
+# product. Boundary values (cos(150°), cos(30°)) are NOT crossed — strict
+# inequalities, same as the firmware.
+import math as _math  # noqa: E402  (kept private; the public re-export is `math`)
+
+_IMU_FLIP_COS = _math.cos(_math.radians(150.0))  # ≈ -0.866
+_IMU_CLEAR_COS = _math.cos(_math.radians(30.0))  # ≈  0.866
+
+
+def _body_up_z(quat):
+    """World-frame z-component of the body-frame +z axis, from quaternion (x,y,z,w).
+
+    The rotation matrix's third column is the rotated +z; we only need the z
+    row of that column. body_up_z == 1.0 upright, -1.0 upside-down.
+    """
+    x, y, z, w = quat
+    return 1.0 - 2.0 * (x * x + y * y)
+
+
+def imu_hysteresis_step(body_up_z, prev_state):
+    """Apply the firmware hysteresis to a single body_up_z sample."""
+    if prev_state:
+        # currently inverted: clear only when we drop below 30° tilt
+        return not (body_up_z > _IMU_CLEAR_COS)
+    # currently upright: flip only when we cross 150° tilt
+    return body_up_z < _IMU_FLIP_COS
+
+
+def imu_pitch_roll_deg(quat):
+    """(pitch_deg, roll_deg) from quaternion (x,y,z,w) using the same accel-only
+    convention as the firmware: pitch = atan2(ay, sqrt(ax^2+az^2)),
+    roll = atan2(-ax, az), where (ax,ay,az) is the body's local gravity vector
+    (== the world -z rotated INTO the body frame). With gravity pointing -z
+    in the world, the body-frame gravity is the third row of R^T == third
+    column of R, negated."""
+    x, y, z, w = quat
+    # body-frame gravity unit vector: -R^T @ ẑ  (rows of R as columns of R^T).
+    # The "body up" components (third column of R) point opposite to gravity.
+    ax = 2.0 * (x * z - w * y)  # = -(-2(xz - wy)) third row of R^T col 0... see below
+    ay = 2.0 * (y * z + w * x)
+    az = 1.0 - 2.0 * (x * x + y * y)
+    # Match firmware sign convention (pitch nose-up positive, roll right-down positive).
+    pitch = _math.atan2(ay, _math.sqrt(ax * ax + az * az)) * 180.0 / _math.pi
+    roll = _math.atan2(-ax, az) * 180.0 / _math.pi
+    return pitch, roll
+
+
+def update_imu_from_pybullet(fc, p, robot_id, prev_state):
+    """Read PyBullet body orientation, hysteresise, push into firmware.
+
+    Returns the new latched state so the caller can thread it across ticks.
+    """
+    _, quat = p.getBasePositionAndOrientation(robot_id)
+    up_z = _body_up_z(quat)
+    new_state = imu_hysteresis_step(up_z, prev_state)
+    pitch, roll = imu_pitch_roll_deg(quat)
+    fc.set_imu_upside_down(new_state)
+    fc.set_imu_pitch_deg(pitch)
+    fc.set_imu_roll_deg(roll)
+    return new_state
+
+
 # ── torque-based link coloring (PyBullet visual feedback) ─────────────────────
 _BAND_RGBA = {
     "green": (0.2, 0.8, 0.2, 1.0),  # safe continuous hold
@@ -386,8 +458,13 @@ class FirmwareSILDriver:
         self._fc.play_clip(cid)
 
         step = 0
+        imu_state = False  # latched upside-down flag, threaded across ticks
         while p.isConnected():
             t_ms = int(step * 1000.0 / 240.0)
+            # Emulate the MPU6050: read PyBullet body orientation and push the
+            # hysteresed upside-down latch + pitch/roll into the firmware
+            # BEFORE tick(), so SpinalCord/Network see the IMU state this tick.
+            imu_state = update_imu_from_pybullet(self._fc, p, robot_id, imu_state)
             self._fc.tick(t_ms)  # advance firmware time + run one control tick
             for name, rad in servo_angles_to_joint_targets(
                 self._fc.servo_angles()
@@ -442,11 +519,16 @@ class FirmwareSILDriver:
         self._fc.handle_message(json.dumps({"T": 5, "g": gait_id}))
 
         step = 0
+        imu_state = False  # latched upside-down flag, threaded across ticks
         while p.isConnected():
             t_ms = int(step * 1000.0 / 240.0)
             # Full CMD_MOVE path each tick: walk() (STATE_WALK) + processCommand(dir),
             # keeping the deadman fed — literally the app's command stream at 240 Hz.
             self._fc.handle_message(json.dumps({"T": 1, "dir": direction}))
+            # Emulate the MPU6050 from PyBullet (same hysteresis as the
+            # firmware), so a tilt during a gait surfaces via imuIsInverted()
+            # the same way it would on hardware.
+            imu_state = update_imu_from_pybullet(self._fc, p, robot_id, imu_state)
             self._fc.tick(t_ms)
             for name, rad in servo_angles_to_joint_targets(
                 self._fc.servo_angles()

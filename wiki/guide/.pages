@@ -1,0 +1,13 @@
+title: Build Guide
+nav:
+  - index.md
+  - design.md
+  - parts.md
+  - printing.md
+  - wiring.md
+  - assembly.md
+  - software.md
+  - calibration.md
+  - remote_control_app.md
+  - toolchain
+  - extending.md

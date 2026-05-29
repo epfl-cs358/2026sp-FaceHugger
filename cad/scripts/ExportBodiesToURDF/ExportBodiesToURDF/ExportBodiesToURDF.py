@@ -121,6 +121,11 @@ CONSTRUCTION_POINTS = [
     # point sits at world z=0. Consumed by generate_urdf.py; harmless
     # if absent.
     "BodyBottomPoint",
+    # Shell alignment pair — body side (FlexibleSkeleton:1/QuadrupedBody:1)
+    # and shell side (FlexibleSkeleton:1/Shell:1). Both must coincide after
+    # assembly to confirm the Shell is seated correctly.
+    "BodyAlignToShellPoint",
+    "ShellAlignToBodyPoint",
     # Joint origins (FaceHuggerLegAssembly:1).
     "BodyToLink1Point",
     "Link1ToLink2Point",
@@ -192,10 +197,13 @@ JOINTS = [
 EXPORT_RULES = [
     # Chassis: explicit body list. QuadrupedBody main frame + the two
     # structural bridges (MiddleBridge, BehindBridge) that share the
-    # QuadrupedBody:1 occurrence + LipoCage. Electronics (PCBs, OLED,
-    # MPU6050, …) are intentionally excluded by NOT being in this list,
-    # regardless of CAD visibility. Brackets (MotorMount{,R}) live in
-    # the leg assembly and are exported separately as leg_mount_{L,R}.stl.
+    # QuadrupedBody:1 occurrence + LipoCage + the top-cover Shell. All are
+    # chassis-fixed, so they bake into ONE world-frame mesh (the base_link
+    # visual) — the Shell rides along just like the LipoCage clip rather
+    # than being a separate sim body. Electronics (PCBs, OLED, MPU6050, …)
+    # are intentionally excluded by NOT being in this list, regardless of
+    # CAD visibility. Brackets (MotorMount{,R}) live in the leg assembly
+    # and are exported separately as leg_mount_{L,R}.stl.
     {
         "type": "combined",
         "stl": "QuadrupedBody.stl",
@@ -213,6 +221,12 @@ EXPORT_RULES = [
                 "body": "BehindBridge",
             },
             {"occurrence": "FlexibleSkeleton:1/LipoCage:1", "body": "LipoCage"},
+            # Shell is an xref'd component; its bRepBody name comes through as
+            # the underlying auto-name (e.g. "Body26"), not the display "Shell"
+            # shown in the Browser. Use "*" to grab the (single) body regardless
+            # of name. If the xref ever grows multiple bodies, this picks the
+            # first one — switch back to an explicit name then.
+            {"occurrence": "FlexibleSkeleton:1/Shell:1", "body": "*"},
         ],
     },
     # Brackets. Combined-rule (single part each) so the output is in

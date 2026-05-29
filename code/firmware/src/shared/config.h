@@ -13,6 +13,28 @@
 #define MIN_PULSE 150
 #define MAX_PULSE 600
 
+// T:2 optional `dur_ms` ease window for the REST/STAND pose buttons. A wire
+// value above this is clamped down so a malicious / buggy app can't park the
+// robot in an arbitrarily long ease (during which the user can't take control
+// back with another T:2). 5 s is well above the 1 s default the app sends.
+#define POSE_EASE_MS_MAX 5000
+
+// Clip-playback servo-clamp half-widths, derived from the URDF joint limits.
+// clampClipServos (motion_math.cpp) uses these to build a per-leg envelope:
+//   hip   = [90 - HIP_CLAMP_FROM_NINETY, 90 + HIP_CLAMP_FROM_NINETY]
+//           Uniform across legs. The URDF shoulder window is asymmetric per leg
+//           (one side 90°, the tight side 52°); 52 is safe on every leg.
+//   thigh = [CALIB_THIGH_BY_LEG[leg] ± THIGH_CLAMP_FROM_CALIB]
+//           URDF thigh range is symmetric ±60° on every leg.
+//   knee  = [CALIB_KNEE_BY_LEG[leg]  ± KNEE_CLAMP_FROM_CALIB]
+//           URDF knee range is symmetric ±90° on every leg.
+// Per-leg + CALIB-relative so post-calibration NEUTRALs (e.g. FL thigh at 27,
+// which is CALIB_FL_THIGH - 60) sit exactly on the lower edge instead of
+// being clipped by a uniform [30, 150] window.
+#define HIP_CLAMP_FROM_NINETY  52
+#define THIGH_CLAMP_FROM_CALIB 60
+#define KNEE_CLAMP_FROM_CALIB  90
+
 // define PCA addresses for servos as well as default angles (IDLE_STAND pose)
 
 // Front right leg (Leg 0 in spinal_cord.cpp)
@@ -20,9 +42,32 @@
 #define FRONT_RIGHT_LEG_THIGH_PCA_CHANNEL 9
 #define FRONT_RIGHT_LEG_KNEE_PCA_CHANNEL 10
 
+// Per-servo zero-point calibration: servo angle when the joint is at mechanical
+// zero (thigh horizontal, knee horizontal — measured 2026-05-28 on real hardware
+// by setting each joint to visually flat with the app's individual servo control).
+// translateToServo uses these instead of the default 90. Set all to 90 to revert
+// to uncalibrated behaviour. DEFAULT_ANGLE values below are derived from these.
+#define CALIB_FR_THIGH  84
+#define CALIB_FR_KNEE   95
+#define CALIB_FL_THIGH  87
+#define CALIB_FL_KNEE   82
+#define CALIB_BR_THIGH 103
+#define CALIB_BR_KNEE   80
+#define CALIB_BL_THIGH  84
+#define CALIB_BL_KNEE   87
+
+// Indexed-by-LegId views for runtime lookup (e.g. applyInvert mirrors about CALIB).
+// Order matches LegId enum: 0=FR, 1=FL, 2=BR/RR, 3=BL/RL.
+#ifdef __cplusplus
+constexpr int CALIB_THIGH_BY_LEG[4] = { CALIB_FR_THIGH, CALIB_FL_THIGH, CALIB_BR_THIGH, CALIB_BL_THIGH };
+constexpr int CALIB_KNEE_BY_LEG[4]  = { CALIB_FR_KNEE,  CALIB_FL_KNEE,  CALIB_BR_KNEE,  CALIB_BL_KNEE };
+#endif
+
+// DEFAULT_ANGLE = translateToServo(NEUTRAL[leg]) with the calibration above applied.
+// Recompute whenever CALIB_* or NEUTRAL[] changes (guarded by test_neutral_consistency).
 #define FRONT_RIGHT_LEG_HIP_DEFAULT_ANGLE 90
-#define FRONT_RIGHT_LEG_THIGH_DEFAULT_ANGLE 150
-#define FRONT_RIGHT_LEG_KNEE_DEFAULT_ANGLE 53
+#define FRONT_RIGHT_LEG_THIGH_DEFAULT_ANGLE 144  // CALIB_FR_THIGH - NEUTRAL[FR].th = 84-(-60)
+#define FRONT_RIGHT_LEG_KNEE_DEFAULT_ANGLE 58    // CALIB_FR_KNEE  + NEUTRAL[FR].kn = 95+(-37)
 
 // Front left leg (Leg 1 in spinal_cord.cpp)
 #define FRONT_LEFT_LEG_HIP_PCA_CHANNEL 12
@@ -30,8 +75,8 @@
 #define FRONT_LEFT_LEG_KNEE_PCA_CHANNEL 14
 
 #define FRONT_LEFT_LEG_HIP_DEFAULT_ANGLE 90  // Change B: was 75; FL now stands at servo 90 like FR/BR/BL
-#define FRONT_LEFT_LEG_THIGH_DEFAULT_ANGLE 30
-#define FRONT_LEFT_LEG_KNEE_DEFAULT_ANGLE 130
+#define FRONT_LEFT_LEG_THIGH_DEFAULT_ANGLE 27   // CALIB_FL_THIGH + NEUTRAL[FL].th = 87+(-60)
+#define FRONT_LEFT_LEG_KNEE_DEFAULT_ANGLE 122   // CALIB_FL_KNEE  - NEUTRAL[FL].kn = 82-(-40)
 
 // Bottom right leg (Leg 2 in spinal_cord.cpp)
 #define BOTTOM_RIGHT_LEG_HIP_PCA_CHANNEL 4
@@ -39,8 +84,8 @@
 #define BOTTOM_RIGHT_LEG_KNEE_PCA_CHANNEL 6
 
 #define BOTTOM_RIGHT_LEG_HIP_DEFAULT_ANGLE 90
-#define BOTTOM_RIGHT_LEG_THIGH_DEFAULT_ANGLE 40
-#define BOTTOM_RIGHT_LEG_KNEE_DEFAULT_ANGLE 140  // = translateToServo(NEUTRAL[BR].kn=-50); was 130, caused rear-knee twitch on gait stop
+#define BOTTOM_RIGHT_LEG_THIGH_DEFAULT_ANGLE 53  // CALIB_BR_THIGH + NEUTRAL[BR].th = 103+(-50)
+#define BOTTOM_RIGHT_LEG_KNEE_DEFAULT_ANGLE 130  // CALIB_BR_KNEE  - NEUTRAL[BR].kn = 80-(-50)
 
 // Bottom left leg (Leg 3 in spinal_cord.cpp)
 #define BOTTOM_LEFT_LEG_HIP_PCA_CHANNEL 0
@@ -48,8 +93,8 @@
 #define BOTTOM_LEFT_LEG_KNEE_PCA_CHANNEL 2
 
 #define BOTTOM_LEFT_LEG_HIP_DEFAULT_ANGLE 90
-#define BOTTOM_LEFT_LEG_THIGH_DEFAULT_ANGLE 150
-#define BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE 55  // = translateToServo(NEUTRAL[BL].kn=-35); was 50, caused rear-knee twitch on gait stop
+#define BOTTOM_LEFT_LEG_THIGH_DEFAULT_ANGLE 144  // CALIB_BL_THIGH - NEUTRAL[BL].th = 84-(-60)
+#define BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE 52    // CALIB_BL_KNEE  + NEUTRAL[BL].kn = 87+(-35)
 
 // Servo ID constants for use as indices
 #define SERVO_HIP   0

@@ -1,0 +1,6 @@
+mkdocs-material>=9.6
+mkdocs-jupyter>=0.25
+mkdocs-glightbox>=0.4        # image lightbox on click
+pymdown-extensions>=10.0
+mkdocs-plotly-plugin>=0.1
+mkdocs-awesome-pages-plugin>=2.9

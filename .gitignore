@@ -730,6 +730,7 @@ celerybeat.pid
 
 # Environments
 .venv
+.venv-docs/
 env/
 venv/
 ENV/
@@ -862,6 +863,12 @@ animation/blend-iterations/
 
 .claude/settings.local.json
 
+# The Python `parts/` ignore (zc.buildout) above accidentally matches the
+# wiki build-guide's Parts & Materials section, which is documentation.
+!wiki/guide/parts/
+!wiki/guide/parts/**
+
 # Agent scratch space: research notes, sub-agent output, working files.
 # Regenerated on demand; not source control material.
 .work/
+.claude/settings.json

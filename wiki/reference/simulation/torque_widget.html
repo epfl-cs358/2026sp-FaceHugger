@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FaceHugger — Torque Calculator</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      background: #f8f9fa;
+      margin: 0;
+      padding: 12px;
+    }
+    #top-row {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    #controls {
+      background: #fff;
+      border: 1px solid #dde;
+      border-radius: 6px;
+      padding: 14px;
+      min-width: 360px;
+      max-width: 400px;
+    }
+    .section-head {
+      font-weight: bold;
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+    .section-note {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 8px;
+    }
+    hr.sep {
+      border: none;
+      border-top: 1px solid #eee;
+      margin: 12px 0;
+    }
+    .ctrl-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 7px;
+    }
+    .ctrl-row label {
+      width: 130px;
+      flex-shrink: 0;
+      font-size: 12px;
+      color: #555;
+    }
+    .ctrl-row input[type=range] {
+      flex: 1;
+      min-width: 100px;
+      accent-color: #e67e22;
+    }
+    .val-lbl {
+      width: 38px;
+      text-align: right;
+      font-size: 12px;
+      color: #333;
+      font-variant-numeric: tabular-nums;
+    }
+    .servo-header {
+      display: flex;
+      gap: 4px;
+      font-size: 11px;
+      color: #888;
+      font-weight: bold;
+      padding-left: 100px;
+      margin-bottom: 4px;
+    }
+    .servo-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 5px;
+    }
+    .servo-lbl {
+      width: 96px;
+      flex-shrink: 0;
+      font-size: 12px;
+      color: #555;
+    }
+    .trq-inp {
+      width: 90px;
+      font-size: 12px;
+      padding: 2px 4px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+    }
+    .mass-inp {
+      width: 65px;
+      font-size: 12px;
+      padding: 2px 4px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+    }
+    #table-area {
+      flex: 1;
+      min-width: 380px;
+    }
+    #diagram {
+      margin-top: 14px;
+      display: flex;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+
+<div id="top-row">
+
+  <!-- ── Left: controls ─────────────────────────────────────────────────── -->
+  <div id="controls">
+
+    <div class="section-head">Pitch axis parameters</div>
+
+    <div class="ctrl-row">
+      <label>L2 length (cm)</label>
+      <input type="range" id="sl_r2" min="3" max="10" step="0.5" value="8">
+      <span class="val-lbl" id="lbl_r2">8.0</span>
+    </div>
+    <div class="ctrl-row">
+      <label>L3 length (cm)</label>
+      <input type="range" id="sl_r3" min="3" max="10" step="0.5" value="6">
+      <span class="val-lbl" id="lbl_r3">6.0</span>
+    </div>
+    <div class="ctrl-row">
+      <label>Hip angle (deg)</label>
+      <input type="range" id="sl_hip" min="0" max="135" step="5" value="0">
+      <span class="val-lbl" id="lbl_hip">0</span>
+    </div>
+    <div class="ctrl-row">
+      <label>Knee angle (deg)</label>
+      <input type="range" id="sl_kne" min="0" max="135" step="5" value="0">
+      <span class="val-lbl" id="lbl_kne">0</span>
+    </div>
+
+    <hr class="sep">
+    <div class="section-head" style="margin-bottom:2px">Yaw motion profile</div>
+    <div class="section-note">shoulder swing · rotational inertia only, no gravity load</div>
+
+    <div class="ctrl-row">
+      <label>Yaw ramp (s)</label>
+      <input type="range" id="sl_ramp" min="0.05" max="1.0" step="0.05" value="0.2">
+      <span class="val-lbl" id="lbl_ramp">0.20</span>
+    </div>
+
+    <hr class="sep">
+    <div class="section-head">Servo parameters</div>
+
+    <div class="servo-header">
+      <span style="width:90px">τ rated (kg·cm)</span>
+      <span style="width:65px">mass (g)</span>
+    </div>
+    <div class="servo-row">
+      <span class="servo-lbl">s_L2  hip</span>
+      <input type="number" class="trq-inp" id="nt_trq_h" min="0.1" max="200" step="0.5" value="15.0">
+      <input type="number" class="mass-inp" id="nt_m_h" min="1" max="500" step="1" value="72">
+    </div>
+    <div class="servo-row">
+      <span class="servo-lbl">s_L3  knee</span>
+      <input type="number" class="trq-inp" id="nt_trq_k" min="0.1" max="200" step="0.5" value="15.0">
+      <input type="number" class="mass-inp" id="nt_m_k" min="1" max="500" step="1" value="72">
+    </div>
+    <div class="servo-row">
+      <span class="servo-lbl">s_L1  shoulder</span>
+      <input type="number" class="trq-inp" id="nt_trq_sh" min="0.1" max="200" step="0.5" value="15.0">
+      <input type="number" class="mass-inp" id="nt_m_sh" min="1" max="500" step="1" value="72">
+    </div>
+
+  </div>
+
+  <!-- ── Right: results ─────────────────────────────────────────────────── -->
+  <div id="table-area">
+    <div id="header-out"></div>
+    <div id="table-out" style="margin-top:8px"></div>
+  </div>
+
+</div>
+
+<!-- ── Bottom: leg diagram ────────────────────────────────────────────────── -->
+<div id="diagram">
+  <div id="plot" style="width:480px;height:430px"></div>
+</div>
+
+<script>
+// ── Constants from doc/torque-analysis/config.yaml ──────────────────────────
+// Link lengths (cm) — L1 fixed, L2/L3 have sliders
+const R1_FIXED = 8.0;   // links.L1.length_cm — shoulder→hip (no slider)
+const DEF_R2   = 8.0;   // links.L2.length_cm
+const DEF_R3   = 6.0;   // links.L3.length_cm
+
+// Link masses (kg): length_cm × width_cm × height_cm × density_g_cm3 × (1 + mass_margin) / 1000
+// L1: 8.0 × 2.0 × 1.5 × 1.24 × 1.15 / 1000
+const M_L1 = 8.0 * 2.0 * 1.5 * 1.24 * 1.15 / 1000;  // ≈ 0.034224 kg
+// L2: 8.0 × 2.0 × 1.5 × 1.24 × 1.15 / 1000
+const M_L2 = 8.0 * 2.0 * 1.5 * 1.24 * 1.15 / 1000;  // ≈ 0.034224 kg
+// L3: 6.0 × 1.5 × 1.2 × 1.24 × 1.15 / 1000
+const M_L3 = 6.0 * 1.5 * 1.2 * 1.24 * 1.15 / 1000;  // ≈ 0.015401 kg
+
+// Tip mass — tip.mass_kg
+const M_TIP = 0.0;
+
+// Inverse-solve display cap — matches Python _MAX_TIP
+const MAX_TIP = 50.0;  // kg
+// ────────────────────────────────────────────────────────────────────────────
+
+// ── Math — exact port from torque_calculations.py ───────────────────────────
+
+function torqueKnee(r3, thetaDeg, mL3, mTip) {
+    // Static torque at knee motor (s_L3) in kg·cm.
+    const cosT = Math.cos(thetaDeg * Math.PI / 180);
+    return (mL3 * (r3 / 2.0) + mTip * r3) * cosT;
+}
+
+function torqueHip(r2, r3, thetaHipDeg, thetaKneDeg, mL2, mL3, mServoKnee, mTip) {
+    // Static torque at hip motor (s_L2) in kg·cm.
+    // L2-attached masses project by cos(hip); L3-attached by cos(knee).
+    const cosH = Math.cos(thetaHipDeg * Math.PI / 180);
+    const cosK = Math.cos(thetaKneDeg * Math.PI / 180);
+    return (
+        mL2 * (r2 / 2.0) * cosH
+        + mServoKnee * r2 * cosH
+        + mL3 * (r2 * cosH + r3 / 2.0 * cosK)
+        + mTip * (r2 * cosH + r3 * cosK)
+    );
+}
+
+function momentOfInertiaLeg(r1, r2, r3, mL1, mL2, mL3, mServoHip, mServoKnee, mTip) {
+    // Moment of inertia of full leg about shoulder yaw axis (kg·cm²).
+    // Links: parallel axis theorem  I_cm + m*d²
+    const dL1 = r1 / 2.0;
+    const dL2 = r1 + r2 / 2.0;
+    const dL3 = r1 + r2 + r3 / 2.0;
+    const iLinks = (
+        (1.0 / 12.0) * mL1 * r1 * r1 + mL1 * dL1 * dL1
+        + (1.0 / 12.0) * mL2 * r2 * r2 + mL2 * dL2 * dL2
+        + (1.0 / 12.0) * mL3 * r3 * r3 + mL3 * dL3 * dL3
+    );
+    // Point masses: servos and tip
+    const iPoints = (
+        mServoHip * r1 * r1
+        + mServoKnee * (r1 + r2) * (r1 + r2)
+        + mTip * (r1 + r2 + r3) * (r1 + r2 + r3)
+    );
+    return iLinks + iPoints;
+}
+
+function torqueYaw(iKgCm2, targetDegPerS, rampTimeS) {
+    // Dynamic torque to accelerate leg to target angular velocity in rampTimeS. kg·cm.
+    const alpha = (targetDegPerS * Math.PI / 180) / rampTimeS;  // rad/s²
+    const iKgM2 = iKgCm2 * 1e-4;
+    const tauNm = iKgM2 * alpha;
+    return tauNm * 10.197;  // N·m → kg·cm
+}
+// ────────────────────────────────────────────────────────────────────────────
+
+function barHtml(tau, rated) {
+    let pct = rated > 0 ? tau / rated * 100.0 : 0.0;
+    pct = Math.max(0.0, Math.min(pct, 100.0));  // clamp: negative tau = gravity assists, show 0%
+    const color = pct < 90 ? '#27ae60' : (pct <= 100 ? '#f39c12' : '#c0392b');
+    return (
+        `<div style="display:inline-flex;align-items:center;gap:6px">` +
+        `<div style="background:#e0e0e0;border-radius:4px;width:120px;height:10px;overflow:hidden">` +
+        `<div style="background:${color};width:${pct.toFixed(0)}%;height:10px"></div></div>` +
+        `<span style="font-size:11px;color:#555">${pct.toFixed(0)}%</span></div>`
+    );
+}
+
+function update() {
+    const r2v   = parseFloat(document.getElementById('sl_r2').value);
+    const r3v   = parseFloat(document.getElementById('sl_r3').value);
+    const hipV  = parseFloat(document.getElementById('sl_hip').value);
+    const kneV  = parseFloat(document.getElementById('sl_kne').value);
+    const rampV = parseFloat(document.getElementById('sl_ramp').value);
+    const r1v   = R1_FIXED;  // L1 has no slider
+
+    // Update readout labels
+    document.getElementById('lbl_r2').textContent   = r2v.toFixed(1);
+    document.getElementById('lbl_r3').textContent   = r3v.toFixed(1);
+    document.getElementById('lbl_hip').textContent  = hipV.toFixed(0);
+    document.getElementById('lbl_kne').textContent  = kneV.toFixed(0);
+    document.getElementById('lbl_ramp').textContent = rampV.toFixed(2);
+
+    // Servo params
+    const ratedK = parseFloat(document.getElementById('nt_trq_k').value);   // knee rated (kg·cm)
+    const ratedH = parseFloat(document.getElementById('nt_trq_h').value);   // hip rated (kg·cm)
+    const ratedY = parseFloat(document.getElementById('nt_trq_sh').value);  // shoulder rated (kg·cm)
+    // mServoHip = s_L2 mass (at end of L1, drives hip pitch); used in torqueHip + inertia
+    const mServoHip  = parseFloat(document.getElementById('nt_m_h').value) / 1000.0;   // g → kg
+    // mServoKnee = s_L3 mass (at end of L2, drives knee pitch)
+    const mServoKnee = parseFloat(document.getElementById('nt_m_k').value) / 1000.0;   // g → kg
+    // s_L1 shoulder mass (nt_m_sh) not used in calculations — shoulder servo rotates in place
+
+    // Link masses are geometry-derived from config (not editable)
+    const mL1v = M_L1, mL2v = M_L2, mL3v = M_L3;
+
+    // ── Inverse solve: max tip load each motor can support ───────────────────
+    // Clamp cosines: angle > 90° means gravity assists → constraint becomes unlimited
+    const cosHip  = Math.cos(hipV * Math.PI / 180);
+    const cosKne  = Math.cos(kneV * Math.PI / 180);
+    const cosHipG = Math.max(cosHip, 0.0);
+    const cosKneG = Math.max(cosKne, 0.0);
+
+    let maxTipKnee, maxTipHip;
+    if (cosKneG > 1e-6) {
+        maxTipKnee = (ratedK / cosKneG - mL3v * r3v / 2.0) / r3v;
+    } else {
+        maxTipKnee = MAX_TIP;
+    }
+
+    const hipNum = (
+        ratedH
+        - (mL2v * r2v / 2.0 + mServoKnee * r2v) * cosHipG
+        - mL3v * (r2v * cosHipG + r3v / 2.0 * cosKneG)
+    );
+    const hipDen = r2v * cosHipG + r3v * cosKneG;
+    if (hipDen > 1e-6) {
+        maxTipHip = hipNum / hipDen;
+    } else {
+        maxTipHip = MAX_TIP;
+    }
+
+    const overloaded = Math.min(maxTipKnee, maxTipHip) < 0;
+    let maxTip = Math.max(Math.min(maxTipKnee, maxTipHip), 0.0);
+    maxTip = Math.min(maxTip, MAX_TIP);
+    const maxBody3 = maxTip * 3;
+    const maxBody4 = maxTip * 4;
+    const capped   = maxTip >= MAX_TIP;
+    const limiting = maxTipKnee <= maxTipHip ? 's_L3 knee' : 's_L2 hip';
+
+    // ── Forward pass at max_tip — for capacity bars ──────────────────────────
+    const tauK = torqueKnee(r3v, kneV, mL3v, maxTip);
+    const tauH = torqueHip(r2v, r3v, hipV, kneV, mL2v, mL3v, mServoKnee, maxTip);
+    // Yaw inertia uses fully-extended (straight) leg — intentional worst-case bound
+    const iV   = momentOfInertiaLeg(r1v, r2v, r3v, mL1v, mL2v, mL3v, mServoHip, mServoKnee, maxTip);
+    const tauY = torqueYaw(iV, 60.0, rampV);
+
+    // ── Header ───────────────────────────────────────────────────────────────
+    let headerHtml;
+    if (overloaded) {
+        headerHtml = (
+            '<div style="background:#fdecea;border:1px solid #e74c3c;border-radius:4px;' +
+            'padding:10px 14px;font-size:13px;color:#c0392b">' +
+            '<b>&#9888; Overloaded</b> — link masses alone exceed servo rating at this angle.<br>' +
+            'Increase hip or knee angle (bend the leg) to reduce the gravity moment.' +
+            '</div>'
+        );
+    } else {
+        const tipStr = capped ? `≥ ${MAX_TIP.toFixed(0)} kg` : `${maxTip.toFixed(3)} kg`;
+        const b3     = capped ? `≥ ${maxBody3.toFixed(1)} kg` : `${maxBody3.toFixed(2)} kg`;
+        const b4     = capped ? `≥ ${maxBody4.toFixed(1)} kg` : `${maxBody4.toFixed(2)} kg`;
+        headerHtml = (
+            `<div style="padding:10px 14px;background:#eaf6ff;border-radius:4px;border:1px solid #aed6f1">` +
+            `<div style="font-size:18px;font-weight:bold;margin-bottom:4px">` +
+            `Max supported body weight: &nbsp;3-leg: ${b3} &nbsp;|&nbsp; 4-leg: ${b4}` +
+            `</div>` +
+            `<div style="font-size:11px;color:#888">per-leg tip load: ${tipStr} &nbsp;·&nbsp; limiting motor: ${limiting}</div>` +
+            `</div>`
+        );
+    }
+    document.getElementById('header-out').innerHTML = headerHtml;
+
+    // ── Table ─────────────────────────────────────────────────────────────────
+    const rows = [
+        ['s_L3&nbsp; knee (pitch)',         tauK, ratedK],
+        ['s_L2&nbsp; hip (pitch)',           tauH, ratedH],
+        ['s_L1&nbsp; shoulder (yaw, dyn)',  tauY, ratedY],
+    ];
+    let rowHtml = '';
+    rows.forEach(([label, tau, rated], i) => {
+        const bg = i % 2 ? " style='background:#f9f9f9'" : '';
+        rowHtml += (
+            `<tr${bg}>` +
+            `<td style='padding:5px 10px;text-align:left'>${label}</td>` +
+            `<td style='padding:5px 10px;text-align:center;font-variant-numeric:tabular-nums'>${tau.toFixed(3)}</td>` +
+            `<td style='padding:5px 10px;text-align:center'>${rated.toFixed(1)}</td>` +
+            `<td style='padding:5px 10px;text-align:center'>${barHtml(tau, rated)}</td>` +
+            `</tr>`
+        );
+    });
+    document.getElementById('table-out').innerHTML = (
+        `<table style="border-collapse:collapse;font-size:12px;min-width:420px">` +
+        `<tr style="background:#f0f0f0">` +
+        `<th style="padding:5px 10px;text-align:left">Motor</th>` +
+        `<th style="padding:5px 10px;text-align:center">τ used (kg·cm)</th>` +
+        `<th style="padding:5px 10px;text-align:center">τ rated</th>` +
+        `<th style="padding:5px 10px;text-align:center">Capacity</th>` +
+        `</tr>` +
+        rowHtml +
+        `</table>` +
+        `<p style="font-size:11px;color:#888;margin-top:6px">` +
+        `hip=${hipV.toFixed(0)}° knee=${kneV.toFixed(0)}° from horizontal &nbsp;|&nbsp; worst case at 0°` +
+        ` &nbsp;|&nbsp; yaw: 60°/s in ${rampV.toFixed(2)}s</p>`
+    );
+
+    // ── Plotly leg diagram ────────────────────────────────────────────────────
+    const hipRad = hipV * Math.PI / 180;
+    const kneRad = kneV * Math.PI / 180;
+
+    const x0 = 0.0, y0 = 0.0;
+    const x1 = x0 + r1v;              // L1 fixed horizontal
+    const y1 = y0;
+    const x2 = x1 + r2v * Math.cos(hipRad);
+    const y2 = y1 - r2v * Math.sin(hipRad);
+    const x3 = x2 + r3v * Math.cos(kneRad);
+    const y3 = y2 - r3v * Math.sin(kneRad);
+
+    // Fixed viewport: sized for worst-case reach so scale is stable across angles
+    const maxX = r1v + r2v + r3v;     // fully extended horizontal
+    const maxY = r2v + r3v;            // fully bent downward
+    const pad  = 2.0;
+    const spanFixed = Math.max(maxX, maxY) + 2 * pad;
+    const cxFixed   = maxX / 2;
+    const cyFixed   = -maxY / 2;
+
+    const traces = [
+        {
+            x: [x0, x1], y: [y0, y1],
+            mode: 'lines',
+            line: { color: '#e67e22', width: 8 },
+            name: `L1 = ${r1v.toFixed(1)} cm (fixed)`,
+        },
+        {
+            x: [x1, x2], y: [y1, y2],
+            mode: 'lines',
+            line: { color: '#3498db', width: 8 },
+            name: `L2 = ${r2v.toFixed(1)} cm`,
+        },
+        {
+            x: [x2, x3], y: [y2, y3],
+            mode: 'lines',
+            line: { color: '#9b59b6', width: 8 },
+            name: `L3 = ${r3v.toFixed(1)} cm`,
+        },
+        {
+            x: [x0, x1, x2], y: [y0, y1, y2],
+            mode: 'markers',
+            marker: { size: 13, color: ['#7f8c8d', '#e74c3c', '#e74c3c'] },
+            showlegend: false,
+            hoverinfo: 'skip',
+        },
+        {
+            x: [x3], y: [y3],
+            mode: 'markers',
+            marker: { size: 11, color: '#2ecc71', symbol: 'triangle-up' },
+            name: 'tip',
+            showlegend: false,
+            hoverinfo: 'skip',
+        },
+    ];
+
+    const annotations = [
+        {
+            x: x0, y: y0,
+            text: `s_L1 (yaw)<br>${tauY.toFixed(3)} kg·cm`,
+            showarrow: false, yshift: 30,
+            font: { size: 8, color: '#555' },
+            bgcolor: 'rgba(255,255,255,0.75)', borderpad: 2,
+        },
+        {
+            x: x1, y: y1,
+            text: `s_L2 (hip)<br>${tauH.toFixed(2)} kg·cm`,
+            showarrow: false, yshift: 30,
+            font: { size: 8, color: '#555' },
+            bgcolor: 'rgba(255,255,255,0.75)', borderpad: 2,
+        },
+        {
+            x: x2, y: y2,
+            text: `s_L3 (knee)<br>${tauK.toFixed(2)} kg·cm`,
+            showarrow: false, yshift: 30,
+            font: { size: 8, color: '#555' },
+            bgcolor: 'rgba(255,255,255,0.75)', borderpad: 2,
+        },
+        {
+            x: x3, y: y3,
+            text: 'tip',
+            showarrow: false, yshift: 18,
+            font: { size: 8, color: '#555' },
+        },
+    ];
+
+    const layout = {
+        title: {
+            text: `Leg: hip=${hipV.toFixed(0)}°  knee=${kneV.toFixed(0)}°   (L1=${r1v} · L2=${r2v} · L3=${r3v} cm)`,
+            font: { size: 10 },
+            x: 0.5,
+        },
+        xaxis: {
+            range: [cxFixed - spanFixed / 2, cxFixed + spanFixed / 2],
+            showticklabels: false,
+            gridcolor: '#e8e8e8',
+            gridwidth: 1,
+            zeroline: false,
+        },
+        yaxis: {
+            range: [cyFixed - spanFixed / 2, cyFixed + spanFixed / 2],
+            showticklabels: false,
+            gridcolor: '#e8e8e8',
+            gridwidth: 1,
+            zeroline: false,
+            scaleanchor: 'x',
+            scaleratio: 1,
+        },
+        legend: {
+            x: 1, y: 1, xanchor: 'right',
+            font: { size: 8 },
+            bgcolor: 'rgba(255,255,255,0.8)',
+        },
+        annotations,
+        margin: { l: 20, r: 20, t: 38, b: 16 },
+        plot_bgcolor: '#fff',
+        paper_bgcolor: '#fff',
+    };
+
+    Plotly.react('plot', traces, layout, { displayModeBar: false });
+}
+
+// ── Wire inputs ───────────────────────────────────────────────────────────────
+['sl_r2', 'sl_r3', 'sl_hip', 'sl_kne', 'sl_ramp'].forEach(id => {
+    document.getElementById(id).addEventListener('input', update);
+});
+['nt_trq_h', 'nt_trq_k', 'nt_trq_sh', 'nt_m_h', 'nt_m_k', 'nt_m_sh'].forEach(id => {
+    document.getElementById(id).addEventListener('change', update);
+});
+
+// Initial render
+update();
+</script>
+
+</body>
+</html>

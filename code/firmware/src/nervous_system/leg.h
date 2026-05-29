@@ -19,6 +19,7 @@ class Leg {
     bool easing() const;
     void identifyAndMove(uint8_t channel, double angle);
     void getJointAngles(float& hip, float& thigh, float& knee) const;
+    uint8_t legId() const { return (uint8_t)id; }  // 0=FR, 1=FL, 2=RR/BR, 3=RL/BL
   private:
     int id;
     Servo hipServo;

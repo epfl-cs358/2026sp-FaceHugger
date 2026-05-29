@@ -65,6 +65,23 @@ NEUTRAL: list[NeutralPose] = [
     NeutralPose(sh=-135.0, th=-60.0, kn=-35.0),  # LEG_RL / BL (3)
 ]
 
+# Per-servo zero-point calibration: servo angle when the joint is at mechanical
+# zero (math 0° = thigh/knee horizontal). Mirror of CALIB_* macros in
+# code/firmware/src/shared/config.h. Hip is uncalibrated (stays at 90).
+# Keep in sync with the firmware whenever CALIB values change.
+CALIB_THIGH: dict[int, int] = {
+    LEG_FR: 84,
+    LEG_FL: 87,
+    LEG_RR: 103,  # BR
+    LEG_RL: 84,  # BL
+}
+CALIB_KNEE: dict[int, int] = {
+    LEG_FR: 95,
+    LEG_FL: 82,
+    LEG_RR: 80,  # BR
+    LEG_RL: 87,  # BL
+}
+
 
 @dataclass
 class ServoTriple:
@@ -98,47 +115,69 @@ def translate_to_servo(leg_id: int, sh: float, th: float, kn: float) -> ServoTri
     out = ServoTriple(hip=90.0, thigh=90.0, knee=90.0)
     if leg_id == LEG_FR:
         out.hip = 90.0 + (sh - 45.0)
-        out.thigh = 90.0 - th
-        out.knee = 90.0 + kn
+        out.thigh = CALIB_THIGH[LEG_FR] - th
+        out.knee = CALIB_KNEE[LEG_FR] + kn
     elif leg_id == LEG_FL:
         out.hip = 90.0 + (sh - 135.0)
-        out.thigh = 90.0 + th
-        out.knee = 90.0 - kn
+        out.thigh = CALIB_THIGH[LEG_FL] + th
+        out.knee = CALIB_KNEE[LEG_FL] - kn
     elif leg_id == LEG_RR:
         # BR shoulder un-mirrored (2026-05-25): +sh = +servo like fr/fl/bl
         # (identical motor, yaw shaft on the same vertical axis). Byte-identical
         # to firmware translateToServo / exporter _frame_to_servo.
         out.hip = 90.0 + (sh + 45.0)
-        out.thigh = 90.0 + th
-        out.knee = 90.0 - kn
+        out.thigh = CALIB_THIGH[LEG_RR] + th
+        out.knee = CALIB_KNEE[LEG_RR] - kn
     elif leg_id == LEG_RL:
         out.hip = 90.0 + (sh + 135.0)
-        out.thigh = 90.0 - th
-        out.knee = 90.0 + kn
+        out.thigh = CALIB_THIGH[LEG_RL] - th
+        out.knee = CALIB_KNEE[LEG_RL] + kn
     else:
         raise ValueError(f"unknown leg_id {leg_id!r}")
     return out
 
 
-def clamp_clip_servos(s: ServoTriple) -> ServoTriple:
-    """Clamp servo angles to safe hardware ranges for clip playback.
+# Clip-playback servo-clamp half-widths, derived from the URDF joint limits.
+# Mirror of HIP_CLAMP_FROM_NINETY / THIGH_CLAMP_FROM_CALIB / KNEE_CLAMP_FROM_CALIB
+# in code/firmware/src/shared/config.h — keep in sync.
+HIP_CLAMP_FROM_NINETY = 52
+THIGH_CLAMP_FROM_CALIB = 60
+KNEE_CLAMP_FROM_CALIB = 90
 
-    Mirrors firmware clampClipServos() in
-    code/firmware/src/nervous_system/motion_math.cpp:10-18.
 
-    Ranges:
-      hip (shoulder): [38, 142]  — 90 ± 52 (tightest side of each leg)
-      thigh:          [30, 150]  — 90 ± 60
-      knee:           [0,  180]  — full travel
+def clamp_clip_servos(leg_id: int, s: ServoTriple) -> ServoTriple:
+    """Clamp servo angles for one leg to its safe envelope on the clip path.
+
+    Per-leg, CALIB-relative — mirrors firmware clampClipServos() in
+    code/firmware/src/nervous_system/motion_math.cpp.
+
+    Envelope (derived from URDF joint limits):
+      hip   uniform 90 ± HIP_CLAMP_FROM_NINETY  (every leg's tight shoulder side)
+      thigh CALIB_THIGH[leg_id] ± THIGH_CLAMP_FROM_CALIB  (URDF ±60° symmetric)
+      knee  CALIB_KNEE[leg_id]  ± KNEE_CLAMP_FROM_CALIB   (URDF ±90° symmetric)
+
+    Raises ValueError for unknown leg_id.
     """
+    if leg_id not in CALIB_THIGH:
+        raise ValueError(f"unknown leg_id {leg_id!r}")
 
     def cl(v: float, lo: float, hi: float) -> float:
         return lo if v < lo else (hi if v > hi else v)
 
+    thigh_center = CALIB_THIGH[leg_id]
+    knee_center = CALIB_KNEE[leg_id]
     return ServoTriple(
-        hip=cl(s.hip, 38.0, 142.0),
-        thigh=cl(s.thigh, 30.0, 150.0),
-        knee=cl(s.knee, 0.0, 180.0),
+        hip=cl(s.hip, 90.0 - HIP_CLAMP_FROM_NINETY, 90.0 + HIP_CLAMP_FROM_NINETY),
+        thigh=cl(
+            s.thigh,
+            thigh_center - THIGH_CLAMP_FROM_CALIB,
+            thigh_center + THIGH_CLAMP_FROM_CALIB,
+        ),
+        knee=cl(
+            s.knee,
+            knee_center - KNEE_CLAMP_FROM_CALIB,
+            knee_center + KNEE_CLAMP_FROM_CALIB,
+        ),
     )
 
 

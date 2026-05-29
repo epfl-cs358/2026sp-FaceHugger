@@ -18,7 +18,7 @@ import sys
 import types
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SCRIPT = os.path.join(REPO_ROOT, "animation/scripts/fh_clip_panel.py")
+SCRIPT = os.path.join(REPO_ROOT, "animation/addons/fh_clip_panel.py")
 CONV_PATH = os.path.join(REPO_ROOT, "animation/convention.json")
 
 
@@ -107,9 +107,12 @@ def main():
     ids = [c["id"] for c in man["clips"]]
     names = [c["name"] for c in man["clips"]]
     check("manifest ids 0..n-1", ids == [0, 1])
-    check("manifest names ordered as dict", names == ["wiggle", "bow"])
-    check("manifest frame_count", man["clips"][0]["frame_count"] == 3)
-    check("manifest duration_ms == last t_ms", man["clips"][0]["duration_ms"] == 84)
+    # Emitter sorts clip names alphabetically (Task #7), so "bow" precedes
+    # "wiggle" regardless of the input dict's insertion order.
+    check("manifest names sorted alphabetically", names == ["bow", "wiggle"])
+    # "bow" is id 0 now and has 2 frames (rows_b above).
+    check("manifest frame_count", man["clips"][0]["frame_count"] == 2)
+    check("manifest duration_ms == last t_ms", man["clips"][0]["duration_ms"] == 50)
 
     # 3. Scale applied exactly once, math-space (NOT servo-space).
     # For raw=0 and neutral n, scaled = n + (0-n)*scale. Check FR shoulder
@@ -153,6 +156,36 @@ def main():
         "leg reorder FR,FL,RR,RL with neutral fixed point",
         all(abs(a - b) < 0.01 for a, b in zip(floats, expected)),
     )
+
+    # 4b. Shuffled input -> alphabetical output (Task #7 regression).
+    # Pass a deliberately reverse-sorted dict and assert the emitters
+    # still produce alphabetical order. Guards against the documented
+    # "insertion order = clip id" drift hazard.
+    shuffled = {"zulu": rows_a, "alpha": rows_b}
+    h_sh, m_sh = mod.to_clips_header(shuffled, conv, write=False)
+    man_sh = json.loads(m_sh)
+    sh_names = [c["name"] for c in man_sh["clips"]]
+    sh_ids = [c["id"] for c in man_sh["clips"]]
+    check("shuffled-input header: names alphabetical", sh_names == ["alpha", "zulu"])
+    check("shuffled-input header: ids 0,1 in sorted order", sh_ids == [0, 1])
+    # FH_CLIPS[] entries should list alpha before zulu.
+    fh_clips_block = re.search(
+        r"FH_CLIPS\[FH_CLIP_COUNT\]\s*=\s*\{(.*?)\};", h_sh, re.DOTALL
+    )
+    check("shuffled-input header: FH_CLIPS[] block present", fh_clips_block is not None)
+    if fh_clips_block:
+        body = fh_clips_block.group(1)
+        i_alpha = body.find('"alpha"')
+        i_zulu = body.find('"zulu"')
+        check(
+            "shuffled-input header: FH_CLIPS[] orders alpha before zulu",
+            i_alpha != -1 and i_zulu != -1 and i_alpha < i_zulu,
+        )
+    # to_clips_extra_json on the same shuffled dict must also sort.
+    extra_sh = json.loads(mod.to_clips_extra_json(shuffled, conv, write=False))
+    extra_names = [c["name"] for c in extra_sh["clips"]]
+    check("shuffled-input extra: clips[0].name == 'alpha'", extra_names[0] == "alpha")
+    check("shuffled-input extra: names alphabetical", extra_names == ["alpha", "zulu"])
 
     # 5. Determinism.
     h_again, m_again = mod.to_clips_header(clips, conv, write=False)

@@ -1,0 +1,6 @@
+title: Firmware
+nav:
+  - index.md
+  - motion-engine.md
+  - fsm-states.md
+  - csv-diagnostics.md

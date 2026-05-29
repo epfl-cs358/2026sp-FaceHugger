@@ -62,19 +62,20 @@ leg_template:
 # the JSON can't: the human-readable id, which body landmark to mount on,
 # and which side mesh to use (L vs R).
 #
-# All three former yaml fields below were dropped after Convention A
-# landed (see code/simulation/docs/MERGE_AND_CONVENTION.md):
+# All three former yaml fields below were dropped — they're now derived
+# from the FL Fusion rest in fusion_export.json:
 #
-#   - rpy_z_deg            -> derived from the FL Fusion rest in JSON
-#                             (FR=-FL, BL=wrap_pi(FL+π), BR=-wrap_pi(FL+π)).
+#   - rpy_z_deg            -> derived from FL's rest (FR=-FL,
+#                             BL=wrap_pi(FL+π), BR=-wrap_pi(FL+π)).
 #                             The geometric back-of-pair flip (0° / 180°)
 #                             is now derived from leg_id ("b*" = back).
 #   - shoulder_limits_deg  -> URDF limits = Fusion limits shifted relative
 #                             to FL's rest; symmetric for every leg by
 #                             mirror symmetry. Computed in generate_urdf.py.
-#   - shoulder_neutral_deg -> identical to URDF θ=0 under Convention A
-#                             (URDF rest IS the Fusion mechanical zero).
-#                             Stance code reads stance_rad["shoulder"] = 0.
+#   - shoulder_neutral_deg -> identical to URDF θ=0 (the URDF rest IS the
+#                             Fusion mechanical zero — the splayed rest is
+#                             baked into the joint <origin rpy>). Stance
+#                             code reads stance_rad["shoulder"] = 0.
 #
 # Diagonal-pair mesh sharing: {FL, BR} use the L mesh; {FR, BL} use R.
 # ---------------------------------------------------------------------------

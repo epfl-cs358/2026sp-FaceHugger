@@ -122,36 +122,59 @@ def test_translate_single_joint_perturb(leg_id, joint):
     assert abs(got.knee - exp_kn) < 1e-9
 
 
-# ─── clamp_clip_servos ───────────────────────────────────────────────────────
+# ─── clamp_clip_servos (per-leg, CALIB-relative) ─────────────────────────────
 
 
-def test_clamp_clip_servos_passthrough():
-    """A servo triple already in range must pass through unchanged."""
+@pytest.mark.parametrize("leg_id", [LEG_FR, LEG_FL, LEG_RR, LEG_RL])
+def test_clamp_clip_servos_passthrough(leg_id):
+    """Mid-range (90,90,90) sits inside every leg's window — pass-through."""
     s = ServoTriple(hip=90.0, thigh=90.0, knee=90.0)
-    c = clamp_clip_servos(s)
+    c = clamp_clip_servos(leg_id, s)
     assert c.hip == 90.0 and c.thigh == 90.0 and c.knee == 90.0
 
 
-def test_clamp_clip_servos_hip_low():
-    """Hip below 38 must be clamped to 38."""
-    s = ServoTriple(hip=0.0, thigh=90.0, knee=90.0)
-    c = clamp_clip_servos(s)
-    assert c.hip == 38.0
+@pytest.mark.parametrize("leg_id", [LEG_FR, LEG_FL, LEG_RR, LEG_RL])
+def test_clamp_clip_servos_hip_uniform(leg_id):
+    """Hip envelope is uniform across legs: 90 ± 52 = [38, 142]."""
+    assert clamp_clip_servos(leg_id, ServoTriple(0.0, 90.0, 90.0)).hip == 38.0
+    assert clamp_clip_servos(leg_id, ServoTriple(200.0, 90.0, 90.0)).hip == 142.0
 
 
-def test_clamp_clip_servos_thigh_high():
-    """Thigh above 150 must be clamped to 150."""
-    s = ServoTriple(hip=90.0, thigh=200.0, knee=90.0)
-    c = clamp_clip_servos(s)
-    assert c.thigh == 150.0
+def test_clamp_clip_servos_thigh_FL_neutral_27():
+    """The motivating case: FL NEUTRAL (servo thigh = 27 = CALIB_FL_THIGH - 60)
+    must sit on the lower edge, not be clipped to 30 by an old uniform window."""
+    s = ServoTriple(hip=90.0, thigh=27.0, knee=90.0)
+    assert clamp_clip_servos(LEG_FL, s).thigh == 27.0
+    # And anything below CALIB-60 IS clipped to CALIB-60.
+    s_low = ServoTriple(hip=90.0, thigh=26.0, knee=90.0)
+    assert clamp_clip_servos(LEG_FL, s_low).thigh == 27.0
 
 
-def test_clamp_clip_servos_knee_range():
-    """Knee is full-travel [0, 180]; values at edges stay unchanged."""
-    s_lo = ServoTriple(hip=90.0, thigh=90.0, knee=0.0)
-    s_hi = ServoTriple(hip=90.0, thigh=90.0, knee=180.0)
-    assert clamp_clip_servos(s_lo).knee == 0.0
-    assert clamp_clip_servos(s_hi).knee == 180.0
+def test_clamp_clip_servos_thigh_BR_upper_163():
+    """CALIB_BR_THIGH = 103 → window [43, 163]. Upper edge is 163, not 150."""
+    assert clamp_clip_servos(LEG_RR, ServoTriple(90.0, 163.0, 90.0)).thigh == 163.0
+    assert clamp_clip_servos(LEG_RR, ServoTriple(90.0, 164.0, 90.0)).thigh == 163.0
+    assert clamp_clip_servos(LEG_RR, ServoTriple(90.0, 43.0, 90.0)).thigh == 43.0
+    assert clamp_clip_servos(LEG_RR, ServoTriple(90.0, 42.0, 90.0)).thigh == 43.0
+
+
+def test_clamp_clip_servos_thigh_FR_lower_24():
+    """CALIB_FR_THIGH = 84 → window [24, 144]. 24 unchanged; 23 clamped to 24."""
+    assert clamp_clip_servos(LEG_FR, ServoTriple(90.0, 24.0, 90.0)).thigh == 24.0
+    assert clamp_clip_servos(LEG_FR, ServoTriple(90.0, 23.0, 90.0)).thigh == 24.0
+
+
+def test_clamp_clip_servos_knee_per_leg():
+    """Knee is CALIB ± 90 per leg, NOT a uniform [0, 180]."""
+    # CALIB_FR_KNEE = 95 → window [5, 185]
+    assert clamp_clip_servos(LEG_FR, ServoTriple(90.0, 90.0, 4.0)).knee == 5.0
+    # CALIB_FL_KNEE = 82 → window [-8, 172]
+    assert clamp_clip_servos(LEG_FL, ServoTriple(90.0, 90.0, 173.0)).knee == 172.0
+
+
+def test_clamp_clip_servos_unknown_leg_raises():
+    with pytest.raises(ValueError):
+        clamp_clip_servos(99, ServoTriple(90.0, 90.0, 90.0))
 
 
 # ─── servo_to_radians ────────────────────────────────────────────────────────

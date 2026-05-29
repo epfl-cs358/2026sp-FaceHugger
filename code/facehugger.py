@@ -353,6 +353,41 @@ def _shutdown_children(procs):
             _signal_group(p, signal.SIGKILL)
 
 
+def _ensure_app_deps(app_dir):
+    """Make sure the Expo app has its npm deps installed before we spawn it.
+
+    Without this, `sim --app` / `app` would call `npx expo start` against a
+    bare checkout, which fails silently inside the spawned process while the
+    sim keeps printing "Web app: …" — confusing on a fresh clone. Idempotent:
+    if `node_modules/.package-lock.json` is newer than `package.json` we
+    short-circuit; otherwise run `npm ci` (or `npm install` if no lock file).
+    Streams stdout/stderr so the user sees install progress + any errors."""
+    pkg = app_dir / "package.json"
+    if not pkg.is_file():
+        sys.exit(f"app package.json not found: {pkg}")
+    if shutil.which("npm") is None:
+        _die_missing(
+            "Node / npm", "Install Node.js 18+ (the app uses Expo):", "nodejs.org"
+        )
+    nm = app_dir / "node_modules"
+    nm_stamp = nm / ".package-lock.json"
+    fresh = (
+        nm.is_dir()
+        and nm_stamp.is_file()
+        and nm_stamp.stat().st_mtime >= pkg.stat().st_mtime
+    )
+    if fresh:
+        return
+    has_lock = (app_dir / "package-lock.json").is_file()
+    cmd = ["npm", "ci"] if has_lock else ["npm", "install"]
+    print(f"Installing app deps ({' '.join(cmd)} in {app_dir.name})…")
+    rc = subprocess.call(cmd, cwd=str(app_dir))
+    if rc != 0:
+        sys.exit(
+            f"app dep install failed (exit {rc}); run `{' '.join(cmd)}` in {app_dir} manually"
+        )
+
+
 def _serve_session(*, host, port, gui, app, app_port, panel=False):
     """Run the firmware-backed WebSocket API (ws_sim), optionally launching the web
     app alongside it and hosting the browser control panel. Backs `sim --serve` /
@@ -373,6 +408,7 @@ def _serve_session(*, host, port, gui, app, app_port, panel=False):
             _die_missing(
                 "Node / npx", "Install Node.js 18+ (the app uses Expo):", "nodejs.org"
             )
+        _ensure_app_deps(app_dir)
         print(f"Web app:   http://localhost:{app_port}  (auto-connects to the sim)")
         # Point the launched web app at the sim by default (config.ts reads these
         # EXPO_PUBLIC_ vars as its startup target). The Settings screen can still
@@ -461,6 +497,7 @@ def cmd_app(args):
         _die_missing(
             "Node / npx", "Install Node.js 18+ (the app uses Expo):", "nodejs.org"
         )
+    _ensure_app_deps(app_dir)
     url = f"http://localhost:{args.port}"
     print(f"Serving the remote-control app (Expo web) at {url}")
     print("Point it at the robot or the sim from the app's Settings screen.")

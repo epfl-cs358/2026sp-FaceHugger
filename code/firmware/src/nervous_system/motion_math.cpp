@@ -1,5 +1,12 @@
 #include "motion_math.h"
+#include "../shared/config.h"  // CALIB_* per-servo zero-point calibration
 #include "clips_all.h"
+
+uint32_t clampPoseEaseMs(uint32_t dur_ms) {
+    // 0 ("snap") is preserved; otherwise cap at POSE_EASE_MS_MAX. uint32_t so a
+    // wire negative read as int becomes a huge unsigned and clamps to MAX, not 0.
+    return dur_ms > (uint32_t)POSE_EASE_MS_MAX ? (uint32_t)POSE_EASE_MS_MAX : dur_ms;
+}
 
 double easeFraction(uint32_t elapsed_ms, uint32_t dur_ms) {
     if (dur_ms == 0 || elapsed_ms >= dur_ms) return 1.0;
@@ -7,13 +14,24 @@ double easeFraction(uint32_t elapsed_ms, uint32_t dur_ms) {
     return t * t * (3.0 - 2.0 * t);  // smoothstep
 }
 
-ServoTriple clampClipServos(ServoTriple s) {
+ServoTriple clampClipServos(uint8_t legId, ServoTriple s) {
     auto cl = [](double v, double lo, double hi) {
         return v < lo ? lo : (v > hi ? hi : v);
     };
-    s.hip   = cl(s.hip,   38.0, 142.0);  // shoulder: 90 +/- 52 (every leg's tight side)
-    s.thigh = cl(s.thigh, 30.0, 150.0);  // 90 +/- 60
-    s.knee  = cl(s.knee,   0.0, 180.0);  // 90 +/- 90
+    // Hip: uniform across legs. The tight side of every URDF shoulder is 52°,
+    // so 90 ± 52 is inside every leg's reach regardless of left/right.
+    const double hip_lo = 90.0 - (double)HIP_CLAMP_FROM_NINETY;
+    const double hip_hi = 90.0 + (double)HIP_CLAMP_FROM_NINETY;
+    // Thigh + knee: CALIB-relative per leg. Bounds-guard legId so a junk caller
+    // can't read past the [4] arrays; out-of-range legs fall back to the old
+    // uniform 90-centered envelope.
+    const double thigh_center = (legId < 4) ? (double)CALIB_THIGH_BY_LEG[legId] : 90.0;
+    const double knee_center  = (legId < 4) ? (double)CALIB_KNEE_BY_LEG[legId]  : 90.0;
+    s.hip   = cl(s.hip,   hip_lo, hip_hi);
+    s.thigh = cl(s.thigh, thigh_center - (double)THIGH_CLAMP_FROM_CALIB,
+                          thigh_center + (double)THIGH_CLAMP_FROM_CALIB);
+    s.knee  = cl(s.knee,  knee_center  - (double)KNEE_CLAMP_FROM_CALIB,
+                          knee_center  + (double)KNEE_CLAMP_FROM_CALIB);
     return s;
 }
 
@@ -21,10 +39,14 @@ float emaStep(float prev, float target, float alpha) {
     return alpha * prev + (1.0f - alpha) * target;
 }
 
-ServoTriple applyInvert(ServoTriple s, bool inverted) {
+ServoTriple applyInvert(uint8_t legId, ServoTriple s, bool inverted) {
     if (inverted) {
-        s.thigh = 180.0 - s.thigh;
-        s.knee  = 180.0 - s.knee;
+        // Mirror about CALIB (= flat in servo space) per joint, so mirror equals
+        // math-space negation. Pre-calibration this was (180 - s) because flat was
+        // assumed to be servo 90 uniformly. With per-joint CALIB the mirror axis
+        // is 2*CALIB - s; reduces to 180 - s exactly when CALIB == 90.
+        s.thigh = 2.0 * CALIB_THIGH_BY_LEG[legId] - s.thigh;
+        s.knee  = 2.0 * CALIB_KNEE_BY_LEG[legId]  - s.knee;
     }
     return s;
 }
@@ -34,14 +56,14 @@ ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn) {
     switch (legId) {
         case 0:  // LEG_FR
             out.hip   = 90.0 + (sh - 45.0);
-            out.thigh = 90.0 - th;
-            out.knee  = 90.0 + kn;
+            out.thigh = CALIB_FR_THIGH - th;
+            out.knee  = CALIB_FR_KNEE  + kn;
             break;
         case 1:  // LEG_FL
             out.hip   = 90.0 + (sh - 135.0);  // Change B: regularized so servo 90 = outward (+135),
                                               // matching FR/BR/BL. Requires FL horn remount on hardware.
-            out.thigh = 90.0 + th;
-            out.knee  = 90.0 - kn;
+            out.thigh = CALIB_FL_THIGH + th;
+            out.knee  = CALIB_FL_KNEE  - kn;
             break;
         case 2:  // LEG_RR / BR
             // BR shoulder un-mirrored (2026-05-25): identical motor, yaw shaft
@@ -50,13 +72,13 @@ ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn) {
             // flipped in tandem so gait servo output is unchanged. See
             // docs/.work/convention-docs/DRAFT-delta-conventions.md §3.
             out.hip   = 90.0 + (sh + 45.0);  // was 90.0 - (sh + 45.0)
-            out.thigh = 90.0 + th;
-            out.knee  = 90.0 - kn;
+            out.thigh = CALIB_BR_THIGH + th;
+            out.knee  = CALIB_BR_KNEE  - kn;
             break;
         case 3:  // LEG_RL / BL
             out.hip   = 90.0 + (sh + 135.0);
-            out.thigh = 90.0 - th;
-            out.knee  = 90.0 + kn;
+            out.thigh = CALIB_BL_THIGH - th;
+            out.knee  = CALIB_BL_KNEE  + kn;
             break;
         default:
             break;

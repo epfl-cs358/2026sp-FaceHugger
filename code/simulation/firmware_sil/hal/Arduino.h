@@ -25,6 +25,15 @@ namespace fh_sim {
 // The single source of "firmware time". The bridge writes this each tick.
 inline uint32_t clock_ms = 0;
 
+// IMU state injected by the SIL bridge from PyBullet's body orientation. The
+// bridge applies the same hysteresis as the firmware (flip>150°, clear<30°)
+// before writing imu_upside_down; pitch_deg / roll_deg are the raw angles so
+// the T:10 telemetry surface can show them. sensors_sil.cpp reads these and
+// returns them through the firmware's sensors.h surface (imuIsInverted etc).
+inline bool  imu_upside_down = false;
+inline float pitch_deg       = 0.0f;
+inline float roll_deg        = 0.0f;
+
 // Captured Serial output, split into complete lines. The firmware's own
 // Serial.printf warnings (e.g. "[OOR] servo N requested X") land here so the
 // SIL can surface them via the binding — we capture the firmware's reports, we

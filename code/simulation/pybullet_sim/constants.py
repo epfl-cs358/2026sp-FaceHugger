@@ -2,7 +2,7 @@
 
 import os
 
-# This module now lives in pybullet_sim/; generated/ and the config yaml sit one
+# This module lives in pybullet_sim/; generated/ and the config yaml sit one
 # level up in code/simulation/ (shared with urdf_gen).
 SIM_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GENERATED_DIR = os.path.join(SIM_ROOT, "generated")
@@ -14,8 +14,8 @@ MESH_DIR = os.path.join(GENERATED_DIR, "exported_meshes")
 TIMESTEP = 1.0 / 240.0
 
 # Standing-pose hip/knee bend, shared across all 4 legs. Shoulder stance is
-# 0 under Convention A (URDF θ=0 already places each leg at its mechanical
-# zero — see code/simulation/docs/MERGE_AND_CONVENTION.md).
+# 0 because the URDF bakes each leg's rest yaw into the joint <origin rpy>,
+# so θ=0 already lands at the mechanical zero (the splayed rest pose).
 STANCE_DEG = {
     "hip": -40.0,
     "knee": -60.0,
