@@ -68,10 +68,10 @@ This is the default standing posture, defined in math-space and indexed by firmw
 | 2 | RR/BR | back-right | -45 | -50 | -50 | leg splayed right-back, knee bent |
 | 3 | RL/BL | back-left | -135 | -60 | -35 | leg splayed left-back, knee bent |
 
-Each leg's NEUTRAL shoulder equals that leg's **outward (flat-spread) direction** on the yaw circle: **FR +45°, FL +135°, BR −45°, BL −135°**. Since change B regularized FL (75° → 135°), *servo 90 now means "outward" for all four legs*. Every leg's standing shoulder math-angle maps to servo 90, and the all-servos-90 pose is the symmetric outward "X" (the flat calibration pose). The thigh/knee values are per-leg physical-calibration choices, tuned on hardware.
+Each leg's NEUTRAL shoulder equals that leg's **outward (flat-spread) direction** on the yaw circle: **FR +45°, FL +135°, BR -45°, BL -135°**. For all four legs, servo 90 corresponds to the outward standing shoulder direction, so the all-servos-90 pose is the symmetric outward "X" - the flat calibration pose. The thigh/knee values are per-leg physical-calibration choices, tuned on hardware.
 
-!!! warning "Change B hardware step pending"
-    FL's 75° → 135° move is committed in code, but its **hardware step (re-mounting the FL shoulder horn so servo 90 points outward) is not yet done**, and the FL clips have not been re-exported. Until both happen, the *running* robot still expects the old servo-75 FL standing pose, so the symmetric "X" holds in code only. FR/BR/BL are unaffected.
+!!! note "FL shoulder horn orientation"
+    The FL shoulder horn must be mounted so that servo 90 points outward (matching FR/BR/BL). If you are re-mounting the FL shoulder or building from scratch, verify this before calibrating. If you re-mount the horn, re-export all clips.
 
 Leg positions at NEUTRAL (top view, front at top):
 
@@ -99,7 +99,7 @@ Output: servo-space angles for hip, thigh, and knee servos.
 | RR/BR (LegId=2) | `90 + (sh + 45)` | `90 + th` | `90 - kn` |
 | RL/BL (LegId=3) | `90 + (sh + 135)` | `90 - th` | `90 + kn` |
 
-The shoulder offsets (−45, −135, +45, +135) just *centre* each leg's outward direction on servo 90. All four are `90 + (sh ± offset)` with a **+1 slope**: a positive `sh` (CCW yaw) drives every shoulder servo up. FL's historic `hip = sh` special case is gone (change B), and BR's old `90 − (sh + 45)` mirror was removed when its shoulder was un-mirrored, 2026-05-25, since all four shoulder shafts share one vertical axis. The **thigh/knee** signs, by contrast, *do* mirror on the {FL,BR} ↔ {FR,BL} diagonal because those servo horns face opposite ways:
+The shoulder offsets (−45, −135, +45, +135) just *centre* each leg's outward direction on servo 90. All four are `90 + (sh ± offset)` with a **+1 slope**: a positive `sh` (CCW yaw) drives every shoulder servo up. All four shoulder shafts share one vertical axis, so every shoulder uses the same +1 slope with no mirroring. The **thigh/knee** signs, by contrast, *do* mirror on the {FL,BR} ↔ {FR,BL} diagonal because those servo horns face opposite ways:
 
 | leg | shoulder | thigh | knee |
 |-----|:--------:|:-----:|:----:|
