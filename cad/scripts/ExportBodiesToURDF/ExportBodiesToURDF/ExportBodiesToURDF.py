@@ -58,11 +58,22 @@ Run via: Shift+S → Scripts and Add-Ins → ExportBodiesToURDF → Run
 
 import json
 import os
-import struct
 import traceback
 
 import adsk.core  # ty:ignore[unresolved-import]
 import adsk.fusion  # ty:ignore[unresolved-import]
+
+from config import (
+    CM2_TO_M2,
+    COLLECT_PHYSICS,
+    CONSTRUCTION_AXES,
+    CONSTRUCTION_POINTS,
+    CM_TO_MM,
+    EXPORT_RULES,
+    JOINTS,
+    LEG_ASSEMBLY_COMPONENT,
+    LEG_ASSEMBLY_OCCURRENCE,
+)
 
 app = adsk.core.Application.get()
 ui = app.userInterface
@@ -79,237 +90,6 @@ _SIM_DIR = os.path.normpath(
 )
 _GENERATED_DIR = os.path.join(_SIM_DIR, "generated")
 _MESH_DIR = os.path.join(_GENERATED_DIR, "exported_meshes")
-
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
-
-COLLECT_PHYSICS = True  # mass/CoM/inertia — slow, set False to skip
-CM_TO_MM = 10.0
-CM2_TO_M2 = 1e-4  # kg·cm² → kg·m²
-
-# Leg-assembly normalization: the FaceHuggerLegAssembly:1 occurrence is
-# placed in CAD with a non-identity world rotation (currently 90° about
-# Z). Mesh vertices and per-joint axis_dir / axis_origin live in that
-# rotated frame, which trips up the URDF generator. We capture that
-# rotation as `R_la` and apply it to leg-assembly-internal joint data
-# in collect_joints() so the JSON output is in a world-aligned frame.
-# Mesh STLs are produced via combined-rule which already bakes
-# world-frame vertices, so no extra mesh math is needed.
-LEG_ASSEMBLY_OCCURRENCE = "FaceHuggerLegAssembly:1"
-LEG_ASSEMBLY_COMPONENT = "FaceHuggerLegAssembly"
-
-# ---------------------------------------------------------------------------
-# Authoritative content whitelists. Visibility (light-bulb state) in Fusion
-# has NO effect on what gets captured — the export is fully driven by these
-# explicit lists. Toggle visibility however you want in CAD; it's a
-# presentation concern, not a data filter.
-#
-# Each list matches by NAME (not occurrence path). When multiple components
-# expose a same-named entity (e.g. LegMountFixedPoint in both MotorMount
-# and MotorMountR; ServoMountPoint in 3 servo instances), every match is
-# captured.
-# ---------------------------------------------------------------------------
-
-CONSTRUCTION_POINTS = [
-    # Body-side mating points (FlexibleSkeleton:1).
-    "LegMountPointFL",
-    "LegMountPointFR",
-    "LegMountPointBR",
-    "LegMountPointBL",
-    # Body Z=0 datum (under the cage) — re-origins the URDF so this
-    # point sits at world z=0. Consumed by generate_urdf.py; harmless
-    # if absent.
-    "BodyBottomPoint",
-    # Shell alignment pair — body side (FlexibleSkeleton:1/QuadrupedBody:1)
-    # and shell side (FlexibleSkeleton:1/Shell:1). Both must coincide after
-    # assembly to confirm the Shell is seated correctly.
-    "BodyAlignToShellPoint",
-    "ShellAlignToBodyPoint",
-    # Joint origins (FaceHuggerLegAssembly:1).
-    "BodyToLink1Point",
-    "Link1ToLink2Point",
-    "Link2ToLink3Point",
-    # Bracket-side mating point (MotorMount + MotorMountR).
-    "LegMountFixedPoint",
-    # Servo seat (each LegBaseServoEnclosure occurrence).
-    "ServoMountPoint",
-    # Link3 tip defined as a vertex
-    "Link3TipPoint",
-]
-
-CONSTRUCTION_AXES = [
-    "BodyToLink1Axis",
-    "Link1ToLink2Axis",
-    "Link2ToLink3Axis",
-]
-
-JOINTS = [
-    "Link1Revolute",
-    "Link2Revolute",
-    "Link3Revolute",
-]
-
-# Rules driving STL export. Three rule types supported:
-#
-#   {"type": "occurrence", "match": "FlexibleSkeleton:1", "stl": "X.stl"}
-#     Export the full subtree of a matching occurrence as one STL. Fusion
-#     bakes every descendant at its placement, so this is mostly useful
-#     when you actually want everything in the subtree. Prefer `combined`
-#     when you need a precise body subset.
-#
-#   {"type": "body", "match": "Link1L", "stl": "X.stl",
-#    "component": "Link1L",                 # optional, disambiguates same-named bodies
-#    "origin_landmark": "BodyToLink1Point"} # optional
-#     Export a single body by name. Without `component`, uses the FIRST
-#     occurrence whose component contains a matching body. With `component`,
-#     restricts to occurrences whose immediate parent component has that
-#     name (e.g. `Link1L` body lives in `Link1L:1` occurrence — needed
-#     because the R-side `Link1R` body shares the assembly with `Link1`).
-#     If `origin_landmark` is set, STL vertices are translated so that
-#     landmark's local-frame position becomes the mesh origin — downstream
-#     URDF can then use <visual><origin xyz="0 0 0"/>.
-#
-#   {"type": "combined", "stl": "X.stl", "parts": [
-#       {"occurrence": "A:1/B:1", "body": "BodyName"},
-#       {"occurrence": "A:1/C:1", "body": "*"},  # "*" = first body in the occ
-#   ], "origin_landmark": "BodyToLink1Point"}    # optional, world-frame re-origin
-#     For each part: export just that body, then transform its vertices by
-#     the occurrence's world_transform_rm_cm, then concatenate all parts
-#     into one binary STL. Output vertices land in root/world frame. If
-#     `origin_landmark` is set, the landmark's WORLD position is subtracted
-#     from every vertex so the mesh's local origin coincides with the
-#     landmark in world space — same effective convention as the body
-#     rule's re-origin. Use when one URDF link's visual is several CAD
-#     bodies (e.g. link1 + the hip servo body that's rigid with link1 per
-#     `Link1RigidGroup`), or when you want a precise body subset for a
-#     chassis STL without dragging in everything visible.
-#
-# Downstream consumers (URDF generator, Blender visualizer) read the
-# `mesh_files` manifest section of fusion_export.json to know what was
-# produced and how to place each mesh — they don't hardcode these rules.
-#
-# Per docs/ASSEMBLY_HIERARCHY.md and docs/PIPELINE_SPEC.md: shoulder servo
-# (LegBaseServoEnclosure:1) is chassis-fixed (bolted to the bracket); hip
-# servo (LegBaseServoEnclosure:2) is rigid with link1 via `Link1RigidGroup`;
-# knee servo (LegBaseServoEnclosure:3) is rigid with link3 via
-# `Link3RigidGroup`.
-EXPORT_RULES = [
-    # Chassis: explicit body list. QuadrupedBody main frame + the two
-    # structural bridges (MiddleBridge, BehindBridge) that share the
-    # QuadrupedBody:1 occurrence + LipoCage + the top-cover Shell. All are
-    # chassis-fixed, so they bake into ONE world-frame mesh (the base_link
-    # visual) — the Shell rides along just like the LipoCage clip rather
-    # than being a separate sim body. Electronics (PCBs, OLED, MPU6050, …)
-    # are intentionally excluded by NOT being in this list, regardless of
-    # CAD visibility. Brackets (MotorMount{,R}) live in the leg assembly
-    # and are exported separately as leg_mount_{L,R}.stl.
-    {
-        "type": "combined",
-        "stl": "QuadrupedBody.stl",
-        "parts": [
-            {
-                "occurrence": "FlexibleSkeleton:1/QuadrupedBody:1",
-                "body": "QuadrupedBody",
-            },
-            {
-                "occurrence": "FlexibleSkeleton:1/QuadrupedBody:1",
-                "body": "MiddleBridge",
-            },
-            {
-                "occurrence": "FlexibleSkeleton:1/QuadrupedBody:1",
-                "body": "BehindBridge",
-            },
-            {"occurrence": "FlexibleSkeleton:1/LipoCage:1", "body": "LipoCage"},
-            # Shell is an xref'd component; its bRepBody name comes through as
-            # the underlying auto-name (e.g. "Body26"), not the display "Shell"
-            # shown in the Browser. Use "*" to grab the (single) body regardless
-            # of name. If the xref ever grows multiple bodies, this picks the
-            # first one — switch back to an explicit name then.
-            {"occurrence": "FlexibleSkeleton:1/Shell:1", "body": "*"},
-        ],
-    },
-    # Brackets. Combined-rule (single part each) so the output is in
-    # world-frame vertices — the leg-assembly's CAD-local rotation gets
-    # absorbed for free by `_transform_triangle`. `landmark_occurrence`
-    # scopes the LegMountFixedPoint lookup to the right bracket; without
-    # it the tree walk could pick the wrong one (both brackets share
-    # the same landmark name).
-    {
-        "type": "combined",
-        "stl": "leg_mount_L.stl",
-        "origin_landmark": "LegMountFixedPoint",
-        "landmark_occurrence": "FaceHuggerLegAssembly:1/MotorMount:1",
-        "parts": [
-            {"occurrence": "FaceHuggerLegAssembly:1/MotorMount:1", "body": "LegMountL"},
-        ],
-    },
-    {
-        "type": "combined",
-        "stl": "leg_mount_R.stl",
-        "origin_landmark": "LegMountFixedPoint",
-        "landmark_occurrence": "FaceHuggerLegAssembly:1/MotorMountR:1",
-        "parts": [
-            {
-                "occurrence": "FaceHuggerLegAssembly:1/MotorMountR:1",
-                "body": "LegMountR",
-            },
-        ],
-    },
-    # Shoulder links — L and R variants. NO servo bake-in: the URDF
-    # generator emits standalone servo visuals on each link from
-    # servo.stl, with per-leg position/rpy. This avoids needing a R-side
-    # servo in CAD and a per-rule mirror flag in the exporter.
-    {
-        "type": "combined",
-        "stl": "leg_shoulder_L.stl",
-        "origin_landmark": "BodyToLink1Point",
-        "parts": [
-            {"occurrence": "FaceHuggerLegAssembly:1/Link1L:1", "body": "Link1L"},
-        ],
-    },
-    {
-        "type": "combined",
-        "stl": "leg_shoulder_R.stl",
-        "origin_landmark": "BodyToLink1Point",
-        "parts": [
-            {"occurrence": "FaceHuggerLegAssembly:1/Link1R:1", "body": "Link1R"},
-        ],
-    },
-    # Upper / lower leg: shared (no mirror in CAD). The URDF generator
-    # applies a (0, π, 0) visual rpy on the R-pair link2/link3 so the
-    # mesh's knee/foot end up on the correct side.
-    {
-        "type": "combined",
-        "stl": "leg_upper.stl",
-        "origin_landmark": "Link1ToLink2Point",
-        "parts": [
-            {"occurrence": "FaceHuggerLegAssembly:1/Link2L:1", "body": "Link2"},
-        ],
-    },
-    {
-        "type": "combined",
-        "stl": "leg_lower.stl",
-        "origin_landmark": "Link2ToLink3Point",
-        "parts": [
-            {"occurrence": "FaceHuggerLegAssembly:1/Link3L:1", "body": "Link3"},
-        ],
-    },
-    # Single shared servo mesh — instanced 12× by the URDF generator
-    # (4 shoulder + 4 hip + 4 knee). Re-origined to ServoMountPoint so
-    # the URDF can place each instance at its servo seat.
-    {
-        "type": "combined",
-        "stl": "servo.stl",
-        "origin_landmark": "ServoMountPoint",
-        "parts": [
-            {
-                "occurrence": "FaceHuggerLegAssembly:1/LegBaseServoEnclosure:1",
-                "body": "ServoBase",
-            },
-        ],
-    },
-]
 
 
 # ---------------------------------------------------------------------------
