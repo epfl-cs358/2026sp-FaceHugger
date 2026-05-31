@@ -91,7 +91,7 @@ def test_clip_monitor_prints_current_status():
 
 
 def test_parity_check_passes():
-    script = _find("verify_export_parity.py")
+    script = _find("export_parity.py")
     r = _run([script])
     assert r.returncode == 0, r.stdout + r.stderr
     assert "agree" in r.stdout

@@ -144,21 +144,18 @@ def cmd_urdf(args):
 def _list_clips():
     """Print the clip names + ids the sim/robot will run, parsed from the
     firmware clips_all.h FH_CLIPS[] table (no C++ toolchain needed)."""
-    import re
+    sys.path.insert(0, str(SIM_DIR))
+    from firmware_port.clip_loader import load_clips_all_h
 
     header = REPO_ROOT / "code" / "firmware" / "src" / "nervous_system" / "clips_all.h"
     if not header.is_file():
         sys.exit(f"clips_all.h not found: {header}")
-    text = header.read_text()
-    m = re.search(r"FH_CLIPS\[[^\]]*\]\s*=\s*\{(.*?)\};", text, re.S)
-    entries = (
-        re.findall(r'\{\s*"([^"]+)"\s*,\s*\w+\s*,\s*(\d+)\s*,\s*(\d+)\s*\}', m.group(1))
-        if m
-        else []
-    )
-    print(f"{len(entries)} clip(s) in {header.relative_to(REPO_ROOT)}:")
-    for i, (name, frames, dur) in enumerate(entries):
-        print(f"  {i:2d}  {name}  ({frames} frames, {dur} ms)")
+    clips = load_clips_all_h(header)
+    print(f"{len(clips)} clip(s) in {header.relative_to(REPO_ROOT)}:")
+    for i, clip in enumerate(clips):
+        print(
+            f"  {i:2d}  {clip.name}  ({clip.frame_count} frames, {clip.duration_ms} ms)"
+        )
 
 
 # Where to point people when a dependency is missing. Descriptive, not a URL:

@@ -18,7 +18,7 @@ import pytest
 
 pytest.importorskip("pybullet")
 
-SIM_DIR = Path(__file__).resolve().parent
+SIM_DIR = Path(__file__).resolve().parent.parent  # tests/ -> code/simulation/
 
 
 def _run(args, timeout=60):
