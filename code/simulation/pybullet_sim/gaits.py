@@ -8,13 +8,8 @@ import pybullet as p
 import pybullet_data
 
 from .constants import TIMESTEP
-from .helpers import (
-    _wrap_pi,
-    apply_joint_targets,
-    apply_leg_pose,
-    build_joint_map,
-    reset_to_stance,
-)
+from .math_utils import _wrap_pi
+from .motor import apply_joint_targets, apply_leg_pose, build_joint_map, reset_to_stance
 
 # --------------------------------------------------------------------------- #
 # Physics realism (applied in _connect_and_setup)
