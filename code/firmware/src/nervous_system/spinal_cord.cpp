@@ -47,26 +47,24 @@ SpinalCord::SpinalCord(uint8_t pwm):
     robotState(STATE_IDLE),
     driver(Adafruit_PWMServoDriver(ADDR_SERVO_DRIVER)),
     face(),
-    leg1(Leg(driver, 0,
-        Servo(driver, FRONT_RIGHT_LEG_HIP_PCA_CHANNEL,    FRONT_RIGHT_LEG_HIP_DEFAULT_ANGLE),
-        Servo(driver, FRONT_RIGHT_LEG_THIGH_PCA_CHANNEL,  FRONT_RIGHT_LEG_THIGH_DEFAULT_ANGLE),
-        Servo(driver, FRONT_RIGHT_LEG_KNEE_PCA_CHANNEL,   FRONT_RIGHT_LEG_KNEE_DEFAULT_ANGLE)
-    )),
-    leg2(Leg(driver, 1,
-        Servo(driver, FRONT_LEFT_LEG_HIP_PCA_CHANNEL,     FRONT_LEFT_LEG_HIP_DEFAULT_ANGLE),
-        Servo(driver, FRONT_LEFT_LEG_THIGH_PCA_CHANNEL,   FRONT_LEFT_LEG_THIGH_DEFAULT_ANGLE),
-        Servo(driver, FRONT_LEFT_LEG_KNEE_PCA_CHANNEL,    FRONT_LEFT_LEG_KNEE_DEFAULT_ANGLE)
-    )),
-    leg3(Leg(driver, 2,
-        Servo(driver, BOTTOM_RIGHT_LEG_HIP_PCA_CHANNEL,   BOTTOM_RIGHT_LEG_HIP_DEFAULT_ANGLE),
-        Servo(driver, BOTTOM_RIGHT_LEG_THIGH_PCA_CHANNEL, BOTTOM_RIGHT_LEG_THIGH_DEFAULT_ANGLE),
-        Servo(driver, BOTTOM_RIGHT_LEG_KNEE_PCA_CHANNEL,  BOTTOM_RIGHT_LEG_KNEE_DEFAULT_ANGLE)
-    )),
-    leg4(Leg(driver, 3,
-        Servo(driver, BOTTOM_LEFT_LEG_HIP_PCA_CHANNEL,    BOTTOM_LEFT_LEG_HIP_DEFAULT_ANGLE),
-        Servo(driver, BOTTOM_LEFT_LEG_THIGH_PCA_CHANNEL,  BOTTOM_LEFT_LEG_THIGH_DEFAULT_ANGLE),
-        Servo(driver, BOTTOM_LEFT_LEG_KNEE_PCA_CHANNEL,   BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE)
-    )),
+    legs_{
+        Leg(driver, 0,  // FR
+            Servo(driver, FRONT_RIGHT_LEG_HIP_PCA_CHANNEL,    FRONT_RIGHT_LEG_HIP_DEFAULT_ANGLE),
+            Servo(driver, FRONT_RIGHT_LEG_THIGH_PCA_CHANNEL,  FRONT_RIGHT_LEG_THIGH_DEFAULT_ANGLE),
+            Servo(driver, FRONT_RIGHT_LEG_KNEE_PCA_CHANNEL,   FRONT_RIGHT_LEG_KNEE_DEFAULT_ANGLE)),
+        Leg(driver, 1,  // FL
+            Servo(driver, FRONT_LEFT_LEG_HIP_PCA_CHANNEL,     FRONT_LEFT_LEG_HIP_DEFAULT_ANGLE),
+            Servo(driver, FRONT_LEFT_LEG_THIGH_PCA_CHANNEL,   FRONT_LEFT_LEG_THIGH_DEFAULT_ANGLE),
+            Servo(driver, FRONT_LEFT_LEG_KNEE_PCA_CHANNEL,    FRONT_LEFT_LEG_KNEE_DEFAULT_ANGLE)),
+        Leg(driver, 2,  // BR/RR
+            Servo(driver, BOTTOM_RIGHT_LEG_HIP_PCA_CHANNEL,   BOTTOM_RIGHT_LEG_HIP_DEFAULT_ANGLE),
+            Servo(driver, BOTTOM_RIGHT_LEG_THIGH_PCA_CHANNEL, BOTTOM_RIGHT_LEG_THIGH_DEFAULT_ANGLE),
+            Servo(driver, BOTTOM_RIGHT_LEG_KNEE_PCA_CHANNEL,  BOTTOM_RIGHT_LEG_KNEE_DEFAULT_ANGLE)),
+        Leg(driver, 3,  // BL/RL
+            Servo(driver, BOTTOM_LEFT_LEG_HIP_PCA_CHANNEL,    BOTTOM_LEFT_LEG_HIP_DEFAULT_ANGLE),
+            Servo(driver, BOTTOM_LEFT_LEG_THIGH_PCA_CHANNEL,  BOTTOM_LEFT_LEG_THIGH_DEFAULT_ANGLE),
+            Servo(driver, BOTTOM_LEFT_LEG_KNEE_PCA_CHANNEL,   BOTTOM_LEFT_LEG_KNEE_DEFAULT_ANGLE)),
+    },
     currentGait_(GAIT_NONE),
     gaitPhaseStartMs_(0),
     targetX(0.0f), targetY(0.0f), targetYaw(0.0f),
@@ -83,11 +81,8 @@ void SpinalCord::begin() {
     isInverted = false;
     hasInverted_  = false;   // clear invert-debounce state on boot
     lastInvertMs_ = 0;
-    leg1.returnToDefaultAngles();
-    leg2.returnToDefaultAngles();
-    leg3.returnToDefaultAngles();
-    leg4.returnToDefaultAngles();
-    
+    for (uint8_t i = 0; i < LEG_COUNT; ++i) legs_[i].returnToDefaultAngles();
+
     face.begin();
     face.setState(EYES_FRONT);
 }
@@ -119,10 +114,7 @@ void SpinalCord::relax() {
     // engine). Calibration is done upright, so clear the invert flag too.
     robotState = STATE_REST;
     isInverted = false;
-    leg1.setJointAngles(90, 90, 90);
-    leg2.setJointAngles(90, 90, 90);
-    leg3.setJointAngles(90, 90, 90);
-    leg4.setJointAngles(90, 90, 90);
+    for (uint8_t i = 0; i < LEG_COUNT; ++i) legs_[i].setJointAngles(90, 90, 90);
 }
 
 void SpinalCord::relax(uint32_t ms) {
@@ -131,10 +123,7 @@ void SpinalCord::relax(uint32_t ms) {
     // to a calibration-flat pose where invert is meaningless anyway.
     robotState = STATE_REST;
     isInverted = false;
-    leg1.setJointAnglesTimed(90, 90, 90, ms);
-    leg2.setJointAnglesTimed(90, 90, 90, ms);
-    leg3.setJointAnglesTimed(90, 90, 90, ms);
-    leg4.setJointAnglesTimed(90, 90, 90, ms);
+    for (uint8_t i = 0; i < LEG_COUNT; ++i) legs_[i].setJointAnglesTimed(90, 90, 90, ms);
 }
 
 // Single invert choke point — see header. Mirrors the pitch joints about 90 when
@@ -166,26 +155,22 @@ void SpinalCord::goToNeutral() {
     // isInverted, so an inverted robot holds the INVERTED neutral. Use this in
     // place of Leg::returnToDefaultAngles() on every gait/clip stop path — that
     // raw-defaults path bypasses the mirror and silently un-inverts the robot.
-    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
     for (uint8_t i = 0; i < LEG_COUNT; ++i)
-        applyServos(legs[i], translateToServo(i, NEUTRAL[i].sh, NEUTRAL[i].th, NEUTRAL[i].kn));
+        applyServos(&legs_[i], translateToServo(i, NEUTRAL[i].sh, NEUTRAL[i].th, NEUTRAL[i].kn));
 }
 
 void SpinalCord::easeToNeutral(uint32_t ms) {
     // Non-blocking ease to the (invert-aware) neutral, for the clip-return glide.
-    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
         ServoTriple n = applyInvert(
             i, translateToServo(i, NEUTRAL[i].sh, NEUTRAL[i].th, NEUTRAL[i].kn), isInverted);
-        legs[i]->setJointAnglesTimed(n.hip, n.thigh, n.knee, ms);
+        legs_[i].setJointAnglesTimed(n.hip, n.thigh, n.knee, ms);
     }
 }
 
 void SpinalCord::applyCalibration(int channel, int angle) {
-    leg1.identifyAndMove(channel, (double)angle);
-    leg2.identifyAndMove(channel, (double)angle);
-    leg3.identifyAndMove(channel, (double)angle);
-    leg4.identifyAndMove(channel, (double)angle);
+    for (uint8_t i = 0; i < LEG_COUNT; ++i)
+        legs_[i].identifyAndMove(channel, (double)angle);
 }
 
 void SpinalCord::update() {
@@ -214,10 +199,7 @@ void SpinalCord::update() {
         case STATE_STAND:
             break;
         case STATE_FAILSAFE:
-            leg1.returnToDefaultAngles();
-            leg2.returnToDefaultAngles();
-            leg3.returnToDefaultAngles();
-            leg4.returnToDefaultAngles();
+            for (uint8_t i = 0; i < LEG_COUNT; ++i) legs_[i].returnToDefaultAngles();
             break;
     }
 
@@ -227,8 +209,7 @@ void SpinalCord::update() {
     // does it). A direct write (gait/stand/calibrate, or a clip's per-frame pose)
     // cancels the ease via setServoAngle, so this is a no-op unless a timed move
     // (invert, clip-return, gait-stop) is actually active.
-    Leg* easeLegs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
-    for (uint8_t i = 0; i < LEG_COUNT; ++i) easeLegs[i]->tickEase();
+    for (uint8_t i = 0; i < LEG_COUNT; ++i) legs_[i].tickEase();
 
     face.update();
 }
@@ -261,7 +242,7 @@ void SpinalCord::tickGait() {
         return;
     }
 
-    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+
     const bool isCrab = (currentGait_ == GAIT_CRAB);
 
     // Scale foot lift by how much motion is actually commanded. Without this the
@@ -319,7 +300,7 @@ void SpinalCord::tickGait() {
         // Translate math-space angles to servo angles (0–180°).
         // Mirrors the JS translateToServo() function exactly. Invert (if any)
         // is applied centrally in applyServos (servo-space, pitch-only).
-        applyServos(legs[i], translateToServo((uint8_t)i, sh, th, kn));
+        applyServos(&legs_[i], translateToServo((uint8_t)i, sh, th, kn));
     }
 }
 
@@ -369,7 +350,7 @@ void SpinalCord::tickTrot() {
         return;
     }
 
-    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+
 
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
         const float legPhase = fmodf(globalPhase - OFFSETS[i] + 1.0f, 1.0f);
@@ -450,7 +431,7 @@ void SpinalCord::tickTrot() {
 
         // Math → servo, identical to the JS translateToServo(). Invert applied
         // centrally in applyServos (servo-space, pitch-only).
-        applyServos(legs[i], translateToServo((uint8_t)i, sh, th, kn));
+        applyServos(&legs_[i], translateToServo((uint8_t)i, sh, th, kn));
     }
 }
 
@@ -479,7 +460,7 @@ void SpinalCord::tickYawRotation() {
     const float t           = (millis() - gaitPhaseStartMs_) / 1000.0f;
     const float globalPhase = fmodf(t / PERIOD_S, 1.0f);
 
-    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+
 
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
         const float legPhase = fmodf(globalPhase - OFFSETS[i] + 1.0f, 1.0f);
@@ -508,7 +489,7 @@ void SpinalCord::tickYawRotation() {
         kn = NEUTRAL[i].kn + (kn - NEUTRAL[i].kn) * SCALE;
 
         // Invert applied centrally in applyServos (servo-space, pitch-only).
-        applyServos(legs[i], translateToServo((uint8_t)i, sh, th, kn));
+        applyServos(&legs_[i], translateToServo((uint8_t)i, sh, th, kn));
     }
 }
 
@@ -558,7 +539,7 @@ void SpinalCord::playClip(uint8_t id, bool loop) {
     // Pre-roll: ease from whatever pose the robot is holding into frame 0's pose
     // (same servo target the first playback tick would apply), so the clip glides
     // in instead of snapping. Real playback begins once the ease completes.
-    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
         ServoTriple f0 = applyInvert(
             i,
@@ -567,7 +548,7 @@ void SpinalCord::playClip(uint8_t id, bool loop) {
                 FH_CLIPS[id].frames[0].a[i * 3 + 1],
                 FH_CLIPS[id].frames[0].a[i * 3 + 2])),
             isInverted);
-        legs[i]->setJointAnglesTimed(f0.hip, f0.thigh, f0.knee, CLIP_PREROLL_MS);
+        legs_[i].setJointAnglesTimed(f0.hip, f0.thigh, f0.knee, CLIP_PREROLL_MS);
     }
     robotState = STATE_ACTION;   // pre-empts any running gait (single motion owner)
     Serial.printf("[clip] play %s (%u frames)%s\n",
@@ -576,12 +557,12 @@ void SpinalCord::playClip(uint8_t id, bool loop) {
 }
 
 void SpinalCord::tickClip() {
-    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+
 
     // Pre-roll: glide from the pose we were holding into frame 0 before playback.
     // Just advance the eased move; do not run the clip clock yet.
     if (millis() < clipPrerollUntilMs_) {
-        for (uint8_t i = 0; i < LEG_COUNT; ++i) legs[i]->tickEase();
+        for (uint8_t i = 0; i < LEG_COUNT; ++i) legs_[i].tickEase();
         return;
     }
 
@@ -604,7 +585,7 @@ void SpinalCord::tickClip() {
                 // EMA smooths the math-space angle; clampClipServos keeps the clip
                 // off each leg's mechanical stop (clip path only); invert (if any)
                 // applied last at the write point.
-                applyServos(legs[i], clampClipServos(i,
+                applyServos(&legs_[i], clampClipServos(i,
                     translateToServo(i, clipSmoothed_[i][0],
                                      clipSmoothed_[i][1],
                                      clipSmoothed_[i][2])));
@@ -648,12 +629,12 @@ void SpinalCord::flipPoseInPlace(uint32_t ms) {
     // gait/stand poses subsequent ticks produce. (During an active gait the next
     // tick overrides these targets with the mirrored gait pose, which is
     // continuous, so this matters while standing, idle, or holding a clip's end.)
-    Leg* legs[LEG_COUNT] = { &leg1, &leg2, &leg3, &leg4 };
+
     for (uint8_t i = 0; i < LEG_COUNT; ++i) {
         float h, t, k;
-        legs[i]->getJointAngles(h, t, k);
+        legs_[i].getJointAngles(h, t, k);
         ServoTriple m = applyInvert(i, { (double)h, (double)t, (double)k }, true);
-        legs[i]->setJointAnglesTimed(m.hip, m.thigh, m.knee, ms);
+        legs_[i].setJointAnglesTimed(m.hip, m.thigh, m.knee, ms);
     }
 }
 
@@ -708,9 +689,7 @@ SpinalCord::Snapshot SpinalCord::snapshot() const {
     s.last_cmd_ms     = lastCommandMs;
     s.target_x = targetX; s.target_y = targetY; s.target_yaw = targetYaw;
     s.active_x = activeX; s.active_y = activeY; s.active_yaw = activeYaw;
-    leg1.getJointAngles(s.servo_angles[0], s.servo_angles[1],  s.servo_angles[2]);
-    leg2.getJointAngles(s.servo_angles[3], s.servo_angles[4],  s.servo_angles[5]);
-    leg3.getJointAngles(s.servo_angles[6], s.servo_angles[7],  s.servo_angles[8]);
-    leg4.getJointAngles(s.servo_angles[9], s.servo_angles[10], s.servo_angles[11]);
+    for (uint8_t i = 0; i < LEG_COUNT; ++i)
+        legs_[i].getJointAngles(s.servo_angles[i*3], s.servo_angles[i*3+1], s.servo_angles[i*3+2]);
     return s;
 }

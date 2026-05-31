@@ -73,10 +73,7 @@ class SpinalCord{
         volatile RobotState robotState;
         Adafruit_PWMServoDriver driver;
         Face face;
-        Leg leg1;
-        Leg leg2;
-        Leg leg3;
-        Leg leg4;
+        Leg legs_[LEG_COUNT];  // indexed 0=FR, 1=FL, 2=RR/BR, 3=RL/BL
 
         GaitType currentGait_;
         uint32_t gaitPhaseStartMs_;
