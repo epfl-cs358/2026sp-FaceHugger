@@ -155,13 +155,13 @@ void handleParsedMessage(uint8_t num, uint8_t * payload) {
         }
         
         case CMD_GAIT_MODE: {
+            // Range guard moved into SpinalCord::setGait(); call unconditionally.
+            // Dedup check kept here — no reason to log/restart the phase timer
+            // if the gait hasn't actually changed.
             if (doc["g"].is<int>()) {
-                int g = doc["g"];
-                if (g >= GAIT_NONE && g <= GAIT_CRAB) {
-                    GaitType requested = (GaitType)g;
-                    if (requested != spinalCord.currentGait()) {
-                        spinalCord.setGait(requested);
-                    }
+                GaitType requested = (GaitType)doc["g"].as<int>();
+                if (requested != spinalCord.currentGait()) {
+                    spinalCord.setGait(requested);
                 }
             }
             break;
@@ -187,14 +187,14 @@ void handleParsedMessage(uint8_t num, uint8_t * payload) {
             break;
         }
         case CMD_PLAY_CLIP: {
+            // Bounds check (id >= FH_CLIP_COUNT) lives inside playClip(); no
+            // redundant outer guard needed here.
             if (doc["c"].is<int>()) {
                 int c = doc["c"];
                 // Optional "loop": true replays the clip until another motion
                 // command preempts it (default false = play once).
                 bool loop = doc["loop"].is<bool>() && doc["loop"].as<bool>();
-                if (c >= 0 && c < 256) {
-                    spinalCord.playClip((uint8_t)c, loop);
-                }
+                spinalCord.playClip((uint8_t)c, loop);
             }
             break;
         }
