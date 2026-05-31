@@ -36,7 +36,8 @@ static const uint32_t CLIP_PREROLL_MS = 200;
 
 // Gait parameters (step values are in degrees, pre-scaled to 2/3 of raw JS values).
 // Offsets order: [LEG_FR, LEG_FL, LEG_RR, LEG_RL]
-static const GaitParams GAITS[] = {
+// Declaration in movements.h; definition here so the table stays next to the gait engine.
+const GaitParams GAITS[] = {
     { 0.0f, 0.0f,  0.0f,  0.0f,  { 0.0f,  0.0f,  0.0f,  0.0f  }, "None"        },
     { 2.0f, 26.7f, 26.7f, 0.75f, { 0.5f,  0.0f,  0.25f, 0.75f }, "Static Walk" },
     { 1.5f, 26.7f, 33.3f, 0.50f, { 0.5f,  0.0f,  0.0f,  0.5f  }, "Trot"        },
