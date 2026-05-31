@@ -60,6 +60,7 @@ import traceback
 import adsk.core  # ty:ignore[unresolved-import]
 import adsk.fusion  # ty:ignore[unresolved-import]
 
+from config import DEFAULT_UP, LOG_MARKER, ROTATIONS, SpecEntry, VALID_SUBFOLDERS
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -71,25 +72,10 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _CAD_DIR = os.path.normpath(os.path.join(_HERE, "..", "..", ".."))
 _SPEC_FILE = os.path.join(_CAD_DIR, "print_export.txt")
 
-_LOG_MARKER = "# === EXPORT LOG (auto-managed below — do not edit) ==="
-
-
-# ---------------------------------------------------------------------------
-# Up-axis rotations
-# ---------------------------------------------------------------------------
-
-# Each entry is the 3x3 rotation matrix R such that R · v_up = (0, 0, 1),
-# where v_up is the body-local axis named by the key. Applied to every
-# vertex AND normal of the exported STL. Identity for "+Z" (no rotation).
-_ROTATIONS = {
-    "+Z": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
-    "-Z": ((1.0, 0.0, 0.0), (0.0, -1.0, 0.0), (0.0, 0.0, -1.0)),  # 180° about +X
-    "+Y": ((1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0)),  # +90° about +X
-    "-Y": ((1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, -1.0, 0.0)),  # -90° about +X
-    "+X": ((0.0, 0.0, -1.0), (0.0, 1.0, 0.0), (1.0, 0.0, 0.0)),  # -90° about +Y
-    "-X": ((0.0, 0.0, 1.0), (0.0, 1.0, 0.0), (-1.0, 0.0, 0.0)),  # +90° about +Y
-}
-_DEFAULT_UP = "+Z"
+# Aliases for backward compat with functions below.
+_LOG_MARKER = LOG_MARKER
+_ROTATIONS = ROTATIONS
+_DEFAULT_UP = DEFAULT_UP
 
 
 def _is_axis_token(tok):
@@ -135,8 +121,7 @@ def _parse_extras(tokens):
 def _read_spec(path):
     """Return (user_lines, entries). `user_lines` is everything up through
     the log marker (preserved verbatim, marker appended if absent).
-    `entries` is a list of (subfolder, body_name, up_axis, hint_or_none)
-    tuples parsed from non-comment lines above the marker."""
+    `entries` is a list of SpecEntry parsed from non-comment lines above the marker."""
     if not os.path.exists(path):
         raise RuntimeError(f"Spec file not found: {path}")
     with open(path, encoding="utf-8") as f:
@@ -165,13 +150,15 @@ def _read_spec(path):
             raise RuntimeError(f"Malformed spec line: {raw!r}")
         subfolder = parts[0]
         body_name = parts[1]
-        if subfolder not in ("body", "leg"):
+        if subfolder not in VALID_SUBFOLDERS:
             raise RuntimeError(
-                f"Spec line {raw!r}: subfolder must be 'body' or 'leg', "
+                f"Spec line {raw!r}: subfolder must be one of {sorted(VALID_SUBFOLDERS)}, "
                 f"got {subfolder!r}"
             )
         up, hint = _parse_extras(parts[2:])
-        entries.append((subfolder, body_name, up, hint))
+        entries.append(
+            SpecEntry(subfolder=subfolder, body_name=body_name, up_axis=up, hint=hint)
+        )
     return user_lines, entries
 
 
@@ -324,26 +311,28 @@ def run(_context: str):
         successes = []  # (rel_path, src_path, up)
         failures = []  # (rel_path, reason)
 
-        for subfolder, body_name, up, hint in entries:
-            out_dir = os.path.join(_CAD_DIR, subfolder)
+        for entry in entries:
+            out_dir = os.path.join(_CAD_DIR, entry.subfolder)
             os.makedirs(out_dir, exist_ok=True)
-            out_path = os.path.join(out_dir, f"{body_name}.stl")
+            out_path = os.path.join(out_dir, f"{entry.body_name}.stl")
             rel_path = os.path.relpath(out_path, _CAD_DIR)
 
-            occ, body, path = _find_body(tree, body_name, hint)
+            occ, body, path = _find_body(tree, entry.body_name, entry.hint)
             if body is None:
-                detail = f" (no match for hint {hint!r})" if hint else ""
-                failures.append((rel_path, f"body {body_name!r} not found{detail}"))
+                detail = f" (no match for hint {entry.hint!r})" if entry.hint else ""
+                failures.append(
+                    (rel_path, f"body {entry.body_name!r} not found{detail}")
+                )
                 continue
 
             try:
                 _export_body(mgr, body, out_path)
-                if up != _DEFAULT_UP:
-                    _rotate_stl_in_place(out_path, _ROTATIONS[up])
+                if entry.up_axis != _DEFAULT_UP:
+                    _rotate_stl_in_place(out_path, _ROTATIONS[entry.up_axis])
             except Exception as e:  # pragma: no cover — Fusion runtime
                 failures.append((rel_path, f"export failed: {e}"))
                 continue
-            successes.append((rel_path, path, up))
+            successes.append((rel_path, path, entry.up_axis))
 
         # Rewrite the EXPORT LOG block at the bottom of the spec file.
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S %Z").strip()
