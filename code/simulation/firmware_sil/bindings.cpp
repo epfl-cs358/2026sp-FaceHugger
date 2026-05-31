@@ -37,6 +37,11 @@ class FirmwareControl {
     FirmwareControl() {
         fh_sim::clock_ms = 0;
         spinalCord.begin();  // sets each servo to its boot default angle
+        // spinalCord is a module-level global shared by all FirmwareControl
+        // instances. begin() resets servo positions and isInverted, but not
+        // all mutable control state. Reset here so each test sees boot defaults.
+        spinalCord.setClipSmoothing(0.75f);    // clipEmaAlpha_ boot default
+        spinalCord.setAutoInvertEnabled(true); // autoInvertEnabled_ boot default
     }
 
     // Advance "firmware time" then run exactly one firmware control tick.

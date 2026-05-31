@@ -14,7 +14,7 @@ pytest.importorskip("pybullet")
 
 STATE_ACTION = 2
 STATE_STAND = 5
-CLIP_ID = 2  # "one leg lift", ~2042 ms — a short clip keeps the test quick
+CLIP_ID = 6  # "one leg lift", ~2042 ms — a short clip keeps the test quick
 
 
 def _fc_or_skip():
