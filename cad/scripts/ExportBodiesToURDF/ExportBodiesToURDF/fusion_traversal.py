@@ -4,14 +4,14 @@
 import adsk.core  # ty:ignore[unresolved-import]
 import adsk.fusion  # ty:ignore[unresolved-import]
 
-from config import (
+from .config import (
     CM2_TO_M2,
     COLLECT_PHYSICS,
     CONSTRUCTION_AXES,
     CONSTRUCTION_POINTS,
     CM_TO_MM,
 )
-from math_utils import (
+from .math_utils import (
     bbox_center_mm,
     dir_world,
     mat_multiply_arrays,
