@@ -147,6 +147,40 @@ clip playback only (not gaits or calibration).
 
 ---
 
+### 12. Stream Clip Frame (`T: 12`) — `CMD_STREAM_FRAME`
+
+Send one animation frame in **math-space** (mechanical joint angles, independent
+of hardware calibration). The firmware converts to servo angles at runtime via
+`translateToServo` and `applyInvert`, so exported clip files never need to be
+regenerated after recalibration.
+
+| Key  | Type         | Description                                     |
+| :--- | :----------- | :---------------------------------------------- |
+| `fr` | float[3]     | Front-right leg `[shoulder, thigh, knee]` in math-space degrees |
+| `fl` | float[3]     | Front-left leg `[shoulder, thigh, knee]`        |
+| `br` | float[3]     | Back-right leg `[shoulder, thigh, knee]`        |
+| `bl` | float[3]     | Back-left leg `[shoulder, thigh, knee]`         |
+
+**Math-space convention:** Shoulder 0° = legs pointing straight forward. Positive
+shoulder = CCW rotation (uniform across all legs). Thigh/knee follow the URDF
+joint convention defined in the sim (`shoulder_rest`, `thigh_rest`, `knee_rest`).
+
+**Dirty-flag optimization:** Joints where the computed servo angle has changed
+by less than `SERVO_DEADBAND_DEG` (0.5°) since the last frame are skipped;
+no PWM write is issued. This filters floating-point noise and reduces bus
+traffic in near-static frames.
+
+**Invert-aware:** If the robot is currently inverted (`isInverted = true`),
+`applyInvert` is applied to the servo triple before writing — the same mirror
+used by gaits and the on-board clip player.
+
+**Example:** `{"T": 12, "fr": [0.0, -10.5, 20.3], "fl": [0.0, -10.5, 20.3], "br": [0.0, -10.5, 20.3], "bl": [0.0, -10.5, 20.3]}`
+
+Missing or wrongly-typed leg arrays are silently rejected (the whole frame is
+dropped). Used by browser-streamed clip playback (exported `.js` files).
+
+---
+
 ### 7. Play Clip ('T: 7')
 Play a bundled animation clip by id. By default the robot plays the clip once on
 its baked timeline, then auto-returns to the neutral standing pose over 500 ms
