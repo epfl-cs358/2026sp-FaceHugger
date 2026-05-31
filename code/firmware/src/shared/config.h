@@ -1,7 +1,11 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#ifdef FIRMWARE_SIM
+#include "calib_sim.h"
+#else
 #include "calib.h"
+#endif
 
 // I2C Addresses
 #define ADDR_SERVO_DRIVER 0x40

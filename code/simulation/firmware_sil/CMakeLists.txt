@@ -69,4 +69,5 @@ target_compile_definitions(fh_sim PRIVATE
     ARDUINOJSON_ENABLE_ARDUINO_PRINT=0
     ARDUINOJSON_ENABLE_PROGMEM=0
     ARDUINOJSON_ENABLE_STD_STRING=1
+    FIRMWARE_SIM  # use calib_sim.h (all CALIB=90) instead of calib.h
 )
