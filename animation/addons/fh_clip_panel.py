@@ -2254,9 +2254,9 @@ def to_js(
 
     clip_lines = []
     for row in frames:
-        s = _frame_to_servo(row, convention)
+        m = _scale_from_neutral(row, convention)
         legs = ", ".join(
-            f"{leg}:[{s[leg][0]},{s[leg][1]},{s[leg][2]}]" for leg in _LEGS
+            f"{leg}:[{m[leg][0]:.4f},{m[leg][1]:.4f},{m[leg][2]:.4f}]" for leg in _LEGS
         )
         clip_lines.append(f"  {{ t: {row['time_ms']}, {legs} }},")
 
@@ -2266,14 +2266,14 @@ def to_js(
     loop_js = "true" if loop else "false"
     if dry_run:
         header_block = (
-            '// DRY RUN — prints each {"T":4,...} message to the console\n'
+            '// DRY RUN — prints each {"T":12,...} message to the console\n'
             "// instead of sending it. No WebSocket is opened; no robot\n"
-            "// needed. Paste into any JS console to validate the servo\n"
-            "// stream before connecting to hardware.\n"
+            "// needed. Paste into any JS console to validate the math-space\n"
+            "// frame stream before connecting to hardware.\n"
             "//\n"
-            "// Wire shape matches origin/main CMD_CALIBRATE (T:4):\n"
-            "//   {T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}\n"
-            "// Firmware maps to PCA channel via LEG_SERVO_CHANNEL."
+            "// Wire shape: T:12 CMD_STREAM_FRAME — one message per frame,\n"
+            "// math-space joint angles (firmware applies CALIB at runtime).\n"
+            "//   {T:12, fr:[sh,th,kn], fl:[sh,th,kn], br:[sh,th,kn], bl:[sh,th,kn]}"
         )
         transport_decl = "// (dry run — no WebSocket opened)"
         open_guard = ""
@@ -2294,9 +2294,9 @@ def to_js(
             '//      — the #1 reason "nothing happens".\n'
             "//   3. Paste this whole file. Call  fhStop()  to stop at any time.\n"
             "//\n"
-            "// Wire shape matches origin/main CMD_CALIBRATE (T:4):\n"
-            "//   {T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}\n"
-            "// Firmware does PCA-channel mapping via LEG_SERVO_CHANNEL."
+            "// Wire shape: T:12 CMD_STREAM_FRAME — one message per frame,\n"
+            "// math-space joint angles (firmware applies CALIB at runtime).\n"
+            "//   {T:12, fr:[sh,th,kn], fl:[sh,th,kn], br:[sh,th,kn], bl:[sh,th,kn]}"
         )
         transport_decl = f'const ws = new WebSocket("ws://{esp_ip}:81");'
         open_guard = "if (ws.readyState !== WebSocket.OPEN) return;"
@@ -2317,19 +2317,18 @@ def to_js(
         )
 
     js = f"""// FaceHugger clip: {clip_name}
-// Generated {today} from Blender animation
+// Generated {today} from Blender animation (math-space; firmware applies CALIB)
 //
 {header_block}
 //
 // PLAYBACK SEMANTICS (Phase-1 parity with firmware tickClip, see spec
 // doc/animation-pipeline/onboard-clip-player-design.md §3.1):
 //   - DEFAULT: play the clip ONCE, then HOLD the final pose by
-//     re-sending the last frame's servo angles every FRAME_MS — the
-//     same as the firmware's hold-at-end behaviour.
+//     re-sending the last frame every FRAME_MS — firmware deadband
+//     suppresses redundant PWM writes on held frames.
 //   - LOOP=true: replay from frame 0 instead of holding (diagnostic).
 //   - fhStop(): explicit safe stop — clears the interval and closes
-//     the socket. The robot keeps the last commanded servo positions
-//     (servos hold their last commanded angle in hardware).
+//     the socket. The robot keeps the last commanded servo positions.
 
 const LOOP = {loop_js};
 // Playback wall-clock period — derived from the Blender scene FPS at
@@ -2339,24 +2338,11 @@ const LOOP = {loop_js};
 const FRAME_MS = {frame_ms};
 const CLIP_NAME = {json.dumps(clip_name)};
 
-// Blender leg name -> firmware LegId (see movements.h enum LegId on
-// origin/main). The wire `id` field is this leg_id; the firmware maps
-// to a PCA channel via LEG_SERVO_CHANNEL[id][servo_id].
-const LEG_IDS = {{ fr: 0, fl: 1, br: 2, bl: 3 }};
-
+// Math-space clip data: [shoulder, thigh, knee] per leg in degrees.
+// Firmware applies translateToServo + CALIB at runtime (T:12).
 const CLIP = [
 {chr(10).join(clip_lines)}
 ];
-
-// Servos accept 0..180; clamp defensively (extreme poses / a drifted
-// convention can push the converted angle out of range).
-const clamp = (v) => Math.max(0, Math.min(180, v | 0));
-
-// Delta-encode: only emit a channel when its value changed since the last
-// frame. Cuts redundant traffic and ends the hold-at-end resend flood
-// (a held pose = unchanged angles = nothing sent). Reset to {{}} on restart
-// so the first frame after a (re)start always sends all 12 channels.
-let _last = {{}};
 
 let _i = 0;
 let _timer = null;
@@ -2375,24 +2361,14 @@ function playFrame() {{
   if (_i >= CLIP.length) {{
     if (LOOP) {{
       _i = 0;
-      _last = {{}};  // reset delta cache so loop restart re-sends all channels
     }} else {{
       _i = CLIP.length - 1;
     }}
   }}
   const frame = CLIP[_i++];
   {open_guard}
-  for (const leg of ["fr", "fl", "br", "bl"]) {{
-    const angles = frame[leg];
-    for (let j = 0; j < 3; j++) {{
-      const a = clamp(angles[j]);
-      const key = leg + ":" + j;
-      if (_last[key] === a) continue;
-      _last[key] = a;
-      const msg = {{ "T": 4, "id": LEG_IDS[leg], "servo_id": j, "a": a }};
-      {send_call}
-    }}
-  }}
+  const msg = {{ T: 12, fr: frame.fr, fl: frame.fl, br: frame.br, bl: frame.bl }};
+  {send_call}
 }}
 
 {starter}
