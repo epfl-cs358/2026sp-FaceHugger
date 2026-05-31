@@ -122,12 +122,12 @@ void test_boot_orientation_dead_zone_defaults_upright(void) {
 
 void test_boot_orientation_dot_unit_helper_normalizes(void) {
     // dotUpright(ax, ay, az) computes (normalized accel) · UPRIGHT_REF.
-    // UPRIGHT_REF = (0, 0, -1): gravity reads as -Z when robot is upright
-    // (chassis +Z points up; MPU senses gravity along -Z body axis).
-    // Accel (0, 0, -9.8) (upright) → unit (0,0,-1) → dot with (0,0,-1) = +1.
-    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 1.0f, dotUpright(0.0f, 0.0f, -9.8f));
-    // Accel (0, 0, +9.8) (upside-down) → dot = -1.
-    TEST_ASSERT_FLOAT_WITHIN(1e-3f, -1.0f, dotUpright(0.0f, 0.0f, 9.8f));
+    // UPRIGHT_REF = (0, 0, +1): chip is Z-down so chip +Z points toward ground;
+    // accelerometer reaction to gravity reads as +Z when robot is upright.
+    // Accel (0, 0, +9.8) (upright) → unit (0,0,+1) → dot with (0,0,+1) = +1.
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 1.0f, dotUpright(0.0f, 0.0f, 9.8f));
+    // Accel (0, 0, -9.8) (upside-down) → dot = -1.
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, -1.0f, dotUpright(0.0f, 0.0f, -9.8f));
     // Accel (9.8, 0, 0) (on side) → dot = 0.
     TEST_ASSERT_FLOAT_WITHIN(1e-3f, 0.0f, dotUpright(9.8f, 0.0f, 0.0f));
 }
