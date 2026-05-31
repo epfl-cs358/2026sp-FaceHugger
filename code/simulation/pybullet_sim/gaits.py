@@ -19,7 +19,6 @@ from .helpers import (
 # --------------------------------------------------------------------------- #
 # Physics realism (applied in _connect_and_setup)
 # --------------------------------------------------------------------------- #
-BODY_MASS_KG = 0.8  # body link total incl. electronics (ESP32, PCA9685, battery)
 FOOT_LATERAL_FRICTION = 2.5  # high grip — models the rubber/elastic bands on the
 # real feet (PyBullet multiplies foot × plane, so this is the grippy end)
 FOOT_SPINNING_FRICTION = 0.3  # rubber tips resist the foot pivoting in place
@@ -309,11 +308,6 @@ def _connect_and_setup(cfg, gui, float_mode=False):
     apply_leg_pose(
         robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity
     )
-
-    # Body mass: the URDF base is the bare frame; add the electronics (ESP32,
-    # PCA9685, battery) so the body weighs a realistic ~BODY_MASS_KG total, which
-    # changes how the legs must support/balance it. (-1 = base link.)
-    p.changeDynamics(robot_id, -1, mass=BODY_MASS_KG)
 
     # Foot contact (link3 = the knee joint's child = lower leg/foot). NB: joint_map
     # keys are URDF joint names (`*_link3_joint`) — they contain "link3", not
