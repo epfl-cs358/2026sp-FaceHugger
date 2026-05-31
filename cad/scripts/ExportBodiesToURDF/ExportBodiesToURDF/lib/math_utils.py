@@ -4,7 +4,7 @@
 
 import math
 
-from config import CM_TO_MM
+from .config import CM_TO_MM
 
 
 def pt_mm(p):

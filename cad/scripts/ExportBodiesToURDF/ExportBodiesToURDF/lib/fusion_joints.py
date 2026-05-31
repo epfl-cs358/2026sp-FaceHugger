@@ -2,8 +2,8 @@
 # Imports adsk (unavoidable — queries design.allComponents and joint API).
 
 
-from config import CM_TO_MM, JOINTS, LEG_ASSEMBLY_COMPONENT, LEG_ASSEMBLY_OCCURRENCE
-from math_utils import _apply_R_3x3
+from .config import CM_TO_MM, JOINTS, LEG_ASSEMBLY_COMPONENT, LEG_ASSEMBLY_OCCURRENCE
+from .math_utils import _apply_R_3x3
 
 
 def _find_leg_assembly_R_la(occurrences_json):

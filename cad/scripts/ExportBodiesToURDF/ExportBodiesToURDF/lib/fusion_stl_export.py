@@ -8,13 +8,13 @@ import os
 
 import adsk.fusion  # ty:ignore[unresolved-import]
 
-from config import CM_TO_MM, EXPORT_RULES
-from landmark_utils import (
+from .config import CM_TO_MM, EXPORT_RULES
+from .landmark_utils import (
     find_landmark_world_pos,
     find_landmark_world_pos_at_occurrence,
 )
-from math_utils import pt_mm
-from stl_utils import (
+from .math_utils import pt_mm
+from .stl_utils import (
     read_binary_stl,
     transform_triangles,
     translate_stl_in_place,
