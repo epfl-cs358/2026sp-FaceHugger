@@ -273,7 +273,7 @@ Before soldering, it helps to understand what each board does:
 - **OLED screen**: Small display for status readout.
 - **ToF sensors**: Measure distance to objects. Used for obstacle detection.
 
-![Read more about the parts in ](/parts.md)
+[Read more about the parts in the Parts & Materials section](parts.md)
 
 ### Step 13: Solder the power chain
 
@@ -401,22 +401,28 @@ Refer to the wiring diagram in the project documentation for the full schematic.
 
 ### Step 20: Connect servo cables to PCA9685
 
-The PCA9685 has 16 servo output channels (0-15). Plug the **12 servo cables** (3-pin JST/Dupont: GND / VCC / Signal) into channels 0-11. Keep a consistent mapping, and document which channel corresponds to which servo:
+The PCA9685 has 16 servo output channels (0–15). Plug the **12 servo cables** (3-pin JST/Dupont: GND / VCC / Signal) into the exact channels shown below. This mapping must match `config.h`'s `LEG_SERVO_CHANNEL` array — if you ever re-wire a servo to a different channel, update `config.h` to match, or the firmware will drive the wrong servo.
 
-| Suggested channel | Servo |
-|---|---|
-| 0 | Front-right hip |
-| 1 | Front-right thigh |
-| 2 | Front-right knee |
-| 3 | Front-left hip |
-| 4 | Front-left thigh |
-| 5 | Front-left knee |
-| 6 | Back-right hip |
-| 7 | Back-right thigh |
-| 8 | Back-right knee |
-| 9 | Back-left hip |
-| 10 | Back-left thigh |
-| 11 | Back-left knee |
+| PCA9685 channel | Leg | Joint | `config.h` constant |
+|---|---|---|---|
+| 0 | Back-left (BL) | Hip | `BOTTOM_LEFT_LEG_HIP_PCA_CHANNEL` |
+| 1 | Back-left (BL) | Thigh | `BOTTOM_LEFT_LEG_THIGH_PCA_CHANNEL` |
+| 2 | Back-left (BL) | Knee | `BOTTOM_LEFT_LEG_KNEE_PCA_CHANNEL` |
+| 3 | *(unused)* | — | — |
+| 4 | Back-right (BR) | Hip | `BOTTOM_RIGHT_LEG_HIP_PCA_CHANNEL` |
+| 5 | Back-right (BR) | Thigh | `BOTTOM_RIGHT_LEG_THIGH_PCA_CHANNEL` |
+| 6 | Back-right (BR) | Knee | `BOTTOM_RIGHT_LEG_KNEE_PCA_CHANNEL` |
+| 7 | *(unused)* | — | — |
+| 8 | Front-right (FR) | Hip | `FRONT_RIGHT_LEG_HIP_PCA_CHANNEL` |
+| 9 | Front-right (FR) | Thigh | `FRONT_RIGHT_LEG_THIGH_PCA_CHANNEL` |
+| 10 | Front-right (FR) | Knee | `FRONT_RIGHT_LEG_KNEE_PCA_CHANNEL` |
+| 11 | *(unused)* | — | — |
+| 12 | Front-left (FL) | Hip | `FRONT_LEFT_LEG_HIP_PCA_CHANNEL` |
+| 13 | Front-left (FL) | Thigh | `FRONT_LEFT_LEG_THIGH_PCA_CHANNEL` |
+| 14 | Front-left (FL) | Knee | `FRONT_LEFT_LEG_KNEE_PCA_CHANNEL` |
+| 15 | *(unused)* | — | — |
+
+Channels 3, 7, 11, and 15 are intentional gaps — leave them empty. The leg order in `config.h` is 0 = FR, 1 = FL, 2 = BR, 3 = BL.
 
 !!! warning "Plug servo cables the right way"
     The 3-pin servo connector is not keyed, so it can go in backwards. The dark wire (GND) should face the outside edge of the PCA9685 board (the side labelled GND). Check your PCA9685's silkscreen to confirm.
