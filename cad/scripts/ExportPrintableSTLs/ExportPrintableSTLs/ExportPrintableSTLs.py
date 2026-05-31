@@ -60,7 +60,8 @@ import traceback
 import adsk.core  # ty:ignore[unresolved-import]
 import adsk.fusion  # ty:ignore[unresolved-import]
 
-from config import DEFAULT_UP, LOG_MARKER, ROTATIONS, SpecEntry, VALID_SUBFOLDERS
+from lib.config import DEFAULT_UP, ROTATIONS  # noqa: F401 — used below
+from lib.spec_io import format_log, read_spec, write_spec_with_log  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -71,105 +72,6 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 # Three levels up = the repo's cad/ directory.
 _CAD_DIR = os.path.normpath(os.path.join(_HERE, "..", "..", ".."))
 _SPEC_FILE = os.path.join(_CAD_DIR, "print_export.txt")
-
-# Aliases for backward compat with functions below.
-_LOG_MARKER = LOG_MARKER
-_ROTATIONS = ROTATIONS
-_DEFAULT_UP = DEFAULT_UP
-
-
-def _is_axis_token(tok):
-    return len(tok) == 2 and tok[0] in "+-" and tok[1] in "XYZ"
-
-
-# ---------------------------------------------------------------------------
-# Spec parsing
-# ---------------------------------------------------------------------------
-
-
-def _parse_extras(tokens):
-    """Classify trailing tokens after body_name. Returns (up_axis, hint).
-    Token shape:
-      - {+,-}{X,Y,Z}     -> up_axis
-      - key=value        -> only `hint=<value>` accepted
-      - any other word   -> hint (one max)
-    """
-    up = _DEFAULT_UP
-    hint = None
-    for tok in tokens:
-        if _is_axis_token(tok):
-            up = tok
-        elif "=" in tok:
-            k, v = tok.split("=", 1)
-            if k == "hint":
-                if hint is not None:
-                    raise RuntimeError(f"Multiple hint tokens in {tokens!r}")
-                hint = v
-            else:
-                raise RuntimeError(
-                    f"Unknown spec keyword {k!r} (only `hint=` is supported)"
-                )
-        else:
-            if hint is not None:
-                raise RuntimeError(f"Multiple hint tokens in {tokens!r}")
-            hint = tok
-    if up not in _ROTATIONS:
-        raise RuntimeError(f"Unknown up axis {up!r}; valid: {list(_ROTATIONS)}")
-    return up, hint
-
-
-def _read_spec(path):
-    """Return (user_lines, entries). `user_lines` is everything up through
-    the log marker (preserved verbatim, marker appended if absent).
-    `entries` is a list of SpecEntry parsed from non-comment lines above the marker."""
-    if not os.path.exists(path):
-        raise RuntimeError(f"Spec file not found: {path}")
-    with open(path, encoding="utf-8") as f:
-        raw_lines = f.read().splitlines()
-
-    user_lines = []
-    saw_marker = False
-    for line in raw_lines:
-        if line.strip() == _LOG_MARKER:
-            saw_marker = True
-            break
-        user_lines.append(line)
-    if not saw_marker:
-        user_lines.append("")
-    user_lines.append(_LOG_MARKER)
-
-    entries = []
-    for raw in user_lines:
-        line = raw.split("#", 1)[0].strip()
-        if not line:
-            continue
-        if line == _LOG_MARKER.lstrip("#").strip():
-            continue
-        parts = line.split()
-        if len(parts) < 2:
-            raise RuntimeError(f"Malformed spec line: {raw!r}")
-        subfolder = parts[0]
-        body_name = parts[1]
-        if subfolder not in VALID_SUBFOLDERS:
-            raise RuntimeError(
-                f"Spec line {raw!r}: subfolder must be one of {sorted(VALID_SUBFOLDERS)}, "
-                f"got {subfolder!r}"
-            )
-        up, hint = _parse_extras(parts[2:])
-        entries.append(
-            SpecEntry(subfolder=subfolder, body_name=body_name, up_axis=up, hint=hint)
-        )
-    return user_lines, entries
-
-
-def _write_spec_with_log(path, user_lines, log_lines):
-    """Write user_lines (which ends with the marker), a blank line, and the
-    fresh log_lines."""
-    body = "\n".join(user_lines + [""] + log_lines)
-    if not body.endswith("\n"):
-        body += "\n"
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(body)
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +195,7 @@ def run(_context: str):
             )
             return
 
-        user_lines, entries = _read_spec(_SPEC_FILE)
+        user_lines, entries = read_spec(_SPEC_FILE)
         if not entries:
             ui.messageBox(
                 f"ExportPrintableSTLs: no spec entries found.\n"
@@ -308,7 +210,7 @@ def run(_context: str):
         tree = list(_iter_occ_tree(root.occurrences))
 
         mgr = design.exportManager
-        successes = []  # (rel_path, src_path, up)
+        successes = []  # (rel_path, src_path, up_axis)
         failures = []  # (rel_path, reason)
 
         for entry in entries:
@@ -327,8 +229,8 @@ def run(_context: str):
 
             try:
                 _export_body(mgr, body, out_path)
-                if entry.up_axis != _DEFAULT_UP:
-                    _rotate_stl_in_place(out_path, _ROTATIONS[entry.up_axis])
+                if entry.up_axis != DEFAULT_UP:
+                    _rotate_stl_in_place(out_path, ROTATIONS[entry.up_axis])
             except Exception as e:  # pragma: no cover — Fusion runtime
                 failures.append((rel_path, f"export failed: {e}"))
                 continue
@@ -341,24 +243,8 @@ def run(_context: str):
             doc_name = app.activeDocument.name
         except Exception:
             pass
-        log_lines = []
-        log_lines.append(f"# Last export : {timestamp}")
-        if doc_name:
-            log_lines.append(f"# Source doc  : {doc_name}")
-        log_lines.append(
-            "# Refinement  : MeshRefinementHigh (binary STL, design units)"
-        )
-        log_lines.append(f"# Exported    : {len(successes)} body·ies")
-        for rel, src_path, up in successes:
-            up_note = "" if up == _DEFAULT_UP else f"  [up={up}]"
-            log_lines.append(f"#   ✓ {rel}    ← {src_path}{up_note}")
-        if failures:
-            log_lines.append(f"# Failures    : {len(failures)}")
-            for rel, reason in failures:
-                log_lines.append(f"#   ✗ {rel}    ({reason})")
-        else:
-            log_lines.append("# Failures    : 0")
-        _write_spec_with_log(_SPEC_FILE, user_lines, log_lines)
+        log_lines = format_log(timestamp, doc_name, successes, failures)
+        write_spec_with_log(_SPEC_FILE, user_lines, log_lines)
 
         # User-facing dialog.
         summary_lines = [
@@ -369,7 +255,7 @@ def run(_context: str):
         if successes:
             summary_lines.append("Successes:")
             for rel, _, up in successes:
-                up_note = "" if up == _DEFAULT_UP else f"  [up={up}]"
+                up_note = "" if up == DEFAULT_UP else f"  [up={up}]"
                 summary_lines.append(f"  ✓ {rel}{up_note}")
         if failures:
             summary_lines.append("")
