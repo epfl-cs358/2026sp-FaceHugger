@@ -129,18 +129,26 @@ Targets Blender 5.x.
 import argparse
 import json
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import bpy
 from mathutils import Matrix, Vector
 
+_LIB = str(Path(__file__).resolve().parents[1] / "lib")
+if _LIB not in sys.path:
+    sys.path.insert(0, _LIB)
+
+from urdf_parser import (  # noqa: E402
+    M_TO_MM,
+    compute_link_world,
+    matrix_m_to_mm,
+    parse_urdf,
+)
+
 
 # ---------------------------------------------------------------------------
 # Constants — match visualize_urdf.py for cross-script overlay
 # ---------------------------------------------------------------------------
-
-M_TO_MM = 1000.0  # URDF metres → mm scene
 
 SPHERE_RADIUS_MM = 3.0
 AXIS_LENGTH_MM = 20.0
@@ -196,118 +204,6 @@ def _foot_tip_for_leg(leg, foot_tip_in_link3_m):
             (-foot_tip_in_link3_m.x, foot_tip_in_link3_m.y, foot_tip_in_link3_m.z)
         )
     return foot_tip_in_link3_m
-
-
-# ---------------------------------------------------------------------------
-# URDF parsing — copy of visualize_urdf.py's parser plus _parse_limit
-# ---------------------------------------------------------------------------
-
-
-def _parse_origin(elem):
-    o = elem.find("origin")
-    if o is None:
-        return Matrix.Identity(4)
-    xyz = [float(v) for v in (o.get("xyz") or "0 0 0").split()]
-    rpy = [float(v) for v in (o.get("rpy") or "0 0 0").split()]
-    rx = Matrix.Rotation(rpy[0], 3, "X")
-    ry = Matrix.Rotation(rpy[1], 3, "Y")
-    rz = Matrix.Rotation(rpy[2], 3, "Z")
-    M = (rz @ ry @ rx).to_4x4()
-    M.translation = Vector(xyz)
-    return M
-
-
-def _parse_axis(elem):
-    a = elem.find("axis")
-    if a is None:
-        return Vector((1.0, 0.0, 0.0))
-    xyz = [float(v) for v in a.get("xyz").split()]
-    v = Vector(xyz)
-    return v.normalized() if v.length > 0 else Vector((1.0, 0.0, 0.0))
-
-
-def _parse_limit(elem):
-    """Return (lower_rad, upper_rad) from <joint><limit>, or (None, None)
-    for fixed joints / missing limits."""
-    lim = elem.find("limit")
-    if lim is None:
-        return (None, None)
-    try:
-        return (float(lim.get("lower")), float(lim.get("upper")))
-    except (TypeError, ValueError):
-        return (None, None)
-
-
-def _parse_visual(v):
-    g = v.find("geometry/mesh")
-    if g is None:
-        return None
-    fname = g.get("filename")
-    scale = [float(s) for s in (g.get("scale") or "1 1 1").split()]
-    return (_parse_origin(v), fname, scale)
-
-
-def parse_urdf(path):
-    """Same shape as visualize_urdf.parse_urdf but joints carry limits too."""
-    tree = ET.parse(path)
-    root_elem = tree.getroot()
-    if root_elem.tag != "robot":
-        sys.exit(f"{path}: root tag is <{root_elem.tag}>, expected <robot>")
-
-    links = {}
-    for link_elem in root_elem.findall("link"):
-        name = link_elem.get("name")
-        visuals = []
-        for v in link_elem.findall("visual"):
-            parsed = _parse_visual(v)
-            if parsed is not None:
-                visuals.append(parsed)
-        links[name] = visuals
-
-    joints = {}
-    for j in root_elem.findall("joint"):
-        parent = j.find("parent").get("link")
-        child = j.find("child").get("link")
-        lower, upper = _parse_limit(j)
-        joints[child] = {
-            "parent": parent,
-            "origin": _parse_origin(j),
-            "axis": _parse_axis(j),
-            "name": j.get("name"),
-            "type": j.get("type"),
-            "lower": lower,
-            "upper": upper,
-        }
-
-    children = set(joints.keys())
-    roots = [n for n in links if n not in children]
-    if len(roots) != 1:
-        sys.exit(f"{path}: expected exactly one root link, got {roots}")
-    return {"root": roots[0], "links": links, "joints": joints}
-
-
-# ---------------------------------------------------------------------------
-# Forward kinematics at rest pose (all joint angles 0)
-# ---------------------------------------------------------------------------
-
-
-def compute_link_world(robot):
-    """{link_name: 4x4 matrix in metres, rest pose}."""
-    link_world = {robot["root"]: Matrix.Identity(4)}
-    remaining = dict(robot["joints"])
-    while remaining:
-        placed = []
-        for child, j in remaining.items():
-            if j["parent"] in link_world:
-                link_world[child] = link_world[j["parent"]] @ j["origin"]
-                placed.append(child)
-        if not placed:
-            sys.exit(
-                f"Dangling joint chain — could not place: {list(remaining.keys())}"
-            )
-        for c in placed:
-            del remaining[c]
-    return link_world
 
 
 def load_foot_tip_in_link3_frame(json_path):
@@ -404,12 +300,6 @@ def load_body_bottom_point(json_path):
         if found[0] is not None:
             break
     return found[0]
-
-
-def matrix_m_to_mm(M):
-    out = M.copy()
-    out.translation = out.translation * M_TO_MM
-    return out
 
 
 # ---------------------------------------------------------------------------
