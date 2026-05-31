@@ -301,6 +301,7 @@ def _connect_and_setup(cfg, gui, float_mode=False):
         basePosition=[0, 0, cfg.body_height + 0.02],
         baseOrientation=p.getQuaternionFromEuler([0, 0, 0]),
         useFixedBase=float_mode,
+        flags=p.URDF_USE_INERTIA_FROM_FILE,
     )
     joint_map = build_joint_map(robot_id)
     # stance_rad is already per-leg; reset + motor-command from the same dict.
