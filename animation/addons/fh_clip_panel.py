@@ -331,7 +331,7 @@ def _toggle_heatmap(self, context):
 
 
 # ---------------------------------------------------------------------------
-# Existing clip helpers (unchanged)
+# Clip model
 # ---------------------------------------------------------------------------
 
 
@@ -547,7 +547,7 @@ def _redraw_view3d(context):
 
 
 # ---------------------------------------------------------------------------
-# Per-clip export-include state (Option A: inline checkbox in the Clips list)
+# Export-selection state
 # ---------------------------------------------------------------------------
 #
 # The set of clips ticked for "Export Selected Clips" is stored as a
@@ -693,7 +693,7 @@ def _copy_extra_to_app():
 
 
 # ---------------------------------------------------------------------------
-# Pose Library — animation/poses.json (committed, like convention.json)
+# Pose library (animation/poses.json)
 # ---------------------------------------------------------------------------
 #
 # A "pose" is a snapshot of the 5 control objects' LOCAL transforms:
@@ -850,7 +850,7 @@ def _seeded_pose(name):
 
 
 # ---------------------------------------------------------------------------
-# N-pose: foot targets from the RIG's own kinematics (not a hand model)
+# N-pose helpers
 # ---------------------------------------------------------------------------
 #
 # An earlier version used a hand-rolled planar FK with guessed mount/yaw
@@ -1589,7 +1589,7 @@ class FH_OT_set_rest_pose(bpy.types.Operator):
 
 
 # ---------------------------------------------------------------------------
-# Operators — Pose Library (position-based, clip-independent)
+# Operators — pose library
 # ---------------------------------------------------------------------------
 
 
@@ -1811,7 +1811,7 @@ class FH_OT_key_pose_into_clip(bpy.types.Operator):
 
 
 # ---------------------------------------------------------------------------
-# Operator — selection sets (pick control objects; touches no data)
+# Operators — control-object selection
 # ---------------------------------------------------------------------------
 #
 # Convenience for animators: select a meaningful group of the rig's
