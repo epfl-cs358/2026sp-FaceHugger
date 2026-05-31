@@ -83,9 +83,10 @@ conda run -n facehugger python -m pytest tests/ -v
   matches the Python re-port at frame 0 within the firmware's whole-degree
   truncation (≤ 1°); the bridge drives PyBullet headless; the default clip path
   (no flag) runs end-to-end through the firmware.
-- `tests/test_sil_clip_suite.py` — replays **every** clip through the firmware and asserts
-  an **exact** match to its committed golden trace (`golden/*.json`). A firmware or
-  clip-export change that shifts any servo angle fails here.
+- `tests/test_sil_clip_suite.py` — replays every clip through the firmware and compares
+  to its committed reference trace (`reference_clips/*.json`). Clips listed under
+  `reference_clips:` in `facehugger_config.yaml` must match exactly; all other clips
+  only warn on mismatch. Regenerate: `python code/facehugger.py update-reference-clips`.
 
 ## Golden traces
 
