@@ -74,6 +74,9 @@ SpinalCord::SpinalCord(uint8_t pwm):
     , clipState_{ CLIP_DONE, 0, 0, 0, 0 }
     , lastInvertMs_(0), hasInverted_(false)
 {
+    for (uint8_t i = 0; i < LEG_COUNT; ++i)
+        for (uint8_t j = 0; j < 3; ++j)
+            lastStreamAngles_[i][j] = 999.0f;  // sentinel: first T:12 frame always writes through
 }
 
 void SpinalCord::begin() {
@@ -491,6 +494,20 @@ void SpinalCord::tickYawRotation() {
 
         // Invert applied centrally in applyServos (servo-space, pitch-only).
         applyServos(&legs_[i], translateToServo((uint8_t)i, sh, th, kn));
+    }
+}
+
+void SpinalCord::streamMathFrame(const float a[LEG_COUNT][3]) {
+    for (uint8_t leg = 0; leg < LEG_COUNT; ++leg) {
+        ServoTriple s = translateToServo(leg, a[leg][0], a[leg][1], a[leg][2]);
+        s = applyInvert(leg, s, isInverted);
+        float servo[3] = { (float)s.hip, (float)s.thigh, (float)s.knee };
+        for (uint8_t j = 0; j < 3; ++j) {
+            if (fabsf(servo[j] - lastStreamAngles_[leg][j]) >= SERVO_DEADBAND_DEG) {
+                lastStreamAngles_[leg][j] = servo[j];
+                legs_[leg].setServo(j, servo[j]);
+            }
+        }
     }
 }
 
