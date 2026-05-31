@@ -18,15 +18,12 @@
 // "we don't really know" and we fall back to the upright assumption.
 //
 // UPRIGHT_REF is the unit gravity vector the MPU6050 should read when the
-// chassis is upright. Assumption: the chip is mounted Z-up in the chassis,
-// so the +Z body axis points up when the robot is upright; gravity then
-// pulls in the -Z direction in the IMU's frame.
-//
-//   // TODO verify on hardware: if the robot boots "upside-down" while sitting
-//   // upright, flip the sign of UPRIGHT_REF_Z.
+// chassis is upright. The chip is mounted Z-down in the chassis, so the
+// -Z body axis points up when the robot is upright; gravity then pulls in
+// the +Z direction in the IMU's frame.
 constexpr float UPRIGHT_REF_X = 0.0f;
 constexpr float UPRIGHT_REF_Y = 0.0f;
-constexpr float UPRIGHT_REF_Z = -1.0f;
+constexpr float UPRIGHT_REF_Z = 1.0f;
 
 constexpr float BOOT_DOT_THRESHOLD = 0.7f;
 
