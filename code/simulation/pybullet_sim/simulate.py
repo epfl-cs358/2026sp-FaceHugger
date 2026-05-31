@@ -20,7 +20,7 @@ Geometry sourcing (no duplication of constants in Python):
 
 import argparse
 
-from .gaits import run_clip, run_gait, run_stand
+from .runner import run_clip, run_gait, run_stand
 from .kinematics import build_config
 
 
