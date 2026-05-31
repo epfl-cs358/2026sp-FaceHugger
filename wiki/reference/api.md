@@ -6,7 +6,7 @@ FaceHugger communicates with control clients over a bidirectional WebSocket conn
 - **Port:** 81
 - **Endpoint:** `ws://192.168.4.1:81` (robot is the AP)
 - **Framing:** Minified JSON objects, one per message
-- **Telemetry interval:** Robot sends a `T:10` status message every 100 ms (10 Hz heartbeat / keep-alive)
+- **Telemetry interval:** Robot sends a `T:10` status message every ~500 ms (heartbeat / keep-alive)
 
 ## Connection
 
@@ -33,7 +33,7 @@ ws.onclose = () => {
 };
 ```
 
-Once the connection is open, the robot begins sending `T:10` telemetry every 100 ms (10 Hz). Clients send commands (`T:1` through `T:11`) as needed; the robot executes them and reflects the updated state in the next telemetry cycle.
+Once the connection is open, the robot begins sending `T:10` telemetry every ~500 ms. Clients send commands (`T:1` through `T:11`) as needed; the robot executes them and reflects the updated state in the next telemetry cycle.
 
 ## Commands (Client to Robot)
 
@@ -82,15 +82,15 @@ Examples:
 
 ### T:3 CMD_POSE (Body Pose / Static IK)
 
-> **Not implemented in current firmware.** `network.cpp` has no T:3 handler; sending this command is a silent no-op. Reserved for a future static-IK body-tilt feature.
+Payload: `{"T": 3, "h": <height_mm>, "p": <pitch_deg>, "r": <roll_deg>}`
 
-Intended payload: `{"T": 3, "h": <height_mm>, "p": <pitch_deg>, "r": <roll_deg>}`
+| Field | Type  | Description                | Unit    | Range |
+|-------|-------|----------------------------|---------|-------|
+| `h`   | int   | Chassis height             | mm      | TBD   |
+| `p`   | float | Pitch (tilt forward/back)  | degrees | TBD   |
+| `r`   | float | Roll (tilt side-to-side)   | degrees | TBD   |
 
-| Field | Type  | Description                | Unit    |
-|-------|-------|----------------------------|---------|
-| `h`   | int   | Chassis height             | mm      |
-| `p`   | float | Pitch (tilt forward/back)  | degrees |
-| `r`   | float | Roll (tilt side-to-side)   | degrees |
+This command adjusts chassis orientation while all feet stay planted. It runs only in `STATE_ACTION`. The robot holds the new pose until a subsequent command arrives. The next `T:10` includes an error if the requested pose is out of reach.
 
 ### T:4 CMD_CALIBRATE (Servo Calibration)
 
@@ -238,7 +238,7 @@ Example: `{"T": 11, "a": 0.5}` - less smoothing, snappier clips.
 
 ### T:10 System Status
 
-The robot emits a `T:10` packet every 100 ms (10 Hz) as a heartbeat and connection keep-alive.
+The robot emits a `T:10` packet every ~500 ms as a heartbeat and connection keep-alive.
 
 Payload: `{"T": 10, "s": <state>, "d": [<tof>...], "a": [<speed>, <gyro_x>, <gyro_y>, <gyro_z>], "g": <gait>, "pc": <progress>, "e": <error_or_null>, "pitch_deg": <float>, "roll_deg": <float>, "upside_down": <bool>, "auto_invert_enabled": <bool>}`
 

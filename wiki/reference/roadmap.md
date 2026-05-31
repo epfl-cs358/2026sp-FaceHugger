@@ -18,7 +18,7 @@
 2. **Mobile app clips UI:** T:7 backend is ready; front-end integration needed.
 3. **Runtime adaptability:** IMU correction, terrain adaptation, and clip mirroring designed; no implementation yet.
 4. **Servo numbering alignment:** Proposal in `animation/SERVO_ID_CONVENTION.md` needs firmware confirmation.
-5. **Clip-based walk (proposed, not started):** Drive locomotion from authored *cyclic* clips played looping per joystick direction, instead of the procedural gaits — a clip per direction (forward/back/left/right + diagonals) with an optional left↔right mirror. The reusable pieces exist (the clip player now loops); the new work is a Blender direction→clip map, an exported lookup table, a `GAIT_CLIPWALK` firmware mode, and a sagittal (L↔R) clip-mirror function (the one genuinely new piece). Dropped for now in favour of the procedural trot/crab.
+5. **Clip-based walk (proposed, not started):** Drive locomotion from authored *cyclic* clips played looping per joystick direction, instead of the procedural gaits - a clip per direction (forward/back/left/right + diagonals) with an optional left↔right mirror. The reusable pieces exist (the clip player now loops); the new work is a Blender direction→clip map, an exported lookup table, a `GAIT_CLIPWALK` firmware mode, and a sagittal (L↔R) clip-mirror function (the one genuinely new piece). Dropped for now in favour of the procedural trot/crab.
 
 ## Known issues and limitations
 
