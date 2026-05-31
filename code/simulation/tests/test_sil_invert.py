@@ -33,14 +33,28 @@ def _fc_or_skip():
 
 def _neutral_servo_angles(inverted):
     """The 12 servo angles (firmware order FR,FL,RR,RL × hip,thigh,knee) the robot
-    should hold at neutral — pitch-mirrored (thigh/knee = 180-x) when inverted."""
-    from firmware_port.servo_convention import NEUTRAL, translate_to_servo
+    should hold at neutral — pitch-mirrored when inverted.
+
+    Inversion mirrors about the CALIB zero-point (2*CALIB - s), not 90 (180 - s).
+    Matches applyInvert() in motion_math.cpp which switched to CALIB-relative mirrors
+    so that mechanical zero aligns with the inversion axis.
+    """
+    from firmware_port.servo_convention import (
+        CALIB_KNEE,
+        CALIB_THIGH,
+        NEUTRAL,
+        translate_to_servo,
+    )
 
     out = []
     for leg in range(4):
         t = translate_to_servo(leg, NEUTRAL[leg].sh, NEUTRAL[leg].th, NEUTRAL[leg].kn)
         if inverted:
-            out += [round(t.hip), round(180.0 - t.thigh), round(180.0 - t.knee)]
+            out += [
+                round(t.hip),
+                round(2 * CALIB_THIGH[leg] - t.thigh),
+                round(2 * CALIB_KNEE[leg] - t.knee),
+            ]
         else:
             out += [round(t.hip), round(t.thigh), round(t.knee)]
     return out
