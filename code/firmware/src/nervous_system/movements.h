@@ -32,4 +32,7 @@ struct GaitParams {
     const char* label;
 };
 
+// Defined in spinal_cord.cpp; one entry per GaitType value.
+extern const GaitParams GAITS[];
+
 #endif
