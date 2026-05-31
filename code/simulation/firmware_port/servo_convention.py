@@ -21,7 +21,7 @@ LEG_RR = 2  # also called BR in simulation / Blender
 LEG_RL = 3  # also called BL in simulation / Blender
 
 # Map firmware LegId (0-3) to URDF/simulation leg name (fl/fr/bl/br).
-# Matches helpers.py build_joint_map naming convention.
+# Matches pybullet_sim.motor.build_joint_map naming convention.
 LEG_ID_TO_SIM_NAME: dict[int, str] = {
     LEG_FR: "fr",
     LEG_FL: "fl",

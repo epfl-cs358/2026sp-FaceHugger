@@ -104,7 +104,8 @@ def test_sil_drives_pybullet_headless():
     """Play the whole clip through PyBullet via the SIL bridge; joints must move."""
     import pybullet as p
 
-    from pybullet_sim import constants, helpers
+    from pybullet_sim import constants
+    from pybullet_sim.motor import build_joint_map
 
     drv = _driver_or_skip()
     cid = p.connect(p.DIRECT)
@@ -112,7 +113,7 @@ def test_sil_drives_pybullet_headless():
         robot = p.loadURDF(
             constants.URDF_PATH, basePosition=[0, 0, 0.15], useFixedBase=True
         )
-        joint_map = helpers.build_joint_map(robot)
+        joint_map = build_joint_map(robot)
         revolute = [
             idx
             for idx in joint_map.values()
