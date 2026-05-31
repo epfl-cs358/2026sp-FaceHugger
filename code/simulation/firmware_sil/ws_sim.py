@@ -49,13 +49,13 @@ class RobotSim:
     def __init__(self, gui=False):
         import pybullet as p
 
-        from pybullet_sim.gaits import _connect_and_setup
         from pybullet_sim.kinematics import build_config
+        from pybullet_sim.scene import connect_and_setup
 
         self.p = p
         self.gui = gui
         self.cfg = build_config()
-        self.robot_id, self.joint_map = _connect_and_setup(self.cfg, gui)
+        self.robot_id, self.joint_map = connect_and_setup(self.cfg, gui)
         self.fc = load_fh_sim().FirmwareControl()
         # IMU emulation hysteresis state — flips when body Z crosses ~150°/30°
         # from world up, matching the firmware's imu_hysteresis thresholds. Read
