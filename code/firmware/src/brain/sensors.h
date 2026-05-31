@@ -1,15 +1,14 @@
 #ifndef SENSORS_H
 #define SENSORS_H
 
-#include "../nervous_system/spinal_cord.h"
-
 // MPU6050-based IMU + (stub) ToF accessor surface.
 //
-//   initSensors(sc)  starts Wire and the MPU6050 on the shared I2C bus, then
+//   initSensors()    starts Wire and the MPU6050 on the shared I2C bus, then
 //                    takes ONE accel sample (after a 50 ms settle) and compares
-//                    it to a hardcoded UPRIGHT reference. If the robot booted
-//                    upside-down (dot < -0.7), sc.setInverted(true) is called
-//                    so the very first servo writes use the inverted NEUTRAL.
+//                    it to a hardcoded UPRIGHT reference. Returns a SensorBootResult
+//                    with `inverted = true` if the robot booted upside-down
+//                    (dot < -0.7). The caller (main.cpp) is responsible for
+//                    forwarding that flag into spinalCord.setInverted(true).
 //                    Replaces the old "average 50 samples = upright reference"
 //                    scheme, which assumed the robot was upright at power-on.
 //   tickImu()        reads the accel once per loop, normalises it, computes the
@@ -25,7 +24,13 @@
 //
 // The ToF stub stays for backwards compatibility with the existing telemetry
 // payload — the real ToF wiring isn't part of this change.
-void initSensors(SpinalCord& sc);
+
+struct SensorBootResult {
+    bool inverted;   // true if the robot booted upside-down
+    bool imu_ready;  // true if the MPU6050 was found and initialised
+};
+
+SensorBootResult initSensors();
 void tickImu();
 bool imuIsInverted();
 float imuTiltDeg();
