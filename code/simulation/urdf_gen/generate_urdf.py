@@ -1118,6 +1118,11 @@ def generate(export: dict, cfg: dict, out_path: Path):
                 else None
             )
             mass, com, inertia = get_physics(link_occ, fallback_mass=0.05)
+            # link1 hosts the hip servo; link3 hosts the knee servo.
+            # Add the physical servo mass so dynamics match the real robot.
+            # CoM stays at the structural centroid (good enough for sim fidelity).
+            if link_key in ("link1", "link3"):
+                mass += servo_cfg.get("mass_kg", 0.060)
             urdf.link(
                 link_name,
                 mesh_name,
