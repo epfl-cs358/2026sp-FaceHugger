@@ -53,15 +53,16 @@ spec (xrefs loaded). Defaults from Fusion's STL exporter are used
 """
 
 import os
-import struct
 import time
 import traceback
 
 import adsk.core  # ty:ignore[unresolved-import]
 import adsk.fusion  # ty:ignore[unresolved-import]
 
-from lib.config import DEFAULT_UP, ROTATIONS  # noqa: F401 — used below
-from lib.spec_io import format_log, read_spec, write_spec_with_log  # noqa: F401
+from lib.config import DEFAULT_UP
+from lib.fusion_api import export_body_stl, find_body, iter_occ_tree
+from lib.spec_io import format_log, read_spec, write_spec_with_log
+from lib.stl_transform import rotate_stl_in_place, rotation_for_up_axis
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -73,108 +74,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _CAD_DIR = os.path.normpath(os.path.join(_HERE, "..", "..", ".."))
 _SPEC_FILE = os.path.join(_CAD_DIR, "print_export.txt")
 
-
-# ---------------------------------------------------------------------------
-# Occurrence-tree walking
-# ---------------------------------------------------------------------------
-
-
-def _iter_occ_tree(occurrences):
-    """Yield (occurrence, dotted_path) for every occurrence in the design.
-    Same traversal pattern as ExportBodiesToURDF.py."""
-    for occ in occurrences:
-        path = occ.name
-        yield occ, path
-        children = occ.childOccurrences
-        if children:
-            for sub_occ, sub_path in _iter_occ_subtree(children, path):
-                yield sub_occ, sub_path
-
-
-def _iter_occ_subtree(occurrences, parent_path):
-    for occ in occurrences:
-        path = f"{parent_path}/{occ.name}"
-        yield occ, path
-        children = occ.childOccurrences
-        if children:
-            yield from _iter_occ_subtree(children, path)
-
-
-def _find_body(tree, body_name, hint):
-    """First (occurrence, body, path) whose body name matches and (if `hint`
-    is given) whose path contains `hint` as a substring. Returns
-    (None, None, None) when nothing matches."""
-    for occ, path in tree:
-        if hint is not None and hint not in path:
-            continue
-        comp = occ.component
-        if comp is None:
-            continue
-        for body in comp.bRepBodies:
-            if body.name == body_name:
-                return occ, body, path
-    return None, None, None
-
-
-# ---------------------------------------------------------------------------
-# STL export + post-rotation
-# ---------------------------------------------------------------------------
-
-
-def _export_body(mgr, body, out_path):
-    """Export a single BRep body to a binary STL at HIGH refinement.
-    Vertices retain the body's native (component-local) frame — no
-    world-transform bake-in."""
-    opts = mgr.createSTLExportOptions(body, out_path)
-    opts.sendToPrintUtility = False
-    opts.isBinaryFormat = True
-    opts.meshRefinement = adsk.fusion.MeshRefinementSettings.MeshRefinementHigh
-    mgr.execute(opts)
-
-
-def _rotate_stl_in_place(path, rotation):
-    """Read binary STL at `path`, rotate every normal and vertex by
-    `rotation` (3 rows of 3 floats), write it back.
-
-    Binary STL layout:
-      80 bytes  : header (preserved)
-       4 bytes  : uint32 triangle count
-      per tri  : 12 floats (3 normal + 9 vertex) + 2 bytes attribute
-    """
-    with open(path, "rb") as f:
-        header = f.read(80)
-        (n_tri,) = struct.unpack("<I", f.read(4))
-        tri_blob = f.read(50 * n_tri)
-
-    r = rotation
-
-    def _rot(v):
-        return (
-            r[0][0] * v[0] + r[0][1] * v[1] + r[0][2] * v[2],
-            r[1][0] * v[0] + r[1][1] * v[1] + r[1][2] * v[2],
-            r[2][0] * v[0] + r[2][1] * v[1] + r[2][2] * v[2],
-        )
-
-    out = bytearray()
-    out += header
-    out += struct.pack("<I", n_tri)
-    off = 0
-    for _ in range(n_tri):
-        nrm = struct.unpack("<3f", tri_blob[off : off + 12])
-        v1 = struct.unpack("<3f", tri_blob[off + 12 : off + 24])
-        v2 = struct.unpack("<3f", tri_blob[off + 24 : off + 36])
-        v3 = struct.unpack("<3f", tri_blob[off + 36 : off + 48])
-        attr = tri_blob[off + 48 : off + 50]
-        n2 = _rot(nrm)
-        v1r = _rot(v1)
-        v2r = _rot(v2)
-        v3r = _rot(v3)
-        out += struct.pack("<12f", *n2, *v1r, *v2r, *v3r)
-        out += attr
-        off += 50
-
-    with open(path, "wb") as f:
-        f.write(bytes(out))
+# Set to True to skip actual export/rotation and do a trial run only.
+DRY_RUN: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +108,7 @@ def run(_context: str):
 
         # Pre-walk the occurrence tree once.
         root = design.rootComponent
-        tree = list(_iter_occ_tree(root.occurrences))
+        tree = list(iter_occ_tree(root.occurrences))
 
         mgr = design.exportManager
         successes = []  # (rel_path, src_path, up_axis)
@@ -219,7 +120,7 @@ def run(_context: str):
             out_path = os.path.join(out_dir, f"{entry.body_name}.stl")
             rel_path = os.path.relpath(out_path, _CAD_DIR)
 
-            occ, body, path = _find_body(tree, entry.body_name, entry.hint)
+            occ, body, path = find_body(tree, entry.body_name, entry.hint)
             if body is None:
                 detail = f" (no match for hint {entry.hint!r})" if entry.hint else ""
                 failures.append(
@@ -227,10 +128,14 @@ def run(_context: str):
                 )
                 continue
 
+            if DRY_RUN:
+                successes.append((rel_path, path, entry.up_axis))
+                continue
+
             try:
-                _export_body(mgr, body, out_path)
+                export_body_stl(mgr, body, out_path)
                 if entry.up_axis != DEFAULT_UP:
-                    _rotate_stl_in_place(out_path, ROTATIONS[entry.up_axis])
+                    rotate_stl_in_place(out_path, rotation_for_up_axis(entry.up_axis))
             except Exception as e:  # pragma: no cover — Fusion runtime
                 failures.append((rel_path, f"export failed: {e}"))
                 continue
@@ -247,8 +152,9 @@ def run(_context: str):
         write_spec_with_log(_SPEC_FILE, user_lines, log_lines)
 
         # User-facing dialog.
+        dry_tag = "[DRY RUN] " if DRY_RUN else ""
         summary_lines = [
-            f"Exported {len(successes)} of {len(successes) + len(failures)} bodies",
+            f"{dry_tag}Exported {len(successes)} of {len(successes) + len(failures)} bodies",
             f"at HIGH mesh refinement to {os.path.basename(_CAD_DIR)}/body+leg/.",
             "",
         ]

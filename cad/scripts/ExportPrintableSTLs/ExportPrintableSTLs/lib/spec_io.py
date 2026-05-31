@@ -6,7 +6,7 @@ from .config import DEFAULT_UP, LOG_MARKER, ROTATIONS, SpecEntry, VALID_SUBFOLDE
 
 
 def _is_axis_token(tok: str) -> bool:
-    return len(tok) == 2 and tok[0] in "+-" and tok[1] in "XYZ"
+    return len(tok) == 2 and tok[0] in "+-" and tok[1].isalpha()
 
 
 def _parse_extras(tokens: list[str]) -> tuple[str, str | None]:
