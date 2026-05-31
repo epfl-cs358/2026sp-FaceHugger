@@ -14,9 +14,11 @@ import re
 import sys
 from pathlib import Path
 
-_LIB = Path(__file__).parent.parent / "lib"
-if str(_LIB) not in sys.path:
-    sys.path.insert(0, str(_LIB))
+_LIB = str(Path(__file__).resolve().parents[1] / "lib")
+if _LIB not in sys.path:
+    sys.path.insert(0, _LIB)
+
+import bpy_stub  # noqa: E402
 
 ADDONS_DIR = Path(__file__).parent.parent / "addons"
 
@@ -35,7 +37,6 @@ BONE_ORDER = [
     "br_link3",
 ]
 JOINT_NAMES = ["hip", "thigh", "knee"]
-
 
 bpy_stub.install()
 
