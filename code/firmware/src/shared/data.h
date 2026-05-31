@@ -18,7 +18,8 @@ enum CommandType {
     CMD_LIST_CLIPS  = 8,
     CMD_SET_INVERT  = 9,
     CMD_TELEMETRY   = 10,
-    CMD_SET_SMOOTHING = 11   // runtime clip-playback smoothing knob (EMA alpha)
+    CMD_SET_SMOOTHING = 11,  // runtime clip-playback smoothing knob (EMA alpha)
+    CMD_STREAM_FRAME  = 12   // math-space clip frame; firmware applies CALIB at runtime
 };
 
 // FSM States matching LaTeX documentation

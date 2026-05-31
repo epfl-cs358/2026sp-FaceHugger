@@ -212,6 +212,25 @@ void handleParsedMessage(uint8_t num, uint8_t * payload) {
             }
             break;
         }
+        case CMD_STREAM_FRAME: {
+            // {T:12, fr:[sh,th,kn], fl:[sh,th,kn], br:[sh,th,kn], bl:[sh,th,kn]}
+            // Math-space angles; firmware applies translateToServo + CALIB at
+            // runtime. Used by browser-streamed clip playback so exported .js files
+            // never need re-exporting after a recalibration.
+            static const char* KEYS[LEG_COUNT] = { "fr", "fl", "br", "bl" };
+            float a[LEG_COUNT][3];
+            bool ok = true;
+            for (uint8_t i = 0; i < LEG_COUNT && ok; ++i) {
+                if (!doc[KEYS[i]].is<JsonArray>()) { ok = false; break; }
+                JsonArray arr = doc[KEYS[i]].as<JsonArray>();
+                if (arr.size() < 3)               { ok = false; break; }
+                a[i][0] = arr[0].as<float>();
+                a[i][1] = arr[1].as<float>();
+                a[i][2] = arr[2].as<float>();
+            }
+            if (ok) spinalCord.streamMathFrame(a);
+            break;
+        }
         case CMD_TELEMETRY: { //this is the robot that sends it
             Serial.printf("FSM state: %d, Battery voltage: %lf, In stabilization mode: %s\n",
                 (int)doc["s"], (float)doc["b"], (int)doc["a"] ? "true": "false");
