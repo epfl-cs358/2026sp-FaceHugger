@@ -234,6 +234,7 @@ void SpinalCord::update() {
 }
 
 void SpinalCord::setGait(GaitType g) {
+    if (g < GAIT_NONE || g > GAIT_CRAB) return;  // guard once; network.cpp no longer needs to check
     currentGait_ = g;
     gaitPhaseStartMs_ = millis();
     Serial.printf("[gait] %s\n", GAITS[g].label);
