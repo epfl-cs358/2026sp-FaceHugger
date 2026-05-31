@@ -1,5 +1,5 @@
 """Export consistency checker: verifies .h bone angles round-trip to .js
-servo values via _frame_to_servo from fh_clip_panel.py.
+servo values via _frame_to_servo from animation/lib/servo_math.py.
 
 Usage:
     python check_export_consistency.py [--export-dir PATH]
@@ -8,7 +8,6 @@ Exit codes: 0 = all pass, 1 = one or more failures, 2 = file error.
 """
 
 import argparse
-import importlib.util
 import json
 import re
 import sys
@@ -18,9 +17,7 @@ _LIB = str(Path(__file__).resolve().parents[1] / "lib")
 if _LIB not in sys.path:
     sys.path.insert(0, _LIB)
 
-import bpy_stub  # noqa: E402
-
-ADDONS_DIR = Path(__file__).parent.parent / "addons"
+from servo_math import _frame_to_servo  # noqa: E402
 
 BONE_ORDER = [
     "fl_link1",
@@ -37,14 +34,6 @@ BONE_ORDER = [
     "br_link3",
 ]
 JOINT_NAMES = ["hip", "thigh", "knee"]
-
-bpy_stub.install()
-
-_panel_script = ADDONS_DIR / "fh_clip_panel.py"
-_spec = importlib.util.spec_from_file_location("fh_clip_panel", str(_panel_script))
-_mod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_mod)
-_frame_to_servo = _mod._frame_to_servo
 
 
 def h_row_to_dict(values: list) -> dict:

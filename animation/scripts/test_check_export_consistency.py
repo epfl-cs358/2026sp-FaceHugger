@@ -188,7 +188,17 @@ def test_body_rotation_uniform_mathspace_yaw():
     shoulder SERVOS now move the same direction for a body yaw too. Regression
     for both the FL inversion and the BR-mirror.
     """
-    from check_export_consistency import _mod
+    import sys
+    from pathlib import Path as _Path
+
+    _lib = str(_Path(__file__).resolve().parents[1] / "lib")
+    if _lib not in sys.path:
+        sys.path.insert(0, _lib)
+    from servo_math import (
+        _frame_to_servo,
+        _link1_delta_to_absolute,
+        _scale_from_neutral,
+    )
 
     axis_sign = {"fr": -1, "fl": +1, "br": +1, "bl": -1}
     n = CONVENTION["neutral_joint_deg"]
@@ -199,8 +209,8 @@ def test_body_rotation_uniform_mathspace_yaw():
         row[f"{leg}_link1"] = axis_sign[leg] * ccw  # raw bone-local reading
         row[f"{leg}_link2"] = n[leg][1]
         row[f"{leg}_link3"] = n[leg][2]
-    _mod._link1_delta_to_absolute(row, CONVENTION)
-    scaled = _mod._scale_from_neutral(row, CONVENTION)
+    _link1_delta_to_absolute(row, CONVENTION)
+    scaled = _scale_from_neutral(row, CONVENTION)
 
     sh_delta = {leg: scaled[leg][0] - n[leg][0] for leg in ("fr", "fl", "br", "bl")}
     spread = max(sh_delta.values()) - min(sh_delta.values())
@@ -210,8 +220,8 @@ def test_body_rotation_uniform_mathspace_yaw():
     )
 
     # Servo consequence after un-mirroring BR: ALL four move the same direction.
-    servo = _mod._frame_to_servo(row, CONVENTION, warn=False)
-    base = _mod._frame_to_servo(
+    servo = _frame_to_servo(row, CONVENTION, warn=False)
+    base = _frame_to_servo(
         {**{f"{leg}_link1": n[leg][0] for leg in n}, **_neutral_pitch(n)}, CONVENTION
     )
     sdelta = {leg: servo[leg][0] - base[leg][0] for leg in ("fr", "fl", "br", "bl")}
