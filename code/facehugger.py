@@ -486,6 +486,11 @@ def cmd_flash(args):
     return _run(["pio", "device", "monitor", "-e", args.env], cwd=fw_dir)
 
 
+def cmd_update_reference_clips(args):
+    """Regenerate all SIL reference clip traces via the compiled firmware (fh_sim)."""
+    return _run([sys.executable, "-m", "firmware_sil.gen_references"])
+
+
 def cmd_app(args):
     app_dir = REPO_ROOT / "code" / "remote-control-app" / "MyApp"
     if not app_dir.is_dir():
@@ -525,7 +530,9 @@ def main():
     )
     # metavar omits the deprecated `serve` alias from the listing (it still works).
     sub = p.add_subparsers(
-        dest="cmd", required=True, metavar="{urdf,sim,blender,flash,app}"
+        dest="cmd",
+        required=True,
+        metavar="{urdf,sim,blender,flash,app,update-reference-clips}",
     )
 
     pu = sub.add_parser("urdf", help="regenerate the URDF")
@@ -717,6 +724,12 @@ def main():
         help="web host port (default 8080; the sim's --serve uses 8081)",
     )
     papp.set_defaults(func=cmd_app)
+
+    pgr = sub.add_parser(
+        "update-reference-clips",
+        help="regenerate SIL reference clip traces (run after re-exporting clips or changing firmware math)",
+    )
+    pgr.set_defaults(func=cmd_update_reference_clips)
 
     args = p.parse_args()
     sys.exit(args.func(args))

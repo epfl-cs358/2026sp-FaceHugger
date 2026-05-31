@@ -133,3 +133,16 @@ servo:
   # rotation, so a 180° X flip inverts the servo around its own shaft-
   # axis direction. Leave at [0, 0, 0] to trust the CAD verbatim.
   visual_flip_rpy_deg: [180, 0, 0]
+
+# ---------------------------------------------------------------------------
+# Reference clip traces for SIL regression testing.
+# Clips in this list are required to match their committed reference exactly
+# (test_sil_clip_suite.py). Clips with a trace but NOT in this list only warn
+# on mismatch — useful while actively authoring clips whose output is still
+# in flux. Regenerate: python code/facehugger.py update-reference-clips
+# ---------------------------------------------------------------------------
+reference_clips:
+  - wiggle
+  - dog walk
+  - wave
+  - lie down and stand up

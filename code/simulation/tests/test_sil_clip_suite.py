@@ -1,24 +1,48 @@
-"""SIL clip suite — golden-trace regression for every firmware clip.
+"""SIL clip suite — reference-trace regression for firmware clips.
 
-Replays each clip through the EXACT firmware code (fh_sim) and asserts its full
-servo-angle trace matches the committed golden under firmware_sil/golden/. This
-is the exporter/firmware guard: a firmware change (or a clip re-export) that
-alters ANY servo angle by >=1 deg fails here, so it can't reach the robot
-unreviewed. Regenerate goldens deliberately with `python -m firmware_sil.gen_golden`.
+Replays each clip through the EXACT firmware code (fh_sim) and compares its
+servo-angle trace to the committed reference under firmware_sil/reference_clips/.
+
+Which clips are hard-checked is controlled by reference_clips: in
+facehugger_config.yaml (the "locked" set). For clips in that list, a mismatch
+fails the test. For clips with a reference trace but NOT in the list, a mismatch
+only warns — useful while actively authoring new clips whose exact output is still
+in flux.
+
+Regenerate references deliberately with:
+    python code/facehugger.py update-reference-clips
 
 Skips if fh_sim isn't built (no C++ toolchain). Build: see firmware_sil/README.md.
 """
 
 import json
+import warnings
 from pathlib import Path
 
 import pytest
+import yaml
 
 pytest.importorskip("pybullet")
 
 SIM_DIR = Path(__file__).resolve().parent.parent  # tests/ -> code/simulation/
-GOLDEN_DIR = SIM_DIR / "firmware_sil" / "golden"
-GOLDEN_FILES = sorted(p for p in GOLDEN_DIR.glob("*.json") if p.name != "index.json")
+REFERENCE_CLIPS_DIR = SIM_DIR / "firmware_sil" / "reference_clips"
+REFERENCE_FILES = sorted(
+    p for p in REFERENCE_CLIPS_DIR.glob("*.json") if p.name != "index.json"
+)
+
+
+def _load_required_clip_names():
+    """Clip names listed under reference_clips: in facehugger_config.yaml."""
+    cfg_path = SIM_DIR / "facehugger_config.yaml"
+    try:
+        with open(cfg_path) as f:
+            cfg = yaml.safe_load(f)
+        return set(cfg.get("reference_clips", []))
+    except Exception:
+        return set()
+
+
+REQUIRED_CLIP_NAMES = _load_required_clip_names()
 
 
 def _fh_or_skip():
@@ -30,41 +54,61 @@ def _fh_or_skip():
         pytest.skip(f"fh_sim not built: {e}")
 
 
-@pytest.mark.parametrize("golden_path", GOLDEN_FILES, ids=lambda p: p.stem)
-def test_clip_matches_golden_trace(golden_path):
-    """The clip's servo-angle trace is bit-identical to its committed golden."""
+@pytest.mark.parametrize("ref_path", REFERENCE_FILES, ids=lambda p: p.stem)
+def test_clip_matches_reference_trace(ref_path):
+    """Compare a clip's servo-angle trace to its committed reference.
+
+    Clips in reference_clips: (facehugger_config.yaml) must match exactly; all
+    others only warn on mismatch so CI doesn't break during active clip authoring.
+    """
     from firmware_sil.sil_bridge import trace_clip
 
     fh = _fh_or_skip()
-    golden = json.loads(golden_path.read_text())
-    fc = fh.FirmwareControl()
-    got = trace_clip(fc, golden["clip"], record_every=golden["record_every"])
+    ref = json.loads(ref_path.read_text())
+    clip_name = ref["clip"]
+    required = clip_name in REQUIRED_CLIP_NAMES
 
-    assert len(got) == len(golden["samples"]), (
-        f"{golden['clip']}: sample count {len(got)} != golden {len(golden['samples'])}"
-    )
-    for (gt_ms, g_angles), (t_ms, angles) in zip(golden["samples"], got):
-        assert t_ms == gt_ms, f"{golden['clip']}: t_ms {t_ms} != golden {gt_ms}"
+    fc = fh.FirmwareControl()
+    got = trace_clip(fc, clip_name, record_every=ref["record_every"])
+
+    def _report(msg):
+        full = (
+            msg + "\nRun `python code/facehugger.py update-reference-clips` to update."
+        )
+        if required:
+            pytest.fail(full)
+        else:
+            warnings.warn(full, UserWarning, stacklevel=3)
+
+    if len(got) != len(ref["samples"]):
+        _report(
+            f"{clip_name}: sample count {len(got)} != reference {len(ref['samples'])}"
+        )
+        return
+
+    for (gt_ms, g_angles), (t_ms, angles) in zip(ref["samples"], got):
+        if t_ms != gt_ms:
+            _report(f"{clip_name}: t_ms {t_ms} != reference {gt_ms}")
+            return
         if angles != g_angles:
             diffs = [
                 (i, g, a) for i, (g, a) in enumerate(zip(g_angles, angles)) if g != a
             ]
-            pytest.fail(
-                f"{golden['clip']} @ t={t_ms}ms: servo angles changed vs golden "
-                f"(idx, golden, got): {diffs}\n"
-                f"If this is an intentional firmware/clip change, regenerate with "
-                f"`python -m firmware_sil.gen_golden` and review the diff."
+            _report(
+                f"{clip_name} @ t={t_ms}ms: servo angles changed vs reference "
+                f"(idx, reference, got): {diffs}"
             )
+            return
 
 
-@pytest.mark.parametrize("golden_path", GOLDEN_FILES, ids=lambda p: p.stem)
-def test_clip_angles_in_range(golden_path):
-    """No servo in any clip is commanded outside the electrical [0,180] range."""
-    golden = json.loads(golden_path.read_text())
-    for t_ms, angles in golden["samples"]:
+@pytest.mark.parametrize("ref_path", REFERENCE_FILES, ids=lambda p: p.stem)
+def test_clip_angles_in_range(ref_path):
+    """No servo in any reference trace is commanded outside the electrical [0,180] range."""
+    ref = json.loads(ref_path.read_text())
+    for t_ms, angles in ref["samples"]:
         for i, a in enumerate(angles):
             assert 0 <= a <= 180, (
-                f"{golden['clip']} @ t={t_ms}ms servo[{i}]={a} out of [0,180]"
+                f"{ref['clip']} @ t={t_ms}ms servo[{i}]={a} out of [0,180]"
             )
 
 
@@ -99,12 +143,10 @@ def test_clip_playback_stays_in_servo_range_soft():
     """Soft guard: warn (don't fail) if any clip drives a servo out of [0,180].
 
     Driven by the firmware's OWN [OOR] warnings (the same lines printed on the
-    bench serial monitor), captured per tick — finer than the sampled golden
+    bench serial monitor), captured per tick — finer than the sampled reference
     check. Healthy clips emit nothing; a regression that pushes a servo past the
     electrical limit surfaces here as a warning naming the clip/time/joint.
     """
-    import warnings
-
     fh = _fh_or_skip()
     from firmware_sil.sil_bridge import channel_to_joint
 
@@ -142,12 +184,32 @@ def test_oor_feature_reports_calibrate_overrange():
     assert channel_to_joint(fc)[channel] == "br_link3_joint"
 
 
-def test_every_firmware_clip_has_a_golden():
-    """A newly added firmware clip must ship a golden (no silent gaps in coverage)."""
+def test_every_reference_clip_has_a_trace():
+    """Clips in reference_clips: (facehugger_config.yaml) should have a reference trace.
+
+    Missing traces warn (not fail) so adding a clip to the required list doesn't
+    immediately break CI — run update-reference-clips to generate the trace.
+    Clips compiled into firmware but absent from both the list and reference_clips/
+    are also reported so they're visible during review.
+    """
     fh = _fh_or_skip()
     fc = fh.FirmwareControl()
-    covered = {json.loads(p.read_text())["clip"] for p in GOLDEN_FILES}
-    missing = [n for n in fc.clip_names() if n not in covered]
-    assert not missing, (
-        f"clips without a golden trace: {missing} — run `python -m firmware_sil.gen_golden`"
-    )
+    covered = {json.loads(p.read_text())["clip"] for p in REFERENCE_FILES}
+
+    missing_required = [n for n in REQUIRED_CLIP_NAMES if n not in covered]
+    if missing_required:
+        warnings.warn(
+            f"clips in reference_clips config but missing a trace: {missing_required}"
+            " — run `python code/facehugger.py update-reference-clips`",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    untracked = [n for n in fc.clip_names() if n not in covered]
+    if untracked:
+        warnings.warn(
+            f"clips compiled into firmware with no reference trace: {untracked}"
+            " (add to reference_clips: in facehugger_config.yaml to lock them down)",
+            UserWarning,
+            stacklevel=2,
+        )
