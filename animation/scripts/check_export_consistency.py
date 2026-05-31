@@ -12,8 +12,11 @@ import importlib.util
 import json
 import re
 import sys
-import types
 from pathlib import Path
+
+_LIB = Path(__file__).parent.parent / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
 
 ADDONS_DIR = Path(__file__).parent.parent / "addons"
 
@@ -34,45 +37,7 @@ BONE_ORDER = [
 JOINT_NAMES = ["hip", "thigh", "knee"]
 
 
-def _stub_bpy() -> None:
-    """Minimal bpy shim so fh_clip_panel.py imports under plain Python.
-    Mirrors the stub in test_servo_parity.py."""
-    if "bpy" in sys.modules:
-        return
-    bpy = types.ModuleType("bpy")
-    bpy.types = types.SimpleNamespace(
-        Operator=type("Operator", (), {}),
-        Panel=type("Panel", (), {}),
-        Scene=type("Scene", (), {}),
-    )
-    bpy.props = types.SimpleNamespace(
-        StringProperty=lambda **kw: None,
-        IntProperty=lambda **kw: None,
-        BoolProperty=lambda **kw: None,
-        EnumProperty=lambda **kw: None,
-    )
-    bpy.app = types.SimpleNamespace(
-        handlers=types.SimpleNamespace(
-            frame_change_post=[],
-            save_pre=[],
-            load_post=[],
-            persistent=lambda fn: fn,
-        )
-    )
-    bpy.data = types.SimpleNamespace(
-        objects=types.SimpleNamespace(get=lambda *a, **kw: None),
-        actions=[],
-        filepath="",
-    )
-    bpy.context = types.SimpleNamespace(scene=None, view_layer=None)
-    bpy.utils = types.SimpleNamespace(
-        register_class=lambda x: None, unregister_class=lambda x: None
-    )
-    bpy.path = types.SimpleNamespace(abspath=lambda p: p)
-    sys.modules["bpy"] = bpy
-
-
-_stub_bpy()
+bpy_stub.install()
 
 _panel_script = ADDONS_DIR / "fh_clip_panel.py"
 _spec = importlib.util.spec_from_file_location("fh_clip_panel", str(_panel_script))
