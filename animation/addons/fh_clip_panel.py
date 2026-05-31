@@ -1405,6 +1405,63 @@ class FH_OT_rename_clip(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class FH_OT_delete_clip(bpy.types.Operator):
+    """Delete all 5 Actions of the named clip from the .blend file.
+    The fake-user flag is cleared first so deletion is immediate rather
+    than deferred to the next save. Removes the clip from the
+    export-selection set so no stale name is left behind."""
+
+    bl_idname = "fh.delete_clip"
+    bl_label = "Delete Clip"
+    bl_options = {"REGISTER", "UNDO"}
+
+    clip_name: bpy.props.StringProperty(name="Clip Name")
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        try:
+            return wm.invoke_confirm(
+                self,
+                event,
+                title=f"Delete '{self.clip_name}'?",
+                message=(
+                    "Permanently remove this clip's 5 Actions from the .blend. "
+                    "This cannot be undone via these tools."
+                ),
+                confirm_text="Delete",
+            )
+        except TypeError:
+            return wm.invoke_confirm(self, event)
+
+    def execute(self, context):
+        clip = self.clip_name.strip()
+        if not clip:
+            self.report({"ERROR"}, "No clip name supplied")
+            return {"CANCELLED"}
+        if clip not in list_clips():
+            self.report({"ERROR"}, f"Clip '{clip}' not found")
+            return {"CANCELLED"}
+
+        removed = 0
+        for target in CLIP_TARGETS:
+            action = bpy.data.actions.get(f"{clip}__{target}")
+            if action is None:
+                continue
+            action.use_fake_user = False
+            bpy.data.actions.remove(action)
+            removed += 1
+
+        raw = context.scene.fh_export_selected_clips
+        names = {n for n in raw.split("\n") if n} if raw else set()
+        if clip in names:
+            names.discard(clip)
+            _write_export_selected(names)
+
+        self.report({"INFO"}, f"Deleted clip '{clip}' ({removed} Actions removed)")
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
 class FH_OT_new_clip(bpy.types.Operator):
     """Create a brand-new clip from scratch: 5 fresh Actions (one per
     control object) keyed at the current pose, then apply them. The only
@@ -3072,6 +3129,9 @@ class FH_PT_clips(_FH_PT_child, bpy.types.Panel):
                     icon=chk_icon,
                     depress=in_export,
                 ).clip_name = clip
+                row.operator(
+                    FH_OT_delete_clip.bl_idname, text="", icon="X"
+                ).clip_name = clip
 
         layout.separator()
         layout.label(text="New clip name:")
@@ -3323,6 +3383,7 @@ CLASSES = (
     FH_OT_overwrite_clip,
     FH_OT_toggle_export_clip,
     FH_OT_rename_clip,
+    FH_OT_delete_clip,
     FH_OT_export_clip,
     FH_OT_export_selected,
     FH_OT_open_export_dir,
