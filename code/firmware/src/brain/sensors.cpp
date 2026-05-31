@@ -36,13 +36,14 @@ static bool readAccelUnit(float out[3]) {
     return true;
 }
 
-void initSensors(SpinalCord& sc) {
+SensorBootResult initSensors() {
+    SensorBootResult result = { false, false };
     Serial.println("Sensors: Initializing MPU6050 on shared I2C bus...");
     Wire.begin();
     if (!s_mpu.begin(0x68)) {
         Serial.println("[WARN] MPU6050 not found at 0x68 — IMU disabled.");
         s_ready = false;
-        return;
+        return result;
     }
     // Defaults are fine for an upside-down latch: ±2g accel range, ±250 deg/s
     // gyro, 21 Hz bandwidth — we only need accel for the gravity vector.
@@ -52,25 +53,27 @@ void initSensors(SpinalCord& sc) {
 
     // Boot-orientation: read ONE accel sample (after a brief settle), classify
     // it against the hardcoded UPRIGHT_REF using the pure host-tested helper,
-    // and arm setInverted(true) if the robot booted upside-down — before the
-    // first servo writes leave the rest pose. No more averaging-50-samples-
-    // as-the-reference; that scheme silently assumed the robot was upright.
+    // and return the inverted flag to main.cpp — before the first servo writes
+    // leave the rest pose. No more averaging-50-samples-as-the-reference; that
+    // scheme silently assumed the robot was upright.
     delay(50);
     float u[3];
     if (!readAccelUnit(u)) {
         Serial.println("[WARN] MPU6050 present but no sample — IMU disabled.");
         s_ready = false;
-        return;
+        return result;
     }
     float dot = u[0]*s_ref[0] + u[1]*s_ref[1] + u[2]*s_ref[2];
     BootOrientation boot = classifyBootOrientation(dot);
     if (boot == BOOT_INVERTED) {
-        Serial.printf("Sensors: boot orientation = INVERTED (dot=%.2f). Arming setInverted(true).\n", dot);
-        sc.setInverted(true);
+        Serial.printf("Sensors: boot orientation = INVERTED (dot=%.2f). Returning inverted=true.\n", dot);
+        result.inverted = true;
     } else {
         Serial.printf("Sensors: boot orientation = UPRIGHT (dot=%.2f).\n", dot);
     }
-    s_ready  = true;
+    s_ready        = true;
+    result.imu_ready = true;
+    return result;
 }
 
 void tickImu() {
