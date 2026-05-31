@@ -30,7 +30,6 @@ CONV_PATH = os.path.join(REPO_ROOT, "animation/convention.json")
 _LIB = os.path.join(REPO_ROOT, "animation/lib")
 if _LIB not in sys.path:
     sys.path.insert(0, _LIB)
-import bpy_stub  # noqa: E402
 
 
 def _firmware_translate(leg: str, sh: float, th: float, kn: float) -> list[float]:
