@@ -36,7 +36,7 @@ The single entry point for the simulation half of the pipeline is [code/facehugg
 - **`code/remote-control-app/MyApp/`** — Expo (React Native + TypeScript) app, uses Zustand for state. Talks to the ESP32 over WebSocket on port 81 per [code/API_SPEC.md](code/API_SPEC.md).
 - **`animation/scripts/`** — Blender 5.x tooling. Two kinds of files live side by side:
   - *Scene builders* (run as `blender --python …`): `visualize_urdf.py` (placement-only, cross-check baseline), `visualize_fusion_export.py` (CAD-side cross-check), `urdf_to_blender_rigged.py` (real armature with FK shoulder + IK on hip/knee). The rigged scene must match the baseline within 0.5 mm at zero pose — if it doesn't, the rig is composing transforms wrong.
-  - *Animator-facing helpers*: `fh_clip_panel.py` (Blender N-panel add-on; manages named 5-Action clip bundles on the rig via the layered Action API) and `fh_rename_actions.py` (one-shot `--background` migration from legacy `*Action` names to the `base_anim__<target>` clip convention). See [animation/scripts/README.md](animation/scripts/README.md) for the table mapping each file to its role + source-of-truth.
+  - *Animator-facing helper*: `fh_clip_panel.py` (Blender N-panel add-on; manages named 5-Action clip bundles on the rig via the layered Action API). See [animation/scripts/README.md](animation/scripts/README.md) for the table mapping each file to its role + source-of-truth.
 - **`animation/blend-iterations/`** — local-only `.blend` work files (gitignored, large).
 - **`doc/animation-pipeline/`** — design docs for the upcoming on-board animation engine (`.fhc` format, ESP32 playback). The `.gait` baked-angle format and textbook IK in firmware are scheduled to be replaced by this. Implementation has not started.
 
