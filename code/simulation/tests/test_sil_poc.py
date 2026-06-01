@@ -53,10 +53,19 @@ def test_firmware_plays_clip_in_range():
         assert all(0.0 <= a <= 180.0 for a in angles), (t_ms, angles)
 
 
-def test_sil_matches_python_report_at_frame0():
-    """SIL servo angles at t=0 == re-port translate_to_servo(frame0), within the
-    firmware's whole-degree truncation. Uses the firmware's OWN clips_all.h on
-    both sides so the comparison is pure convention-math (C++ vs Python port)."""
+def test_sil_response_matches_port_response_between_frames():
+    """SIL and the Python re-port apply the same convention math, modulo a
+    CONSTANT per (leg, joint) — so their servo *response* across two clip
+    frames must be byte-identical (within whole-degree truncation).
+
+    Why deltas instead of absolute equality: the compiled SIL may be built
+    against `calib_sim.h` (CALIB=90 everywhere) while the Python re-port
+    mirrors `calib.h` (real per-leg CALIB). That difference shows up as a
+    per-joint constant offset in absolute servo angles, but cancels exactly
+    in the delta between two frames. Comparing deltas tests the load-bearing
+    property (same convention math, same sign per leg) without coupling the
+    test to which CALIB header SIL was compiled with.
+    """
     drv = _driver_or_skip()
     from firmware_port.clip_loader import get_clip_by_name, load_clips_all_h
     from firmware_port.servo_convention import (
@@ -70,33 +79,49 @@ def test_sil_matches_python_report_at_frame0():
 
     fc = drv._fc
     cid = fc.clip_id_by_name(CLIP)
-    fc.set_clock_ms(0)
-    fc.play_clip(cid)
-    # playClip eases the live pose into frame 0 over the pre-roll (firmware
-    # CLIP_PREROLL_MS = 200 ms); the true frame-0 pose lands once playback starts,
-    # so tick past the pre-roll before sampling.
+    clip = get_clip_by_name(load_clips_all_h(FW_CLIPS), CLIP)
     PREROLL_MS = 200
-    step = 0
-    while True:
-        t_ms = int(step * 1000.0 / 240)
-        fc.tick(t_ms)
-        if t_ms >= PREROLL_MS:
-            break
-        step += 1
-    sil = list(fc.servo_angles())
+    FRAME_MS = 1000.0 / 24  # firmware CLIP_FPS
 
-    a = get_clip_by_name(load_clips_all_h(FW_CLIPS), CLIP).frames[0].a
-    port = []
-    for leg in (LEG_FR, LEG_FL, LEG_RR, LEG_RL):
-        s = clamp_clip_servos(
-            leg,
-            translate_to_servo(leg, a[leg * 3], a[leg * 3 + 1], a[leg * 3 + 2]),
-        )
-        port += [s.hip, s.thigh, s.knee]
+    def _sil_at_frame(frame_idx: int) -> list[float]:
+        """Re-play the clip and tick past pre-roll + frame_idx frames."""
+        fc.set_clock_ms(0)
+        fc.play_clip(cid)
+        target_ms = PREROLL_MS + frame_idx * FRAME_MS
+        step = 0
+        while True:
+            t_ms = int(step * FRAME_MS / 10)  # tighter step than 24fps for accuracy
+            fc.tick(t_ms)
+            if t_ms >= target_ms:
+                break
+            step += 1
+        return list(fc.servo_angles())
 
-    max_diff = max(abs(s - p) for s, p in zip(sil, port))
+    def _port_at_frame(frame_idx: int) -> list[float]:
+        a = clip.frames[frame_idx].a
+        out = []
+        for leg in (LEG_FR, LEG_FL, LEG_RR, LEG_RL):
+            s = clamp_clip_servos(
+                leg,
+                translate_to_servo(leg, a[leg * 3], a[leg * 3 + 1], a[leg * 3 + 2]),
+            )
+            out += [s.hip, s.thigh, s.knee]
+        return out
+
+    # Pick a second frame mid-clip (not too far, so clamps stay open).
+    n_frames = len(clip.frames)
+    second = min(n_frames - 1, max(5, n_frames // 4))
+
+    sil_delta = [a - b for a, b in zip(_sil_at_frame(second), _sil_at_frame(0))]
+    port_delta = [a - b for a, b in zip(_port_at_frame(second), _port_at_frame(0))]
+
+    max_diff = max(abs(s - p) for s, p in zip(sil_delta, port_delta))
     assert max_diff <= 1.0, (
-        f"SIL vs re-port differ by {max_diff:.3f} deg\nSIL={sil}\nport={port}"
+        f"SIL and Port disagree on servo *response* between frame 0 and "
+        f"frame {second} by {max_diff:.3f} deg.\n"
+        f"This means they use different convention math (not just different "
+        f"CALIB) — a real bug.\n"
+        f"sil_delta={sil_delta}\nport_delta={port_delta}"
     )
 
 
