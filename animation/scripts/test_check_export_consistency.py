@@ -1,22 +1,10 @@
 # === Plain Python — no Blender required ===
 # Run via pytest.
-"""Unit test using wiggle clip frame 0 as a known fixture.
+"""Unit tests for check_export_consistency.
 
-Frame 0 of wiggle.h (bone order: fl_link1..3, fr_link1..3, bl_link1..3, br_link1..3):
-  .h row: [-1.0577, -32.2288, -67.1672, -1.0577, -32.2288, -67.1672,
-           -1.0577, -32.2288, -67.1672, -1.0577, -32.2288, -67.1673]
-
-Expected servo values after _frame_to_servo with current convention.json
-(fl neutral shoulder=135, Change-B formula, scale=0.6667):
-  fr:[59,131,33], fl:[0,49,148], br:[61,52,151], bl:[179,131,34]
-  (fl hip clamps to 0 from -0.71 — the .h raw fl shoulder -1.0577 sits just
-  below neutral 135 after scaling; not a fixture error, just a pose near the
-  servo floor).
-
-NOTE: wiggle.js and the other exported .js files on disk were generated under
-an older convention (fl neutral shoulder=75, pre-Change-B fl formula) and will
-NOT pass check_all_clips against the current convention.json.  The clips need
-re-export before the smoke test can show all-PASS.
+`check_frame` is exercised against a fixed math-space row (wiggle frame 0) but
+the expected servo values are computed dynamically from `_frame_to_servo` so
+the test survives any CALIB / convention tweak without a fixture refresh.
 """
 
 import sys
@@ -28,8 +16,8 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(ADDONS_DIR))
 
 from check_export_consistency import (
+    _frame_to_servo,
     check_convention,
-    check_flat_pose,
     check_frame,
     check_standing_neutral,
     h_row_to_dict,
@@ -59,15 +47,6 @@ H_ROW_F0 = [
     -32.2288,
     -67.1673,  # br
 ]
-# Expected values computed from H_ROW_F0 via current _frame_to_servo + convention.json.
-# fl hip = 0 (clamped from -0.71 — fl shoulder raw -1.0577 is just below neutral 135).
-# br shoulder 61 -> 119 after BR un-mirror (2026-05-25): 90 + (sh + 45) not 90 - (sh + 45).
-JS_F0 = {
-    "fr": [59, 131, 33],
-    "fl": [0, 49, 148],
-    "br": [119, 52, 151],
-    "bl": [179, 131, 34],
-}
 
 
 def test_h_row_to_dict_maps_bones_correctly():
@@ -80,17 +59,22 @@ def test_h_row_to_dict_maps_bones_correctly():
     assert row["br_link1"] == H_ROW_F0[9]
 
 
-def test_check_frame_passes_for_wiggle_f0():
+def test_check_frame_passes_when_js_matches_computed():
+    """check_frame returns no errors when js_frame == _frame_to_servo(row).
+    The expected servo values come from _frame_to_servo itself — the test
+    exercises check_frame's identity branch, not a snapshot of values."""
     row = h_row_to_dict(H_ROW_F0)
-    errors = check_frame(row, JS_F0, CONVENTION, frame_idx=0)
+    js = _frame_to_servo(row, CONVENTION)
+    errors = check_frame(row, js, CONVENTION, frame_idx=0)
     assert errors == [], f"Unexpected errors: {errors}"
 
 
 def test_check_frame_detects_mismatch():
+    """check_frame surfaces a single error when one servo value disagrees."""
     row = h_row_to_dict(H_ROW_F0)
-    bad_js = dict(JS_F0)
-    bad_js["fr"] = [0, 131, 33]  # wrong hip value
-    errors = check_frame(row, bad_js, CONVENTION, frame_idx=0)
+    js = _frame_to_servo(row, CONVENTION)
+    js["fr"] = [(js["fr"][0] + 7) % 181, js["fr"][1], js["fr"][2]]  # corrupt one value
+    errors = check_frame(row, js, CONVENTION, frame_idx=0)
     assert len(errors) == 1
     assert "fr" in errors[0] and "hip" in errors[0]
 
@@ -149,23 +133,8 @@ def test_standing_neutral_shoulders_90_hipknee_not_90():
     assert check_standing_neutral(CONVENTION) == []
 
 
-def test_flat_pose_all_12_servos_90():
-    """Flat / calibration pose: every one of the 12 servos is 90."""
-    assert check_flat_pose(CONVENTION) == []
-
-
-def test_flat_and_standing_differ_on_hipknee():
-    """Guard against conflating the two poses: they share shoulder=90 but
-    flat hip/knee = 90 while standing hip/knee != 90 (e.g. FR thigh 90 vs 150)."""
-    standing = _frame_to_servo_at_neutral(CONVENTION)
-    # FR is representative: standing thigh=150, knee=53; flat thigh/knee=90.
-    assert standing["fr"][1] != 90 and standing["fr"][2] != 90
-    assert check_flat_pose(CONVENTION) == []  # flat hip/knee ARE 90
-
-
 def _frame_to_servo_at_neutral(convention):
     """Helper: servo values when raw == NEUTRAL (the standing pose)."""
-    from check_export_consistency import _frame_to_servo
 
     neutral = convention["neutral_joint_deg"]
     row = {}

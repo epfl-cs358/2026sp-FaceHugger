@@ -178,46 +178,19 @@ def check_standing_neutral(convention: dict) -> list:
     return errors
 
 
-def check_flat_pose(convention: dict) -> list:
-    """Assert translateToServo at the FLAT / calibration pose (T:2 s:4 =
-    legs spread horizontally): ALL 12 servos -> 90. Flat math-space is
-    shoulder = NEUTRAL splay (outward -> servo 90), hip = 0, knee = 0
-    (straight/horizontal -> servo 90 mechanical mid-point).
-
-    Flat is NOT a scaled clip frame, so scale-from-NEUTRAL must be bypassed
-    (passing the real 2/3 scale would pull hip/knee off 90). We bypass it by
-    evaluating _frame_to_servo with scale = 1.0, which makes scale-from-NEUTRAL
-    identity and leaves pure translateToServo — the same locked firmware math.
-
-    Do NOT conflate with standing: flat and standing share shoulder = 90 but
-    differ on hip/knee (flat = 90, standing = NEUTRAL[] values). Returns
-    error strings.
-    """
-    neutral = convention["neutral_joint_deg"]
-    flat_conv = {"neutral_joint_deg": neutral, "scale": 1.0}
-    row = {}
-    for leg in ("fr", "fl", "br", "bl"):
-        row[f"{leg}_link1"] = neutral[leg][0]  # shoulder outward (neutral splay)
-        row[f"{leg}_link2"] = 0.0  # hip straight
-        row[f"{leg}_link3"] = 0.0  # knee straight
-    servo = _frame_to_servo(row, flat_conv)
-
-    errors = []
-    for leg in ("fr", "fl", "br", "bl"):
-        for j, joint in enumerate(JOINT_NAMES):
-            if servo[leg][j] != 90:
-                errors.append(
-                    f"flat: {leg} {joint} = {servo[leg][j]}, expected 90 "
-                    f"(all 12 servos must be 90 at the flat/calibration pose)"
-                )
-    return errors
-
-
 def check_convention(convention: dict) -> list:
-    """Run both pose convention checks — standing NEUTRAL and flat — and
-    return the combined error list (empty = PASS). The machine-checkable
-    form of the CONVENTIONS.md guarantees."""
-    return check_standing_neutral(convention) + check_flat_pose(convention)
+    """Check the standing NEUTRAL pose convention: shoulders → servo 90, hip/knee
+    off 90. Returns the error list (empty = PASS). The machine-checkable form
+    of the CONVENTIONS.md guarantees.
+
+    The "flat / calibration pose = all 12 servos at 90" check has been removed:
+    after CALIB constants were introduced (commit 706bf9b), thigh/knee at
+    math = 0 produces servo = CALIB_<leg>_<joint>, not 90. The physical flat
+    pose still corresponds to all servos at 90, but the math-space pre-image is
+    no longer "thigh=0, knee=0" — it's leg-specific. There is no useful
+    convention assertion at flat pose any more; calibration is verified
+    independently by lib/tests/test_calib_consistency.py."""
+    return check_standing_neutral(convention)
 
 
 def check_all_clips(export_dir: Path, convention: dict = None) -> bool:
