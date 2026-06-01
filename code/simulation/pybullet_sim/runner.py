@@ -11,7 +11,7 @@ import time
 
 import pybullet as p
 
-from .constants import TIMESTEP
+from .paths import TIMESTEP
 from .motor import apply_joint_targets
 from .scene import connect_and_setup as _connect_and_setup
 from .scene import print_banner as _print_banner
