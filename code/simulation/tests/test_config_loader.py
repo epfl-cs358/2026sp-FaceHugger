@@ -16,8 +16,7 @@ import pytest
 # Load config_loader by file path to avoid colliding with any other "lib"
 # package cached in sys.modules (e.g. from test_census_pure).
 _CL_PATH = (
-    Path(__file__).parents[3]
-    / "cad/scripts/ExportBodiesToURDF/ExportBodiesToURDF/lib/config_loader.py"
+    Path(__file__).parents[3] / "cad/scripts/FaceHuggerExport/lib/config_loader.py"
 )
 _spec = importlib.util.spec_from_file_location("_eb_config_loader", _CL_PATH)
 _mod = importlib.util.module_from_spec(_spec)

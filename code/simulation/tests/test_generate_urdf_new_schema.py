@@ -21,7 +21,11 @@ _spec.loader.exec_module(_gu)
 get_physics = _gu.get_physics
 _servo_rot_by_role = _gu._servo_rot_by_role
 _find_occ_rot = _gu._find_occ_rot
-_cad_axis_dir = _gu._cad_axis_dir
+
+
+def _cad_axis_dir(cad: dict):
+    return cad.get("axis_dir_world") or cad.get("axis_dir_local_unit")
+
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
