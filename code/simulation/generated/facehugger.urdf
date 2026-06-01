@@ -74,7 +74,7 @@
          BodyToLink1Point : 0.000 11.970 41.844
          Link1ToLink2Point: -46.920 34.365 10.246
          Link2ToLink3Point: -121.620 34.570 10.246
-         FootTip (leg_lower.stl max +Y centroid, in link3 frame): -27.106 -13.000 -0.012 -->
+         FootTip (Link3TipPoint construction point, in link3 frame): -78.220 -20.510 0.000 -->
 
   <!-- LEG: FL  (side=L, shoulder_rest=-45.0°, limits=[-52.0°, +90.0°]) -->
   <joint name="fl_link1_joint" type="revolute">

@@ -18,16 +18,12 @@ import argparse
 import json
 import math
 import struct
-import warnings
 from pathlib import Path
 
 try:
     import yaml
 except ImportError:
     raise SystemExit("PyYAML missing — run: uv add pyyaml")
-
-from urdf_gen.lib.construction_points import resolve_leg_construction_points
-from urdf_gen.lib.joint_defs import build_joint_definitions, flip_joint_for_r_side
 
 
 # ---------------------------------------------------------------------------
@@ -452,16 +448,10 @@ FALLBACK_INERTIA = {
 }
 
 
-def get_physics(
-    occ_node: dict | None, fallback_mass: float = 0.05, comp_name: str = ""
-):
+def get_physics(occ_node: dict | None, fallback_mass: float = 0.05):
     if occ_node and "physics" in occ_node and "error" not in occ_node["physics"]:
         ph = occ_node["physics"]
         return ph["mass_kg"], ph["com_mm"], ph["inertia_kg_m2"]
-    warnings.warn(
-        f"No physics data for {comp_name!r}; using fallback inertia.",
-        stacklevel=2,
-    )
     return fallback_mass, [0, 0, 0], FALLBACK_INERTIA
 
 
@@ -534,7 +524,7 @@ def _servo_world_by_role(export: dict, role: str) -> list | None:
 
 def _servo_rot_by_role(export: dict, role: str) -> list | None:
     """3x3 rotation of the servo occurrence assigned to `role`, from its
-    world_transform (or legacy world_transform_rm_cm) — rotation part of a 4x4."""
+    world_transform_rm_cm (dimensionless — rotation part of a 4x4)."""
     mf = export.get("mesh_files") or {}
     roles = mf.get("_servo_role_assignment") or {}
     path = roles.get(role)
@@ -543,7 +533,7 @@ def _servo_rot_by_role(export: dict, role: str) -> list | None:
     occ = _find_occ_by_path(export["occurrences"], path)
     if occ is None:
         return None
-    wtf = occ.get("world_transform") or occ.get("world_transform_rm_cm")
+    wtf = occ.get("world_transform_rm_cm")
     if wtf is None:
         return None
     return [row[:3] for row in wtf[:3]]
@@ -551,10 +541,10 @@ def _servo_rot_by_role(export: dict, role: str) -> list | None:
 
 def _find_occ_rot(occs: list, name: str) -> list | None:
     """Find an occurrence by leaf name anywhere in the tree and return its
-    3x3 world rotation (from world_transform or world_transform_rm_cm)."""
+    3x3 world rotation (from world_transform_rm_cm)."""
     for n in _iter_occ(occs):
         if n.get("name") == name:
-            wtf = n.get("world_transform") or n.get("world_transform_rm_cm")
+            wtf = n.get("world_transform_rm_cm")
             if wtf:
                 return [row[:3] for row in wtf[:3]]
     return None
@@ -648,6 +638,27 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # all share one mental model. The semantic mapping
     # link1=shoulder, link2=hip, link3=knee lives in
     # helpers._joint_type_from_name.
+    _JOINT_TOPOLOGY = [
+        {
+            "cad_name": "Link1Revolute",
+            "urdf_name": "link1",
+            "parent": "base_link",
+            "child": "link1",
+        },
+        {
+            "cad_name": "Link2Revolute",
+            "urdf_name": "link2",
+            "parent": "link1",
+            "child": "link2",
+        },
+        {
+            "cad_name": "Link3Revolute",
+            "urdf_name": "link3",
+            "parent": "link2",
+            "child": "link3",
+        },
+    ]
+
     leg_tmpl = cfg["leg_template"]
     leg_occ = find_occurrence(occs, leg_tmpl["leg_assembly_occurrence"])
     if not leg_occ:
@@ -655,11 +666,86 @@ def generate(export: dict, cfg: dict, out_path: Path):
             f"Leg assembly occurrence not found: {leg_tmpl['leg_assembly_occurrence']}"
         )
 
-    jd_result = build_joint_definitions(export, cfg)
-    joint_defs = jd_result.joints
-    fl_rest_rad = jd_result.fl_rest_rad
-    shoulder_lower_deg = jd_result.shoulder_lower_deg
-    shoulder_upper_deg = jd_result.shoulder_upper_deg
+    cad_joints_by_name = {j.get("name"): j for j in (export.get("joints") or [])}
+
+    joint_defs = []
+    for jcfg in _JOINT_TOPOLOGY:
+        cad_name = jcfg["cad_name"]
+        cad = cad_joints_by_name.get(cad_name)
+        if cad is None:
+            raise ValueError(
+                f"Joint {cad_name!r} not found in fusion_export.json's joints[] "
+                f"(make sure it's in the JOINTS whitelist in ExportBodiesToURDF.py)."
+            )
+        origin_mm = cad.get("axis_origin_local_mm")
+        axis_dir = cad.get("axis_dir_local_unit")
+        if origin_mm is None or axis_dir is None:
+            raise ValueError(
+                f"Joint {cad_name!r} is missing axis_origin_local_mm or "
+                f"axis_dir_local_unit in the export."
+            )
+        lim = cad.get("limits_rad") or {}
+        lim_min_rad = lim.get("min")
+        lim_max_rad = lim.get("max")
+        lim_rest_rad = lim.get("rest", 0.0) or 0.0
+        lim_current_rad = lim.get("current", 0.0) or 0.0
+        lim_min_deg = math.degrees(lim_min_rad) if lim_min_rad is not None else None
+        lim_max_deg = math.degrees(lim_max_rad) if lim_max_rad is not None else None
+        joint_defs.append(
+            {
+                "urdf_name": jcfg["urdf_name"],
+                "parent": jcfg["parent"],
+                "child": jcfg["child"],
+                "cad_name": cad_name,
+                "origin_local_mm": origin_mm,
+                "axis_dir": axis_dir,
+                "limits_deg": [lim_min_deg, lim_max_deg],
+                "limits_rad": {
+                    "min": lim_min_rad,
+                    "max": lim_max_rad,
+                    "rest": lim_rest_rad,
+                    "current": lim_current_rad,
+                },
+            }
+        )
+
+    # The shoulder (Link1Revolute) rest value in the JSON defines FL's
+    # mechanical zero. The other 3 corners are derived via
+    # _shoulder_rest_for(leg_id, fl_rest_rad). The Fusion limits are also
+    # FL-relative; URDF limits = Fusion limits shifted by FL's rest, which
+    # by mirror symmetry produces the same shifted range for every leg.
+    #
+    # `shoulder_rest_source` (yaml) picks which JSON field to read:
+    #   "rest"    -> limits_rad.rest    (configured mechanical zero, default)
+    #   "current" -> limits_rad.current (live joint angle at export time)
+    rest_source = cfg.get("shoulder_rest_source", "rest")
+    if rest_source not in ("rest", "current"):
+        raise ValueError(
+            f"facehugger_config.yaml: shoulder_rest_source must be "
+            f"'rest' or 'current' (got {rest_source!r})."
+        )
+    fl_rest_rad = joint_defs[0]["limits_rad"][rest_source]
+    print(
+        f"[generate_urdf] FL shoulder rest source = {rest_source!r} "
+        f"-> {math.degrees(fl_rest_rad):+.2f}°"
+    )
+    fl_min_rad = joint_defs[0]["limits_rad"]["min"]
+    fl_max_rad = joint_defs[0]["limits_rad"]["max"]
+    if fl_min_rad is None or fl_max_rad is None:
+        raise ValueError(
+            "Link1Revolute missing limits_rad.min/max in the export — "
+            "needed to derive the URDF shoulder limit window."
+        )
+    shoulder_lower_deg = math.degrees(fl_min_rad - fl_rest_rad)
+    shoulder_upper_deg = math.degrees(fl_max_rad - fl_rest_rad)
+
+    # Offsets between successive joints, in LAL (leg-assembly-local) frame
+    # (== URDF link frame since rpy_z_deg only acts at the shoulder joint).
+    for i in range(1, len(joint_defs)):
+        joint_defs[i]["offset_from_parent_mm"] = sub(
+            joint_defs[i]["origin_local_mm"],
+            joint_defs[i - 1]["origin_local_mm"],
+        )
 
     # --- per-side offsets in normalized (world-aligned) frame ---
     # The leg-assembly normalization in the exporter (E1-E3) aligned the
@@ -669,22 +755,63 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # is sitting at the mirror position. We derive the constant offsets
     # (mount-tab → axis, mount-tab → shoulder-servo, etc.) from the
     # source-CAD positions and reuse them per leg.
-    cpts = resolve_leg_construction_points(occs)
-    body_to_link1_world = cpts["body_to_link1"]
-    link2_to_link3_world = cpts["link2_to_link3"]
-    mount_L_world = cpts["mount_L"]
-    mount_R_world = cpts["mount_R"]
-    shoulder_servo_L_world = cpts["shoulder_servo_L"]
-    shoulder_servo_R_world = cpts["shoulder_servo_R"]
-    hip_servo_world = cpts["hip_servo"]
-    knee_servo_world = cpts["knee_servo"]
-    L_axis_offset = cpts["L_axis_offset"]
-    R_axis_offset = cpts["R_axis_offset"]
+    LEG_ASSEMBLY = "FaceHuggerLegAssembly:1"
+    body_to_link1_world = find_point_world_at_occurrence(
+        occs, LEG_ASSEMBLY, "BodyToLink1Point"
+    )
+    link2_to_link3_world = find_point_world_at_occurrence(
+        occs, LEG_ASSEMBLY, "Link2ToLink3Point"
+    )
+    mount_L_world = find_point_world_at_occurrence(
+        occs, f"{LEG_ASSEMBLY}/MotorMount:1", "LegMountFixedPoint"
+    )
+    mount_R_world = find_point_world_at_occurrence(
+        occs, f"{LEG_ASSEMBLY}/MotorMountR:1", "LegMountFixedPoint"
+    )
+    if any(
+        v is None
+        for v in (
+            body_to_link1_world,
+            link2_to_link3_world,
+            mount_L_world,
+            mount_R_world,
+        )
+    ):
+        raise ValueError(
+            "Missing required construction points: BodyToLink1Point / "
+            "Link2ToLink3Point / MotorMount(R) LegMountFixedPoint."
+        )
+
+    L_axis_offset = sub(body_to_link1_world, mount_L_world)
+    R_axis_offset = sub(body_to_link1_world, mount_R_world)
 
     # Standalone-servo design (no bake-in): each leg gets a shoulder,
     # hip, and knee servo emitted as separate <visual> blocks. The mesh
     # `servo.stl` is re-origined to ServoMountPoint, so the visual's xyz
     # is the world position where ServoMountPoint should land.
+    #
+    # Source-CAD shoulder-servo positions: each bracket has a nested
+    # `LegBaseServoEnclosure:1` with its own ServoMountPoint. Its world
+    # position is the place where that bracket's shoulder servo sits in
+    # the source-FL placement (L bracket) or the mirror (R bracket).
+    shoulder_servo_L_world = find_point_world_at_occurrence(
+        occs,
+        f"{LEG_ASSEMBLY}/MotorMount:1/LegBaseServoEnclosure:1",
+        "ServoMountPoint",
+    )
+    shoulder_servo_R_world = find_point_world_at_occurrence(
+        occs,
+        f"{LEG_ASSEMBLY}/MotorMountR:1/Servo_Mouser_Model(Mirror):1",
+        "ServoMountPoint",
+    )
+    # Top-level hip / knee servos: shared (no L/R variants in CAD).
+    hip_servo_world = find_point_world_at_occurrence(
+        occs, f"{LEG_ASSEMBLY}/LegBaseServoEnclosure:2", "ServoMountPoint"
+    )
+    knee_servo_world = find_point_world_at_occurrence(
+        occs, f"{LEG_ASSEMBLY}/LegBaseServoEnclosure:3", "ServoMountPoint"
+    )
+
     shoulder_servo_L_offset = (
         sub(shoulder_servo_L_world, mount_L_world) if shoulder_servo_L_world else None
     )
@@ -748,9 +875,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
     urdf.comment("BASE LINK")
     base_cfg = cfg["base_link"]
     base_occ = find_occurrence(occs, "FlexibleSkeleton:1")
-    mass, com, inertia = get_physics(
-        base_occ, fallback_mass=0.5, comp_name="FlexibleSkeleton:1"
-    )
+    mass, com, inertia = get_physics(base_occ, fallback_mass=0.5)
     # Fusion only knows about the printed chassis; the electronics live in
     # config (see base_link.extra_mass_kg). COM/inertia stay Fusion's: the
     # electronics are roughly co-located with the chassis centroid, so the
@@ -856,15 +981,15 @@ def generate(export: dict, cfg: dict, out_path: Path):
         tip_source = "leg_lower.stl max-distance-from-origin centroid, in link3 frame"
     pts_comment = [
         "LEG ASSEMBLY METADATA (mm, leg-assembly-local frame)",
-        f"  BodyToLink1Point : {joint_defs[0].origin_local_mm[0]:.3f} "
-        f"{joint_defs[0].origin_local_mm[1]:.3f} "
-        f"{joint_defs[0].origin_local_mm[2]:.3f}",
-        f"  Link1ToLink2Point: {joint_defs[1].origin_local_mm[0]:.3f} "
-        f"{joint_defs[1].origin_local_mm[1]:.3f} "
-        f"{joint_defs[1].origin_local_mm[2]:.3f}",
-        f"  Link2ToLink3Point: {joint_defs[2].origin_local_mm[0]:.3f} "
-        f"{joint_defs[2].origin_local_mm[1]:.3f} "
-        f"{joint_defs[2].origin_local_mm[2]:.3f}",
+        f"  BodyToLink1Point : {joint_defs[0]['origin_local_mm'][0]:.3f} "
+        f"{joint_defs[0]['origin_local_mm'][1]:.3f} "
+        f"{joint_defs[0]['origin_local_mm'][2]:.3f}",
+        f"  Link1ToLink2Point: {joint_defs[1]['origin_local_mm'][0]:.3f} "
+        f"{joint_defs[1]['origin_local_mm'][1]:.3f} "
+        f"{joint_defs[1]['origin_local_mm'][2]:.3f}",
+        f"  Link2ToLink3Point: {joint_defs[2]['origin_local_mm'][0]:.3f} "
+        f"{joint_defs[2]['origin_local_mm'][1]:.3f} "
+        f"{joint_defs[2]['origin_local_mm'][2]:.3f}",
         f"  FootTip ({tip_source}): {tip_mm[0]:.3f} {tip_mm[1]:.3f} {tip_mm[2]:.3f}",
     ]
     urdf.comment("\n       ".join(pts_comment))
@@ -928,12 +1053,11 @@ def generate(export: dict, cfg: dict, out_path: Path):
         # without breaking the right side. The shoulder rpy_z (rest)
         # does NOT change with the axis flip — it is a static rotation
         # in body frame, independent of axis sign.
-        shoulder_axis = list(sj.axis_dir)
+        shoulder_axis = list(sj["axis_dir"])
         sh_lo, sh_hi = shoulder_lower_deg, shoulder_upper_deg
         if side == "R":
-            shoulder_axis, sh_lo, sh_hi, _ = flip_joint_for_r_side(
-                shoulder_axis, sh_lo, sh_hi
-            )
+            shoulder_axis = [-a for a in shoulder_axis]
+            sh_lo, sh_hi = -shoulder_upper_deg, -shoulder_lower_deg
 
         urdf.comment(
             f"LEG: {leg_id.upper()}  (side={side}, "
@@ -945,7 +1069,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
         # this corner (= mount + rotated side-offset). rpy_z carries the
         # leg's mechanical rest so URDF θ=0 lands at the Fusion mechanical zero.
         urdf.joint(
-            name=f"{leg_id}_{sj.urdf_name}_joint",
+            name=f"{leg_id}_{sj['urdf_name']}_joint",
             jtype="revolute",
             parent=base_cfg["name"],
             child=f"{leg_id}_link1",
@@ -973,15 +1097,17 @@ def generate(export: dict, cfg: dict, out_path: Path):
         #   3. Negate-and-swap the joint limits (same physical range,
         #      expressed in the flipped sign convention).
         for i, jd in enumerate(joint_defs[1:], start=1):
-            offset = list(jd.offset_from_parent_mm)
-            axis_dir = list(jd.axis_dir)
-            lim_lo, lim_hi = jd.limits_deg
+            offset = list(jd["offset_from_parent_mm"])
+            axis_dir = list(jd["axis_dir"])
+            lim_lo, lim_hi = jd["limits_deg"]
             if side == "R":
-                axis_dir, lim_lo, lim_hi, offset = flip_joint_for_r_side(
-                    axis_dir, lim_lo, lim_hi, offset
-                )
+                offset[0] = -offset[0]
+                axis_dir = [-a for a in axis_dir]
+                # negate-and-swap: physical limit range stays the same
+                if lim_lo is not None and lim_hi is not None:
+                    lim_lo, lim_hi = -lim_hi, -lim_lo
             urdf.joint(
-                name=f"{leg_id}_{jd.urdf_name}_joint",
+                name=f"{leg_id}_{jd['urdf_name']}_joint",
                 jtype="revolute",
                 parent=f"{leg_id}_link{i}",
                 child=f"{leg_id}_link{i + 1}",
@@ -1043,9 +1169,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
                 if link_occ_path
                 else None
             )
-            mass, com, inertia = get_physics(
-                link_occ, fallback_mass=0.05, comp_name=mesh_name
-            )
+            mass, com, inertia = get_physics(link_occ, fallback_mass=0.05)
             # link1 hosts the hip servo; link3 hosts the knee servo.
             # Add the physical servo mass so dynamics match the real robot.
             # CoM stays at the structural centroid (good enough for sim fidelity).

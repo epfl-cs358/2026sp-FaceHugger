@@ -1,0 +1,36 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pytest
+      - name: Animation lib tests (CALIB cross-repo consistency)
+        run: pytest animation/lib/tests/ -v
+      - name: Foot-tip geometry parity
+        run: pytest code/simulation/tests/test_foot_tip_parity.py -v
+
+  firmware-native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install platformio
+      - name: Build firmware (upesy_wroom)
+        working-directory: code/firmware
+        run: pio run -e upesy_wroom
+      - name: Native C++ kinematics tests
+        working-directory: code/firmware
+        run: pio test -e native -f test_kinematics
