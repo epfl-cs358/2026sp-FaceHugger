@@ -225,6 +225,113 @@ class FirmwareSILDriver:
                 break
 
 
+# --------------------------------------------------------------------------- #
+# SIL run loops (moved from pybullet_sim.runner in Phase 4 of the sim-reorg
+# to break the bidirectional pybullet_sim ↔ firmware_sil import edge).
+# --------------------------------------------------------------------------- #
+
+
+def run_clip_sil(
+    cfg, clip_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
+):
+    """Play a clip through the compiled firmware (software-in-the-loop)."""
+    import pybullet as p_
+
+    from pybullet_sim.scene import connect_and_setup, print_banner, settle
+    from pybullet_sim.sim_monitor import finalize_log, setup_step_hook
+
+    try:
+        driver = FirmwareSILDriver()  # auto-builds fh_sim if stale/missing
+    except ImportError as e:
+        raise SystemExit(
+            f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
+            "play clips with the Python re-port instead:\n"
+            f"  python facehugger.py sim --clip {clip_name!r} --python"
+        ) from e
+    if clip_name not in driver.clip_names():
+        raise KeyError(
+            f"clip {clip_name!r} not in firmware clips {driver.clip_names()}"
+        )
+
+    robot_id, joint_map = connect_and_setup(cfg, gui, float_mode=float_mode)
+    print_banner(cfg)
+    if float_mode:
+        print("[float] no gravity/floor, body pinned — showing joint geometry")
+    elif settle_s > 0:
+        print(f"\n[settle] holding stance for {settle_s:.2f}s before clip")
+        settle(robot_id, joint_map, cfg, settle_s)
+
+    mon_note = "  [monitor: torque/current]" if monitor else ""
+    print(f"\n[clip][SIL] playing '{clip_name}' via exact firmware code{mon_note}")
+    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
+    try:
+        driver.play_clip_blocking(
+            robot_id,
+            joint_map,
+            clip_name,
+            cfg.servo_force,
+            cfg.servo_velocity,
+            gui=gui,
+            on_step=on_step,
+        )
+    except (KeyboardInterrupt, p_.error):
+        pass
+    finally:
+        if p_.isConnected():
+            p_.disconnect()
+        finalize_log(logger)
+
+
+def run_gait_sil(
+    cfg, gait_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
+):
+    """Run a gait through the compiled firmware (software-in-the-loop) — the EXACT
+    tickGait/tickTrot. Spawns at the neutral-stance body height (like clips), which
+    is stable since the gait oscillates around NEUTRAL[]; no Python body-height solve."""
+    import pybullet as p_
+
+    from pybullet_sim.scene import connect_and_setup, print_banner, settle
+    from pybullet_sim.sim_monitor import finalize_log, setup_step_hook
+
+    try:
+        driver = FirmwareSILDriver()  # auto-builds fh_sim if stale/missing
+    except ImportError as e:
+        raise SystemExit(
+            f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
+            "run the gait with the Python re-port instead:\n"
+            f"  python facehugger.py sim --{gait_name} --python"
+        ) from e
+
+    robot_id, joint_map = connect_and_setup(cfg, gui, float_mode=float_mode)
+    print_banner(cfg)
+    if float_mode:
+        print("[float] no gravity/floor, body pinned")
+    elif settle_s > 0:
+        print(f"\n[settle] holding stance for {settle_s:.2f}s before gait")
+        settle(robot_id, joint_map, cfg, settle_s)
+
+    mon_note = "  [monitor: torque/current]" if monitor else ""
+    print(f"\n[gait][SIL] running '{gait_name}' (FW) via exact firmware code{mon_note}")
+    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
+    try:
+        driver.run_gait_blocking(
+            robot_id,
+            joint_map,
+            gait_name,
+            cfg.servo_force,
+            cfg.servo_velocity,
+            gui=gui,
+            on_step=on_step,
+            duration_s=None if gui else 3.0,  # headless: finite smoke run
+        )
+    except (KeyboardInterrupt, p_.error):
+        pass
+    finally:
+        if p_.isConnected():
+            p_.disconnect()
+        finalize_log(logger)
+
+
 def _main():
     """CI / pre-run check:  python -m firmware_sil.sil_bridge [--check]
 

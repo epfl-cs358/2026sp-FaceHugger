@@ -1,4 +1,11 @@
-"""Simulation run loops: run_stand, run_gait, run_clip and their SIL variants."""
+"""Python-port run loops: run_stand, run_clip, run_gait.
+
+These are the no-C++-toolchain code paths driven from `simulate.py --python`.
+The matching SIL run loops (`run_clip_sil`, `run_gait_sil`) live in
+`firmware_sil.sil_bridge` — moved there in Phase 4 of the sim-reorg to
+break the bidirectional pybullet_sim ↔ firmware_sil import edge. Dispatch
+between the two ports is now `simulate.py`'s job.
+"""
 
 import time
 
@@ -9,72 +16,7 @@ from .motor import apply_joint_targets
 from .scene import connect_and_setup as _connect_and_setup
 from .scene import print_banner as _print_banner
 from .scene import settle as _settle
-
-
-# --------------------------------------------------------------------------- #
-# Step monitor + logger helpers
-# --------------------------------------------------------------------------- #
-
-
-def _make_step_monitor(robot_id, joint_map, every=30, logger=None):
-    """Return an on_step(i) callback for the sim loops.
-
-    --monitor: prints a torque + estimated-current status line every `every`
-    sim steps (~8 Hz at 240 Hz) — per-leg angles, peak joint torque, total
-    estimated current ([WARN >10A]) and any stalling joint ([STALL]).
-
-    --log: if `logger` (a sim_monitor.SimLogger) is given, records every step
-    (not just every `every`) for the end-of-run summary/CSV/plot. Reads torques
-    once per step and shares them with the periodic print. See sim_monitor.py.
-    """
-    from . import sim_monitor
-
-    def on_step(i):
-        do_print = i % every == 0
-        if logger is None and not do_print:
-            return
-        torques = sim_monitor.read_joint_torques(robot_id, joint_map)
-        if logger is not None:
-            logger.record(i * TIMESTEP, torques)
-        if do_print:
-            pos = sim_monitor.read_joint_pos_deg(robot_id, joint_map)
-            print(sim_monitor.format_status(i * TIMESTEP, torques, pos))
-
-    return on_step
-
-
-def setup_step_hook(robot_id, joint_map, monitor, log):
-    """Build the (on_step, logger) pair shared by the run_* loops.
-
-    Returns (None, None) when neither --monitor nor --log is set. When --log,
-    the SimLogger is returned too so the caller can _finalize_log() it after
-    the loop. See _make_step_monitor / sim_monitor.SimLogger.
-    """
-    if not (monitor or log):
-        return None, None
-    from . import sim_monitor
-
-    logger = sim_monitor.SimLogger(list(joint_map.keys())) if log else None
-    on_step = _make_step_monitor(robot_id, joint_map, logger=logger)
-    return on_step, logger
-
-
-def _finalize_log(logger):
-    """End-of-run output for --log: summary table, CSV, and 3-panel plot.
-
-    Called from each run_* finally block so it runs even on Ctrl+C / p.error.
-    No-op when logging is disabled.
-    """
-    if logger is None:
-        return
-    logger.summary()
-    logger.save_csv("sim_log.csv")
-    logger.plot("sim_log.png")
-
-
-# --------------------------------------------------------------------------- #
-# Run loops
-# --------------------------------------------------------------------------- #
+from .sim_monitor import finalize_log, setup_step_hook
 
 
 def run_stand(cfg, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False):
@@ -101,7 +43,7 @@ def run_stand(cfg, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=
     finally:
         if p.isConnected():
             p.disconnect()
-        _finalize_log(logger)
+        finalize_log(logger)
 
 
 def run_clip(
@@ -113,32 +55,16 @@ def run_clip(
     float_mode=False,
     monitor=False,
     log=False,
-    python_port=False,
 ):
-    """Load and play an animation clip by name in PyBullet.
+    """Load and play an animation clip in PyBullet via the Python re-port
+    (firmware_port.ClipPlayer). No C++ toolchain required.
 
-    By DEFAULT the joints are driven by the EXACT firmware code compiled to the
-    host (firmware_sil) — i.e. what the robot would actually command — and the
-    fh_sim module is auto-rebuilt if firmware sources changed. This requires a
-    C++ toolchain; if it is unavailable the run errors (use --python instead).
-
-    python_port=True instead uses the Python re-port (firmware_port.ClipPlayer),
-    which needs no toolchain. The re-port reads animation/exported_clips/
-    clips_all.h; the firmware (default) reads the firmware's own clips_all.h.
-    loop=True (GUI, re-port only) replays continuously; float_mode pins the body;
-    monitor/log add the torque/current readout + capture.
+    The re-port reads animation/exported_clips/clips_all.h. loop=True (GUI)
+    replays continuously; float_mode pins the body; monitor/log add the
+    torque/current readout + capture. For the EXACT compiled firmware
+    instead, dispatch to firmware_sil.sil_bridge.run_clip_sil (simulate.py
+    does this when --python is absent).
     """
-    if not python_port:
-        return _run_clip_sil(
-            cfg,
-            clip_name,
-            gui=gui,
-            settle_s=settle_s,
-            float_mode=float_mode,
-            monitor=monitor,
-            log=log,
-        )
-
     from firmware_port.clip_loader import (
         DEFAULT_CLIPS_H,
         get_clip_by_name,
@@ -171,117 +97,16 @@ def run_clip(
     finally:
         if p.isConnected():
             p.disconnect()
-        _finalize_log(logger)
-
-
-def _run_clip_sil(
-    cfg, clip_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
-):
-    """Play a clip through the compiled firmware (software-in-the-loop)."""
-    from firmware_sil.sil_bridge import FirmwareSILDriver
-
-    try:
-        driver = FirmwareSILDriver()  # auto-builds fh_sim if stale/missing
-    except ImportError as e:
-        raise SystemExit(
-            f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
-            "play clips with the Python re-port instead:\n"
-            f"  python facehugger.py sim --clip {clip_name!r} --python"
-        ) from e
-    if clip_name not in driver.clip_names():
-        raise KeyError(
-            f"clip {clip_name!r} not in firmware clips {driver.clip_names()}"
-        )
-
-    robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
-    _print_banner(cfg)
-    if float_mode:
-        print("[float] no gravity/floor, body pinned — showing joint geometry")
-    elif settle_s > 0:
-        print(f"\n[settle] holding stance for {settle_s:.2f}s before clip")
-        _settle(robot_id, joint_map, cfg, settle_s)
-
-    mon_note = "  [monitor: torque/current]" if monitor else ""
-    print(f"\n[clip][SIL] playing '{clip_name}' via exact firmware code{mon_note}")
-    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
-    try:
-        driver.play_clip_blocking(
-            robot_id,
-            joint_map,
-            clip_name,
-            cfg.servo_force,
-            cfg.servo_velocity,
-            gui=gui,
-            on_step=on_step,
-        )
-    except (KeyboardInterrupt, p.error):
-        pass
-    finally:
-        if p.isConnected():
-            p.disconnect()
-        _finalize_log(logger)
-
-
-def _run_gait_sil(
-    cfg, gait_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
-):
-    """Run a gait through the compiled firmware (software-in-the-loop) — the EXACT
-    tickGait/tickTrot. Spawns at the neutral-stance body height (like clips), which
-    is stable since the gait oscillates around NEUTRAL[]; no Python body-height solve."""
-    from firmware_sil.sil_bridge import FirmwareSILDriver
-
-    try:
-        driver = FirmwareSILDriver()  # auto-builds fh_sim if stale/missing
-    except ImportError as e:
-        raise SystemExit(
-            f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
-            "run the gait with the Python re-port instead:\n"
-            f"  python facehugger.py sim --{gait_name} --python"
-        ) from e
-
-    robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
-    _print_banner(cfg)
-    if float_mode:
-        print("[float] no gravity/floor, body pinned")
-    elif settle_s > 0:
-        print(f"\n[settle] holding stance for {settle_s:.2f}s before gait")
-        _settle(robot_id, joint_map, cfg, settle_s)
-
-    mon_note = "  [monitor: torque/current]" if monitor else ""
-    print(f"\n[gait][SIL] running '{gait_name}' (FW) via exact firmware code{mon_note}")
-    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
-    try:
-        driver.run_gait_blocking(
-            robot_id,
-            joint_map,
-            gait_name,
-            cfg.servo_force,
-            cfg.servo_velocity,
-            gui=gui,
-            on_step=on_step,
-            duration_s=None if gui else 3.0,  # headless: finite smoke run
-        )
-    except (KeyboardInterrupt, p.error):
-        pass
-    finally:
-        if p.isConnected():
-            p.disconnect()
-        _finalize_log(logger)
+        finalize_log(logger)
 
 
 def run_gait(
-    cfg,
-    gait_name,
-    gui=True,
-    settle_s=0.5,
-    float_mode=False,
-    monitor=False,
-    log=False,
-    python_port=False,
+    cfg, gait_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
 ):
-    """Run a gait. By DEFAULT drives the joints with the EXACT compiled firmware
-    (firmware_sil) — the same tickGait/tickTrot the robot runs. python_port=True uses
-    the Python IK gait below instead (no C++ toolchain; also the body-height reference)."""
+    """Run a gait via the Python IK gait (also the body-height reference).
+    For the EXACT compiled firmware instead, dispatch to
+    firmware_sil.sil_bridge.run_gait_sil — simulate.py does this when
+    --python is absent."""
     from .gaits import (
         GAITS,
         _body_height_for_gait,
@@ -292,16 +117,6 @@ def run_gait(
 
     if gait_name not in GAITS:
         raise ValueError(f"Unknown gait: {gait_name}")
-    if not python_port:
-        return _run_gait_sil(
-            cfg,
-            gait_name,
-            gui=gui,
-            settle_s=settle_s,
-            float_mode=float_mode,
-            monitor=monitor,
-            log=log,
-        )
     gait = GAITS[gait_name]
 
     # Gait-aware spawn height: worst foot Z across a full period, not just
@@ -371,4 +186,4 @@ def run_gait(
     finally:
         if p.isConnected():
             p.disconnect()
-        _finalize_log(logger)
+        finalize_log(logger)
