@@ -197,7 +197,7 @@ def _require_sim_deps(need_build):
         return
     extra = None
     if "pybind11" in missing and "pybullet" not in missing:
-        extra = "Or skip the C++ toolchain: rerun with --python"
+        extra = "Or skip the C++ toolchain: rerun with --python-port"
     _die_missing(
         ", ".join(missing), "Install the sim dependencies:", SIM_INSTALL, extra
     )
@@ -212,7 +212,7 @@ def cmd_sim(args):
         or getattr(args, "app", False)
         or getattr(args, "panel", False)
     )
-    # Default path (non --python) and any serve build the firmware SIL.
+    # Default path (non --python-port) and any serve build the firmware SIL.
     _require_sim_deps(need_build=serving or not getattr(args, "python_port", False))
     if serving:
         # Drive the sim from an external client (app / panel) over the T: WebSocket
@@ -237,7 +237,7 @@ def cmd_sim(args):
     if args.log:
         cli.append("--log")
     if args.python_port:
-        cli.append("--python")
+        cli.append("--python-port")
     if args.walk:
         cli.append("--walk")
     if args.trot:
@@ -568,7 +568,7 @@ def main():
         help="record per-step torque/current → summary + sim_log.csv + sim_log.png",
     )
     ps.add_argument(
-        "--python",
+        "--python-port",
         dest="python_port",
         action="store_true",
         help="drive clips AND gaits with the Python re-port instead of the default "

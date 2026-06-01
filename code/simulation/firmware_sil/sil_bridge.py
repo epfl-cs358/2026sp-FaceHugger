@@ -246,7 +246,7 @@ def run_clip_sil(
         raise SystemExit(
             f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
             "play clips with the Python re-port instead:\n"
-            f"  python facehugger.py sim --clip {clip_name!r} --python"
+            f"  python facehugger.py sim --clip {clip_name!r} --python-port"
         ) from e
     if clip_name not in driver.clip_names():
         raise KeyError(
@@ -299,7 +299,7 @@ def run_gait_sil(
         raise SystemExit(
             f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
             "run the gait with the Python re-port instead:\n"
-            f"  python facehugger.py sim --{gait_name} --python"
+            f"  python facehugger.py sim --{gait_name} --python-port"
         ) from e
 
     robot_id, joint_map = connect_and_setup(cfg, gui, float_mode=float_mode)

@@ -68,19 +68,19 @@ def main():
         "summary table and write sim_log.csv + sim_log.png (additive to --monitor)",
     )
     parser.add_argument(
-        "--python",
+        "--python-port",
         dest="python_port",
         action="store_true",
         help="drive clips AND gaits with the Python re-port (firmware_port / the "
         "Python IK gait) instead of the default — which is the EXACT compiled firmware "
-        "(firmware_sil, auto-built). Use --python when you have no C++ toolchain.",
+        "(firmware_sil, auto-built). Use --python-port when you have no C++ toolchain.",
     )
     args = parser.parse_args()
 
     cfg = build_config()
     gui = not args.headless
 
-    # Dispatch: --python uses pybullet_sim.run_clip / run_gait (Python re-port);
+    # Dispatch: --python-port uses pybullet_sim.run_clip / run_gait (Python re-port);
     # default uses firmware_sil.run_clip_sil / run_gait_sil (compiled firmware).
     # Importing firmware_sil only when the SIL path is taken keeps the Python
     # re-port runnable on machines without a C++ toolchain.

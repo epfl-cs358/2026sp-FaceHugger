@@ -158,7 +158,7 @@ def test_sil_drives_pybullet_headless():
 
 def test_facehugger_sim_clip_defaults_to_firmware():
     """`facehugger.py sim --clip wave --headless` defaults to the firmware SIL
-    (no flag needed); --python would force the re-port instead."""
+    (no flag needed); --python-port would force the re-port instead."""
     _driver_or_skip()  # skip if fh_sim isn't built
     r = subprocess.run(
         [

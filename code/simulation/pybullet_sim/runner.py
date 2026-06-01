@@ -1,6 +1,6 @@
 """Python-port run loops: run_stand, run_clip, run_gait.
 
-These are the no-C++-toolchain code paths driven from `simulate.py --python`.
+These are the no-C++-toolchain code paths driven from `simulate.py --python-port`.
 The matching SIL run loops (`run_clip_sil`, `run_gait_sil`) live in
 `firmware_sil.sil_bridge` — moved there in Phase 4 of the sim-reorg to
 break the bidirectional pybullet_sim ↔ firmware_sil import edge. Dispatch
@@ -63,7 +63,7 @@ def run_clip(
     replays continuously; float_mode pins the body; monitor/log add the
     torque/current readout + capture. For the EXACT compiled firmware
     instead, dispatch to firmware_sil.sil_bridge.run_clip_sil (simulate.py
-    does this when --python is absent).
+    does this when --python-port is absent).
     """
     from firmware_port.clip_loader import (
         DEFAULT_CLIPS_H,
@@ -106,7 +106,7 @@ def run_gait(
     """Run a gait via the Python IK gait (also the body-height reference).
     For the EXACT compiled firmware instead, dispatch to
     firmware_sil.sil_bridge.run_gait_sil — simulate.py does this when
-    --python is absent."""
+    --python-port is absent."""
     from .gaits import (
         GAITS,
         _body_height_for_gait,

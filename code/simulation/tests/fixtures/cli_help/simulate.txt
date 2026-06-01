@@ -1,4 +1,4 @@
-usage: simulate.py [-h] [--walk] [--trot] [--headless] [--settle SETTLE] [--clip NAME] [--loop] [--float] [--monitor] [--log] [--python]
+usage: simulate.py [-h] [--walk] [--trot] [--headless] [--settle SETTLE] [--clip NAME] [--loop] [--float] [--monitor] [--log] [--python-port]
 
 FaceHugger Quadruped Simulation
 
@@ -13,4 +13,4 @@ options:
   --float          no gravity, no floor, body pinned — watch the clip's pure joint geometry without the robot falling/slipping/collapsing
   --monitor        print a torque + estimated-current status line periodically (per-leg angles, peak torque, total current [WARN >10A], [STALL] joints)
   --log            record per-joint torque/current every step; on exit print a summary table and write sim_log.csv + sim_log.png (additive to --monitor)
-  --python         drive clips AND gaits with the Python re-port (firmware_port / the Python IK gait) instead of the default — which is the EXACT compiled firmware (firmware_sil, auto-built). Use --python when you have no C++ toolchain.
+  --python-port    drive clips AND gaits with the Python re-port (firmware_port / the Python IK gait) instead of the default — which is the EXACT compiled firmware (firmware_sil, auto-built). Use --python-port when you have no C++ toolchain.
