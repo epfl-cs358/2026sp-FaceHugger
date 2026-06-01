@@ -110,4 +110,4 @@ broader servo ID / channel convention.
 ### What's next
 
 - **Binary `.fhc` exporter** — a Layer-2 converter to the on-board binary playback format once it lands (see [doc/animation-pipeline/](../../doc/animation-pipeline/)).
-- **Torque heatmap** — gravity-hold torque mode for the Display heatmap; scoped in [pipeline/torque-heatmap.md](../pipeline/torque-heatmap.md).
+- **Torque heatmap** — gravity-hold torque mode for the Display heatmap; scoped in the [Torque heatmap wiki page](../../wiki/reference/simulation/torque-heatmap.md) under "Planned: gravity-hold torque mode".
