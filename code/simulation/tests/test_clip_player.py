@@ -1,4 +1,4 @@
-# code/simulation/firmware_port/tests/test_clip_player.py
+# code/simulation/tests/test_clip_player.py
 """Tests for clip_player.py — pure-math tests only (no PyBullet needed).
 
 Tests verify:
