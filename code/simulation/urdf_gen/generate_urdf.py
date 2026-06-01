@@ -560,11 +560,6 @@ def _find_occ_rot(occs: list, name: str) -> list | None:
     return None
 
 
-def _cad_axis_dir(cad: dict) -> list | None:
-    """Return axis direction from a CAD joint dict, preferring new schema name."""
-    return cad.get("axis_dir_world") or cad.get("axis_dir_local_unit")
-
-
 # --- small 3x3 matrix helpers ------------------------------------------------
 
 
