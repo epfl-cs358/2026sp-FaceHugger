@@ -1,15 +1,28 @@
 # code/simulation/firmware_port/tests/test_servo_convention.py
-"""Parity tests: assert servo_convention matches firmware translateToServo.
+"""Property tests for `translate_to_servo`.
 
-Structure mirrors animation/scripts/test_servo_parity.py.
-_firmware_translate() is copied verbatim from firmware source as
-independent ground truth — DO NOT factor it out into servo_convention.py.
-Divergence between the two is precisely the bug these tests guard against.
+Earlier versions of this file kept a verbatim copy of the firmware
+`translateToServo` switch (`_firmware_translate`) as "independent ground
+truth" and asserted byte-equality at specific poses. That approach broke
+the moment per-leg `CALIB_*_THIGH/KNEE` were introduced (commit 706bf9b)
+and required the test fixture to drift in lockstep with every CALIB
+tweak — exactly the maintenance trap the parity test was meant to prevent.
 
-Firmware source: code/firmware/src/nervous_system/motion_math.cpp:32-59
+The tests below replace those fixtures with *properties* of
+`translate_to_servo` that survive any CALIB / formula tweak:
+
+- The shoulder neutral pose still maps to servo 90 (load-bearing convention).
+- math thigh/knee = 0 still maps to servo = CALIB[leg][joint] (defines CALIB).
+- The function is affine in math-space with the expected per-leg sign
+  pattern (derived from URDF axis sign), and perturbing one math joint
+  does not leak into another joint's servo output.
+
+Byte-for-byte parity with the firmware switch is still verified, but at
+the exporter side, by `animation/scripts/test_servo_parity.py`.
 """
 
 import math
+import random
 import sys
 from pathlib import Path
 
@@ -18,8 +31,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from firmware_port.servo_convention import (
+    CALIB_KNEE,
+    CALIB_THIGH,
     LEG_FL,
     LEG_FR,
+    LEG_ID_TO_URDF_AXIS_SIGN,
     LEG_RL,
     LEG_RR,
     NEUTRAL,
@@ -29,97 +45,143 @@ from firmware_port.servo_convention import (
     translate_to_servo,
 )
 
+ALL_LEGS = [LEG_FR, LEG_FL, LEG_RR, LEG_RL]
 
-def _firmware_translate(
-    leg_id: int, sh: float, th: float, kn: float
-) -> tuple[float, float, float]:
-    """Independent ground truth — verbatim from motion_math.cpp:32-59.
-    DO NOT replace with servo_convention.translate_to_servo.
+
+def _expected_sign(leg_id: int, joint_idx: int) -> int:
+    """Expected sign of d(servo) / d(math_input) for one (leg, joint).
+
+    Derived from the URDF axis directions (independent specification),
+    not from `translate_to_servo` itself — so the test catches divergence
+    between the URDF and the firmware formulas. Shoulder is always +1
+    per the load-bearing yaw-uniform convention; thigh sign equals the
+    URDF link2/3 axis sign for that leg; knee sign is its negation
+    (knee mounts on the opposite face — motion_math.cpp).
     """
-    if leg_id == 0:  # LEG_FR
-        return (90.0 + (sh - 45.0), 90.0 - th, 90.0 + kn)
-    if leg_id == 1:  # LEG_FL — Change B: 90 + (sh - 135)
-        return (90.0 + (sh - 135.0), 90.0 + th, 90.0 - kn)
-    if leg_id == 2:  # LEG_RR / BR
-        # BR shoulder un-mirrored (2026-05-25): +sh = +servo like the others.
-        return (90.0 + (sh + 45.0), 90.0 + th, 90.0 - kn)
-    if leg_id == 3:  # LEG_RL / BL
-        return (90.0 + (sh + 135.0), 90.0 - th, 90.0 + kn)
-    raise ValueError(f"unknown leg_id {leg_id}")
+    if joint_idx == 0:  # shoulder
+        return +1
+    axis = LEG_ID_TO_URDF_AXIS_SIGN[leg_id]
+    return axis if joint_idx == 1 else -axis  # thigh, knee
 
 
-# ─── NEUTRAL value tests ─────────────────────────────────────────────────────
+# ─── NEUTRAL value tests (load-bearing constants) ─────────────────────────────
 
 
 def test_neutral_fr():
-    """FR neutral must match neutral_pose.h:14."""
     n = NEUTRAL[LEG_FR]
     assert n.sh == 45.0 and n.th == -60.0 and n.kn == -37.0
 
 
 def test_neutral_fl():
-    """FL neutral must match neutral_pose.h:15 (Change B: sh=135)."""
+    """Change B: FL shoulder sh=135 (outward direction matches FR/BR/BL)."""
     n = NEUTRAL[LEG_FL]
     assert n.sh == 135.0 and n.th == -60.0 and n.kn == -40.0
 
 
 def test_neutral_rr():
-    """RR/BR neutral must match neutral_pose.h:16."""
     n = NEUTRAL[LEG_RR]
     assert n.sh == -45.0 and n.th == -50.0 and n.kn == -50.0
 
 
 def test_neutral_rl():
-    """RL/BL neutral must match neutral_pose.h:17."""
     n = NEUTRAL[LEG_RL]
     assert n.sh == -135.0 and n.th == -60.0 and n.kn == -35.0
 
 
-# ─── translate_to_servo parity at NEUTRAL ───────────────────────────────────
+# ─── shoulder neutral → servo 90 (the yaw-uniform convention) ───────────────
 
 
-@pytest.mark.parametrize("leg_id", [LEG_FR, LEG_FL, LEG_RR, LEG_RL])
-def test_translate_at_neutral_matches_firmware(leg_id):
-    """At NEUTRAL pose, translate_to_servo must equal firmware formula."""
+@pytest.mark.parametrize("leg_id", ALL_LEGS)
+def test_shoulder_at_neutral_maps_to_servo_90(leg_id):
+    """At math-space NEUTRAL shoulder, every shoulder servo = 90.
+    This is the load-bearing convention that survives any CALIB tweak."""
     n = NEUTRAL[leg_id]
     got = translate_to_servo(leg_id, n.sh, n.th, n.kn)
-    exp_hip, exp_th, exp_kn = _firmware_translate(leg_id, n.sh, n.th, n.kn)
-    assert abs(got.hip - exp_hip) < 1e-9, f"hip mismatch leg {leg_id}"
-    assert abs(got.thigh - exp_th) < 1e-9, f"thigh mismatch leg {leg_id}"
-    assert abs(got.knee - exp_kn) < 1e-9, f"knee mismatch leg {leg_id}"
+    assert got.hip == 90.0, f"leg {leg_id} shoulder neutral did not map to 90"
 
 
-# ─── translate_to_servo parity at NEUTRAL + uniform 30° offset ──────────────
+# ─── CALIB is the servo angle at math zero ───────────────────────────────────
 
 
-@pytest.mark.parametrize("leg_id", [LEG_FR, LEG_FL, LEG_RR, LEG_RL])
-def test_translate_at_offset_matches_firmware(leg_id):
-    """At NEUTRAL + 30° on all joints, translate_to_servo must equal firmware."""
+@pytest.mark.parametrize("leg_id", ALL_LEGS)
+def test_thigh_servo_at_math_zero_equals_calib(leg_id):
+    """math thigh = 0 → servo thigh = CALIB_THIGH[leg]. Definition of CALIB."""
     n = NEUTRAL[leg_id]
-    sh, th, kn = n.sh + 30.0, n.th + 30.0, n.kn + 30.0
-    got = translate_to_servo(leg_id, sh, th, kn)
-    exp_hip, exp_th, exp_kn = _firmware_translate(leg_id, sh, th, kn)
-    assert abs(got.hip - exp_hip) < 1e-9
-    assert abs(got.thigh - exp_th) < 1e-9
-    assert abs(got.knee - exp_kn) < 1e-9
+    got = translate_to_servo(leg_id, n.sh, 0.0, n.kn)
+    assert got.thigh == CALIB_THIGH[leg_id]
 
 
-# ─── per-axis perturbation (catches cross-axis leakage) ─────────────────────
-
-
-@pytest.mark.parametrize("leg_id", [LEG_FR, LEG_FL, LEG_RR, LEG_RL])
-@pytest.mark.parametrize("joint", ["sh", "th", "kn"])
-def test_translate_single_joint_perturb(leg_id, joint):
-    """Perturbing one joint must not affect others' servo output."""
+@pytest.mark.parametrize("leg_id", ALL_LEGS)
+def test_knee_servo_at_math_zero_equals_calib(leg_id):
+    """math knee = 0 → servo knee = CALIB_KNEE[leg]."""
     n = NEUTRAL[leg_id]
-    sh = n.sh + (20.0 if joint == "sh" else 0.0)
-    th = n.th + (20.0 if joint == "th" else 0.0)
-    kn = n.kn + (20.0 if joint == "kn" else 0.0)
-    got = translate_to_servo(leg_id, sh, th, kn)
-    exp_hip, exp_th, exp_kn = _firmware_translate(leg_id, sh, th, kn)
-    assert abs(got.hip - exp_hip) < 1e-9
-    assert abs(got.thigh - exp_th) < 1e-9
-    assert abs(got.knee - exp_kn) < 1e-9
+    got = translate_to_servo(leg_id, n.sh, n.th, 0.0)
+    assert got.knee == CALIB_KNEE[leg_id]
+
+
+# ─── affine response + no cross-axis leakage ────────────────────────────────
+
+
+@pytest.mark.parametrize("leg_id", ALL_LEGS)
+@pytest.mark.parametrize("joint_idx", [0, 1, 2])
+def test_servo_response_matches_sign_convention(leg_id, joint_idx):
+    """Perturbing ONE math joint by Δ shifts ITS servo by ±Δ (per
+    `_expected_sign`) and leaves the other two servos untouched.
+
+    Tests three properties at once, CALIB-invariantly:
+      (a) sign of the response matches the URDF axis convention,
+      (b) the response is exactly Δ in magnitude (linear, not scaled),
+      (c) no cross-axis leakage.
+    """
+    n = NEUTRAL[leg_id]
+    sh, th, kn = n.sh, n.th, n.kn
+    base = translate_to_servo(leg_id, sh, th, kn)
+
+    delta = 7.0
+    pert = [sh, th, kn]
+    pert[joint_idx] += delta
+    after = translate_to_servo(leg_id, *pert)
+
+    field = ("hip", "thigh", "knee")[joint_idx]
+    got = getattr(after, field) - getattr(base, field)
+    expected = _expected_sign(leg_id, joint_idx) * delta
+    assert math.isclose(got, expected), (
+        f"leg {leg_id} joint {field}: Δservo={got} expected={expected}"
+    )
+
+    for other_idx, other_field in enumerate(("hip", "thigh", "knee")):
+        if other_idx == joint_idx:
+            continue
+        before_v = getattr(base, other_field)
+        after_v = getattr(after, other_field)
+        assert before_v == after_v, (
+            f"leg {leg_id}: perturbing math {field} leaked into {other_field} "
+            f"({before_v} → {after_v})"
+        )
+
+
+@pytest.mark.parametrize("leg_id", ALL_LEGS)
+def test_translate_is_affine_under_random_inputs(leg_id):
+    """`translate_to_servo` is affine in math-space: for two random poses A and B,
+    `translate(A) − translate(B)` equals the expected sign-weighted (A − B).
+
+    This catches non-linear drift (e.g. a stray square or gating in the
+    formula) without depending on what CALIB the per-leg formulas are
+    centered on.
+    """
+    rng = random.Random(42 + leg_id)
+    for _ in range(20):
+        a = (rng.uniform(-180, 180), rng.uniform(-90, 90), rng.uniform(-90, 90))
+        b = (rng.uniform(-180, 180), rng.uniform(-90, 90), rng.uniform(-90, 90))
+        sa = translate_to_servo(leg_id, *a)
+        sb = translate_to_servo(leg_id, *b)
+
+        for joint_idx, field in enumerate(("hip", "thigh", "knee")):
+            got = getattr(sa, field) - getattr(sb, field)
+            expected = _expected_sign(leg_id, joint_idx) * (a[joint_idx] - b[joint_idx])
+            assert math.isclose(got, expected, abs_tol=1e-9), (
+                f"leg {leg_id} {field}: Δ={got} expected={expected} for a={a} b={b}"
+            )
 
 
 # ─── clamp_clip_servos (per-leg, CALIB-relative) ─────────────────────────────
