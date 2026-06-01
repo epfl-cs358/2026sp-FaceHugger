@@ -26,6 +26,8 @@ try:
 except ImportError:
     raise SystemExit("PyYAML missing — run: uv add pyyaml")
 
+from urdf_gen.lib.construction_points import resolve_leg_construction_points
+
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -767,63 +769,22 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # is sitting at the mirror position. We derive the constant offsets
     # (mount-tab → axis, mount-tab → shoulder-servo, etc.) from the
     # source-CAD positions and reuse them per leg.
-    LEG_ASSEMBLY = "FaceHuggerLegAssembly:1"
-    body_to_link1_world = find_point_world_at_occurrence(
-        occs, LEG_ASSEMBLY, "BodyToLink1Point"
-    )
-    link2_to_link3_world = find_point_world_at_occurrence(
-        occs, LEG_ASSEMBLY, "Link2ToLink3Point"
-    )
-    mount_L_world = find_point_world_at_occurrence(
-        occs, f"{LEG_ASSEMBLY}/MotorMount:1", "LegMountFixedPoint"
-    )
-    mount_R_world = find_point_world_at_occurrence(
-        occs, f"{LEG_ASSEMBLY}/MotorMountR:1", "LegMountFixedPoint"
-    )
-    if any(
-        v is None
-        for v in (
-            body_to_link1_world,
-            link2_to_link3_world,
-            mount_L_world,
-            mount_R_world,
-        )
-    ):
-        raise ValueError(
-            "Missing required construction points: BodyToLink1Point / "
-            "Link2ToLink3Point / MotorMount(R) LegMountFixedPoint."
-        )
-
-    L_axis_offset = sub(body_to_link1_world, mount_L_world)
-    R_axis_offset = sub(body_to_link1_world, mount_R_world)
+    cpts = resolve_leg_construction_points(occs)
+    body_to_link1_world = cpts["body_to_link1"]
+    link2_to_link3_world = cpts["link2_to_link3"]
+    mount_L_world = cpts["mount_L"]
+    mount_R_world = cpts["mount_R"]
+    shoulder_servo_L_world = cpts["shoulder_servo_L"]
+    shoulder_servo_R_world = cpts["shoulder_servo_R"]
+    hip_servo_world = cpts["hip_servo"]
+    knee_servo_world = cpts["knee_servo"]
+    L_axis_offset = cpts["L_axis_offset"]
+    R_axis_offset = cpts["R_axis_offset"]
 
     # Standalone-servo design (no bake-in): each leg gets a shoulder,
     # hip, and knee servo emitted as separate <visual> blocks. The mesh
     # `servo.stl` is re-origined to ServoMountPoint, so the visual's xyz
     # is the world position where ServoMountPoint should land.
-    #
-    # Source-CAD shoulder-servo positions: each bracket has a nested
-    # `LegBaseServoEnclosure:1` with its own ServoMountPoint. Its world
-    # position is the place where that bracket's shoulder servo sits in
-    # the source-FL placement (L bracket) or the mirror (R bracket).
-    shoulder_servo_L_world = find_point_world_at_occurrence(
-        occs,
-        f"{LEG_ASSEMBLY}/MotorMount:1/LegBaseServoEnclosure:1",
-        "ServoMountPoint",
-    )
-    shoulder_servo_R_world = find_point_world_at_occurrence(
-        occs,
-        f"{LEG_ASSEMBLY}/MotorMountR:1/Servo_Mouser_Model(Mirror):1",
-        "ServoMountPoint",
-    )
-    # Top-level hip / knee servos: shared (no L/R variants in CAD).
-    hip_servo_world = find_point_world_at_occurrence(
-        occs, f"{LEG_ASSEMBLY}/LegBaseServoEnclosure:2", "ServoMountPoint"
-    )
-    knee_servo_world = find_point_world_at_occurrence(
-        occs, f"{LEG_ASSEMBLY}/LegBaseServoEnclosure:3", "ServoMountPoint"
-    )
-
     shoulder_servo_L_offset = (
         sub(shoulder_servo_L_world, mount_L_world) if shoulder_servo_L_world else None
     )
