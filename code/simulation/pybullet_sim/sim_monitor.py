@@ -8,10 +8,15 @@ hardware.
 
 The pure helpers (estimate_current_a, total_current_a, format_status) take plain
 numbers/dicts and are unit-tested without PyBullet; read_joint_torques /
-read_joint_pos_deg do the PyBullet reads.
+read_joint_pos_deg do the PyBullet reads. setup_step_hook + finalize_log are
+the run-loop glue that both pybullet_sim's Python-port run loops and
+firmware_sil's SIL run loops use to share a single --monitor / --log
+implementation.
 """
 
 import math
+
+from .constants import TIMESTEP
 
 STALL_TORQUE_NM = 2.94  # QYRC DSS-230MG 30 kg·cm stall (== servo.effort_nm)
 STALL_CURRENT_A = 2.0  # QYRC DSS-230MG — ~2 A max draw at stall
@@ -104,6 +109,59 @@ def read_joint_pos_deg(robot_id, joint_map) -> dict:
         name: math.degrees(p.getJointState(robot_id, idx)[0])
         for name, idx in joint_map.items()
     }
+
+
+def make_step_monitor(robot_id, joint_map, every=30, logger=None):
+    """Return an on_step(i) callback for the sim loops.
+
+    --monitor: prints a torque + estimated-current status line every `every`
+    sim steps (~8 Hz at 240 Hz) — per-leg angles, peak joint torque, total
+    estimated current ([WARN >10A]) and any stalling joint ([STALL]).
+
+    --log: if `logger` (a SimLogger) is given, records every step (not just
+    every `every`) for the end-of-run summary/CSV/plot. Reads torques once
+    per step and shares them with the periodic print.
+    """
+
+    def on_step(i):
+        do_print = i % every == 0
+        if logger is None and not do_print:
+            return
+        torques = read_joint_torques(robot_id, joint_map)
+        if logger is not None:
+            logger.record(i * TIMESTEP, torques)
+        if do_print:
+            pos = read_joint_pos_deg(robot_id, joint_map)
+            print(format_status(i * TIMESTEP, torques, pos))
+
+    return on_step
+
+
+def setup_step_hook(robot_id, joint_map, monitor, log):
+    """Build the (on_step, logger) pair shared by the run_* loops.
+
+    Returns (None, None) when neither --monitor nor --log is set. When --log,
+    the SimLogger is returned too so the caller can finalize_log() it after
+    the loop.
+    """
+    if not (monitor or log):
+        return None, None
+    logger = SimLogger(list(joint_map.keys())) if log else None
+    on_step = make_step_monitor(robot_id, joint_map, logger=logger)
+    return on_step, logger
+
+
+def finalize_log(logger):
+    """End-of-run output for --log: summary table, CSV, and 3-panel plot.
+
+    Called from each run_* finally block so it runs even on Ctrl+C / p.error.
+    No-op when logging is disabled.
+    """
+    if logger is None:
+        return
+    logger.summary()
+    logger.save_csv("sim_log.csv")
+    logger.plot("sim_log.png")
 
 
 class SimLogger:

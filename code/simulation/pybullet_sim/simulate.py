@@ -20,8 +20,8 @@ Geometry sourcing (no duplication of constants in Python):
 
 import argparse
 
-from .runner import run_clip, run_gait, run_stand
 from .kinematics import build_config
+from .runner import run_clip, run_gait, run_stand
 
 
 def main():
@@ -79,20 +79,30 @@ def main():
 
     cfg = build_config()
     gui = not args.headless
+
+    # Dispatch: --python uses pybullet_sim.run_clip / run_gait (Python re-port);
+    # default uses firmware_sil.run_clip_sil / run_gait_sil (compiled firmware).
+    # Importing firmware_sil only when the SIL path is taken keeps the Python
+    # re-port runnable on machines without a C++ toolchain.
+    if args.python_port:
+        clip_fn, gait_fn = run_clip, run_gait
+    else:
+        from firmware_sil import run_clip_sil as clip_fn  # noqa: N813
+        from firmware_sil import run_gait_sil as gait_fn  # noqa: N813
+
     if args.clip:
-        run_clip(
-            cfg,
-            args.clip,
+        kwargs = dict(
             gui=gui,
             settle_s=args.settle,
-            loop=args.loop,
             float_mode=args.float_mode,
             monitor=args.monitor,
             log=args.log,
-            python_port=args.python_port,
         )
+        if args.python_port:
+            kwargs["loop"] = args.loop  # Python-port-only
+        clip_fn(cfg, args.clip, **kwargs)
     elif args.walk:
-        run_gait(
+        gait_fn(
             cfg,
             "walk",
             gui=gui,
@@ -100,10 +110,9 @@ def main():
             float_mode=args.float_mode,
             monitor=args.monitor,
             log=args.log,
-            python_port=args.python_port,
         )
     elif args.trot:
-        run_gait(
+        gait_fn(
             cfg,
             "trot",
             gui=gui,
@@ -111,7 +120,6 @@ def main():
             float_mode=args.float_mode,
             monitor=args.monitor,
             log=args.log,
-            python_port=args.python_port,
         )
     else:
         run_stand(

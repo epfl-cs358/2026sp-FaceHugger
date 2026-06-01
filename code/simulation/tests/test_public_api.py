@@ -38,6 +38,8 @@ PYBULLET_SIM_API = (
 
 FIRMWARE_SIL_API = (
     "FirmwareSILDriver",
+    "run_clip_sil",
+    "run_gait_sil",
     "servo_angles_to_joint_targets",
 )
 
