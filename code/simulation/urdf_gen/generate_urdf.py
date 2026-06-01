@@ -18,6 +18,7 @@ import argparse
 import json
 import math
 import struct
+import warnings
 from pathlib import Path
 
 try:
@@ -448,10 +449,16 @@ FALLBACK_INERTIA = {
 }
 
 
-def get_physics(occ_node: dict | None, fallback_mass: float = 0.05):
+def get_physics(
+    occ_node: dict | None, fallback_mass: float = 0.05, comp_name: str = ""
+):
     if occ_node and "physics" in occ_node and "error" not in occ_node["physics"]:
         ph = occ_node["physics"]
         return ph["mass_kg"], ph["com_mm"], ph["inertia_kg_m2"]
+    warnings.warn(
+        f"No physics data for {comp_name!r}; using fallback inertia.",
+        stacklevel=2,
+    )
     return fallback_mass, [0, 0, 0], FALLBACK_INERTIA
 
 
@@ -524,7 +531,7 @@ def _servo_world_by_role(export: dict, role: str) -> list | None:
 
 def _servo_rot_by_role(export: dict, role: str) -> list | None:
     """3x3 rotation of the servo occurrence assigned to `role`, from its
-    world_transform_rm_cm (dimensionless — rotation part of a 4x4)."""
+    world_transform (or legacy world_transform_rm_cm) — rotation part of a 4x4."""
     mf = export.get("mesh_files") or {}
     roles = mf.get("_servo_role_assignment") or {}
     path = roles.get(role)
@@ -533,7 +540,7 @@ def _servo_rot_by_role(export: dict, role: str) -> list | None:
     occ = _find_occ_by_path(export["occurrences"], path)
     if occ is None:
         return None
-    wtf = occ.get("world_transform_rm_cm")
+    wtf = occ.get("world_transform") or occ.get("world_transform_rm_cm")
     if wtf is None:
         return None
     return [row[:3] for row in wtf[:3]]
@@ -541,13 +548,18 @@ def _servo_rot_by_role(export: dict, role: str) -> list | None:
 
 def _find_occ_rot(occs: list, name: str) -> list | None:
     """Find an occurrence by leaf name anywhere in the tree and return its
-    3x3 world rotation (from world_transform_rm_cm)."""
+    3x3 world rotation (from world_transform or world_transform_rm_cm)."""
     for n in _iter_occ(occs):
         if n.get("name") == name:
-            wtf = n.get("world_transform_rm_cm")
+            wtf = n.get("world_transform") or n.get("world_transform_rm_cm")
             if wtf:
                 return [row[:3] for row in wtf[:3]]
     return None
+
+
+def _cad_axis_dir(cad: dict) -> list | None:
+    """Return axis direction from a CAD joint dict, preferring new schema name."""
+    return cad.get("axis_dir_world") or cad.get("axis_dir_local_unit")
 
 
 # --- small 3x3 matrix helpers ------------------------------------------------
@@ -677,12 +689,11 @@ def generate(export: dict, cfg: dict, out_path: Path):
                 f"Joint {cad_name!r} not found in fusion_export.json's joints[] "
                 f"(make sure it's in the JOINTS whitelist in ExportBodiesToURDF.py)."
             )
-        origin_mm = cad.get("axis_origin_local_mm")
-        axis_dir = cad.get("axis_dir_local_unit")
-        if origin_mm is None or axis_dir is None:
+        axis_dir = _cad_axis_dir(cad)
+        origin_mm = cad.get("axis_origin_local_mm")  # may be None for new schema
+        if axis_dir is None:
             raise ValueError(
-                f"Joint {cad_name!r} is missing axis_origin_local_mm or "
-                f"axis_dir_local_unit in the export."
+                f"Joint {cad_name!r} is missing axis_dir_world or axis_dir_local_unit in the export."
             )
         lim = cad.get("limits_rad") or {}
         lim_min_rad = lim.get("min")
@@ -741,11 +752,12 @@ def generate(export: dict, cfg: dict, out_path: Path):
 
     # Offsets between successive joints, in LAL (leg-assembly-local) frame
     # (== URDF link frame since rpy_z_deg only acts at the shoulder joint).
+    # For new-schema joints without axis_origin_local_mm, origins come from
+    # construction points; default to [0,0,0] so the sub() doesn't fail.
     for i in range(1, len(joint_defs)):
-        joint_defs[i]["offset_from_parent_mm"] = sub(
-            joint_defs[i]["origin_local_mm"],
-            joint_defs[i - 1]["origin_local_mm"],
-        )
+        origin_cur = joint_defs[i]["origin_local_mm"] or [0.0, 0.0, 0.0]
+        origin_prev = joint_defs[i - 1]["origin_local_mm"] or [0.0, 0.0, 0.0]
+        joint_defs[i]["offset_from_parent_mm"] = sub(origin_cur, origin_prev)
 
     # --- per-side offsets in normalized (world-aligned) frame ---
     # The leg-assembly normalization in the exporter (E1-E3) aligned the
@@ -875,7 +887,9 @@ def generate(export: dict, cfg: dict, out_path: Path):
     urdf.comment("BASE LINK")
     base_cfg = cfg["base_link"]
     base_occ = find_occurrence(occs, "FlexibleSkeleton:1")
-    mass, com, inertia = get_physics(base_occ, fallback_mass=0.5)
+    mass, com, inertia = get_physics(
+        base_occ, fallback_mass=0.5, comp_name="FlexibleSkeleton:1"
+    )
     # Fusion only knows about the printed chassis; the electronics live in
     # config (see base_link.extra_mass_kg). COM/inertia stay Fusion's: the
     # electronics are roughly co-located with the chassis centroid, so the
@@ -1169,7 +1183,9 @@ def generate(export: dict, cfg: dict, out_path: Path):
                 if link_occ_path
                 else None
             )
-            mass, com, inertia = get_physics(link_occ, fallback_mass=0.05)
+            mass, com, inertia = get_physics(
+                link_occ, fallback_mass=0.05, comp_name=mesh_name
+            )
             # link1 hosts the hip servo; link3 hosts the knee servo.
             # Add the physical servo mass so dynamics match the real robot.
             # CoM stays at the structural centroid (good enough for sim fidelity).
