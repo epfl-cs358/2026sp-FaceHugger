@@ -17,7 +17,7 @@ LEG_SERVO_CHANNEL[4][3] = {
 
 This is the canonical channel map; it is also reproduced in the [Servo Channels and Hardware](../conventions.md#servo-channels-and-hardware) section of the main conventions page.
 
-The firmware leg order is `FR=0, FL=1, RR=2, RL=3`, and `RR/RL` ("rear") are the same physical legs the URDF and Python code call `BR/BL` ("back"). The translation table is canonical in [`code/simulation/docs/MERGE_AND_CONVENTION.md`](https://github.com/EPFL-FaceHugger/2026sp-FaceHugger/blob/main/code/simulation/docs/MERGE_AND_CONVENTION.md) §5:
+The firmware leg order is `FR=0, FL=1, RR=2, RL=3`, and `RR/RL` ("rear") are the same physical legs the URDF and Python code call `BR/BL` ("back"). The translation table lives in [`kinematics.md`](kinematics.md):
 
 | Firmware leg id | Firmware name | URDF id | Full name |
 |:---:|:---:|:---:|---|
@@ -77,6 +77,6 @@ See [Roadmap: Servo numbering alignment](../roadmap.md#servo-numbering-alignment
 ## Related pages
 
 - [Conventions](../conventions.md) — leg naming, joint axes, channel table, calibration model.
-- [`code/simulation/docs/MERGE_AND_CONVENTION.md`](https://github.com/EPFL-FaceHugger/2026sp-FaceHugger/blob/main/code/simulation/docs/MERGE_AND_CONVENTION.md) — leg naming convention authority, URDF source-of-truth rules.
+- [Kinematics conventions](kinematics.md) — leg naming convention authority, URDF source-of-truth rules.
 - [Motion engine](motion-engine.md) — `translateToServo`, `applyInvert`, `clampClipServos`.
 - [Roadmap](../roadmap.md) — servo numbering alignment as an open thread.
