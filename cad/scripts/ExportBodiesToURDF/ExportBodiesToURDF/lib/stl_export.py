@@ -1,4 +1,4 @@
-# fusion_stl_export.py — Fusion-dependent STL orchestration.
+# stl_export.py — Fusion-dependent STL orchestration.
 # Imports adsk (unavoidable — calls exportManager and walks bRepBodies).
 # The local-frame landmark finders (_find_landmark_pos_mm,
 # _find_landmark_in_component) stay here because they walk the live Fusion
@@ -91,6 +91,19 @@ def _find_landmark_in_component(component, landmark_name):
     return None
 
 
+def _find_json_node(occurrences_json, path):
+    """Return the JSON occurrence node at `path` (slash-separated), or None."""
+    parts = path.split("/")
+    nodes = occurrences_json
+    node = None
+    for part in parts:
+        node = next((n for n in nodes if n.get("name") == part), None)
+        if node is None:
+            return None
+        nodes = node.get("children", [])
+    return node
+
+
 def _export_one(mgr, entity, filename):
     """Common STL export call. `entity` is an Occurrence or BRepBody."""
     opts = mgr.createSTLExportOptions(entity, filename)
@@ -165,6 +178,21 @@ def export_stls(design, root, occurrences_json, mesh_dir):
                     continue
                 _export_one(mgr, target_body, filename)
                 landmark = rule.get("origin_landmark")
+                if not landmark:
+                    # Auto-detect: scan occurrence's construction points for "ExportOrigin" substring
+                    occurrences_json_node = (
+                        _find_json_node(occurrences_json, matching_paths[0])
+                        if matching_paths
+                        else None
+                    )
+                    for pt_entry in (
+                        occurrences_json_node.get("points") or []
+                        if occurrences_json_node
+                        else []
+                    ):
+                        if "ExportOrigin" in pt_entry.get("name", ""):
+                            landmark = pt_entry["name"]
+                            break
                 shift_mm = [0.0, 0.0, 0.0]
                 if landmark:
                     pos = None
