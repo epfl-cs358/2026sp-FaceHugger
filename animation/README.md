@@ -33,7 +33,9 @@ under plain Python via `pytest.importorskip("bpy")`.
 
 - `fh_rigged_latest.blend` — the animation library (rig + all authored clips).
   Built/updated by `facehugger.py blender --rigged`; edited by the clip panel.
-- `SERVO_ID_CONVENTION.md` — servo ID / channel mapping between URDF links and
-  firmware `LEG_SERVO_CHANNEL`.
 - `poses.json` — committed pose library consumed by `fh_clip_panel.py`.
 - `convention.json` — servo math + channel table for the exporter and parity test.
+
+Servo ID / channel conventions (URDF link names, firmware `LEG_SERVO_CHANNEL`,
+the still-open `servo_id` proposal) are documented in
+[`wiki/reference/firmware/servo-conventions.md`](../wiki/reference/firmware/servo-conventions.md).

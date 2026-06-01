@@ -2,5 +2,6 @@ title: Firmware
 nav:
   - index.md
   - motion-engine.md
+  - servo-conventions.md
   - fsm-states.md
   - csv-diagnostics.md
