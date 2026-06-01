@@ -11,14 +11,10 @@ import math
 import sys
 from pathlib import Path
 
+import pytest  # noqa: F401  (used by skip branch in test_interpolate_real_clip)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from firmware_port.clip_loader import (
-    DEFAULT_CLIPS_H,
-    get_clip_by_name,
-    load_clips_all_h,
-)
 from firmware_port.clip_player import (
     _interpolate_frame,
     frame_to_joint_targets,
@@ -28,6 +24,8 @@ from firmware_port.servo_convention import (
     NEUTRAL,
     servo_to_radians,
 )
+
+# `sample_clip` is provided by conftest.py — any real clip from the catalog.
 
 
 # ─── frame_to_joint_targets ─────────────────────────────────────────────────
@@ -160,10 +158,13 @@ def test_interpolate_midpoint():
         assert abs(v - 5.0) < 1e-9
 
 
-def test_interpolate_real_clip():
-    """Interpolating within a real clip must not crash and must produce 12 values."""
-    clips = load_clips_all_h(DEFAULT_CLIPS_H)
-    clip = get_clip_by_name(clips, "tiny wiggle")
-    result = _interpolate_frame(clip.frames, elapsed_ms=500)
+def test_interpolate_real_clip(sample_clip):
+    """Interpolating within a real clip must not crash and must produce 12 values.
+    Uses an arbitrary clip from the current catalog (clip set churns with
+    animator workflow; the test should not pin a specific name)."""
+    if not sample_clip.frames:
+        pytest.skip(f"sample clip {sample_clip.name!r} has no frames")
+    mid_ms = sample_clip.duration_ms // 2 if sample_clip.duration_ms else 0
+    result = _interpolate_frame(sample_clip.frames, elapsed_ms=mid_ms)
     assert len(result) == 12
     assert all(isinstance(v, float) for v in result)

@@ -16,25 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from firmware_port.clip_loader import (
     DEFAULT_CLIPS_H,
     get_clip_by_name,
-    load_clips_all_h,
 )
 
-
-@pytest.fixture(scope="module")
-def all_clips():
-    return load_clips_all_h(DEFAULT_CLIPS_H)
-
-
-@pytest.fixture(scope="module")
-def manifest():
-    """clips_manifest.json sits next to clips_all.h and is the export's own
-    record of clip id/name/frame_count/duration_ms. Validate the parsed
-    clips against it rather than hardcoding counts — the clip set changes
-    as animations are authored."""
-    import json
-
-    path = DEFAULT_CLIPS_H.parent / "clips_manifest.json"
-    return json.loads(path.read_text())["clips"]
+# `all_clips`, `manifest`, and `sample_clip` are provided by conftest.py so
+# test_clip_player.py can share them too.
 
 
 def test_clips_all_h_exists():
@@ -89,20 +74,25 @@ def test_frames_in_ascending_order(all_clips):
 
 
 def test_first_frame_lie_down_fr_shoulder(all_clips):
-    """Spot-check FR shoulder first frame of 'lie down and stand up'.
-
-    a[0] = FR shoulder ≈ 45.71 — FR neutral (45) plus the small rest-yaw
-    residual under the uniform-math-space yaw convention (the exporter cancels
-    the rig bone axis_sign). Earlier values: ~14.29 (delta bug), then ~44.29
-    before the axis-cancel fix. See docs/CLIP_SHOULDER_CONVENTION.md.
-    """
-    clip = get_clip_by_name(all_clips, "lie down and stand up")
+    """Spot-check FR shoulder first frame of 'lie down and stand up' — the
+    historical regression value (~45.71 = FR neutral 45 plus the rest-yaw
+    residual under the uniform-math-space yaw convention). If that clip
+    has been retired from the catalog, this regression-guard skips rather
+    than failing, since the value is meaningless without that specific clip.
+    See docs/CLIP_SHOULDER_CONVENTION.md."""
+    try:
+        clip = get_clip_by_name(all_clips, "lie down and stand up")
+    except KeyError:
+        pytest.skip("'lie down and stand up' is no longer in the clip catalog")
     assert abs(clip.frames[0].a[0] - 45.7052) < 0.01
 
 
-def test_get_clip_by_name_case_insensitive(all_clips):
-    clip = get_clip_by_name(all_clips, "Tiny Wiggle")
-    assert clip.name == "tiny wiggle"
+def test_get_clip_by_name_case_insensitive(all_clips, sample_clip):
+    """Lookup is case-insensitive — exercise against an arbitrary real clip
+    rather than a hardcoded name (catalog churns as animations are authored)."""
+    name = sample_clip.name
+    assert get_clip_by_name(all_clips, name.upper()).name == name
+    assert get_clip_by_name(all_clips, name.lower()).name == name
 
 
 def test_get_clip_by_name_not_found(all_clips):
