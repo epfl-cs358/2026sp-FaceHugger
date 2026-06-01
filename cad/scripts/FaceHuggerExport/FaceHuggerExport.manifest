@@ -1,0 +1,13 @@
+{
+    "autodeskProduct": "Fusion",
+    "type": "addin",
+    "id": "FaceHuggerExport",
+    "author": "Marcus Hamelink",
+    "description": {
+        "": "FaceHugger CAD export: URDF bodies and printable STLs"
+    },
+    "version": "0.1.0",
+    "runOnStartup": false,
+    "supportedOS": "windows|mac",
+    "editEnabled": true
+}
