@@ -39,9 +39,9 @@ from lib.config import (
     LEG_ASSEMBLY_OCCURRENCE,
 )
 from lib.formatters import fmt_header, fmt_joints, fmt_message, fmt_tree
-from lib.fusion_joints import _find_leg_assembly_R_la, collect_joints
-from lib.fusion_stl_export import export_stls
-from lib.fusion_traversal import collect_axes, collect_points, identity_matrix, traverse
+from lib.census import _find_leg_assembly_R_la, collect_joints
+from lib.census import collect_axes, collect_points, identity_matrix, traverse
+from lib.stl_export import export_stls
 from lib.manifest import build_mesh_files_manifest
 from lib.verify import verify_against_assembly_hierarchy
 
