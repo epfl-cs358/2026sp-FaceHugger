@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# === Blender-only ===
+# Invoked via: blender --background --python <this file>  (imports real bpy).
 """Headless-Blender regression: baking a clip must be independent of the
 currently-active clip. Guards the bake_clip() mislabel bug (export-review
 findings 2026-05-21 §2). Run via:

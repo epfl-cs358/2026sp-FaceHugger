@@ -1,3 +1,5 @@
+# === Blender-only ===
+# Invoked via: blender --python <this file>
 """
 visualize_fusion_export.py  —  Blender debug scene builder (no rigging)
 
@@ -50,17 +52,17 @@ from mathutils import Matrix, Vector
 # Fusion's STL export writes vertex values in mm, so importing with
 # global_scale=1.0 already lands in the right scale with no conversion. All
 # positions in the JSON are in mm too, so we use them at face value.
-MM_SCALE = 1.0   # mm → Blender units (no conversion; kept for readability)
+MM_SCALE = 1.0  # mm → Blender units (no conversion; kept for readability)
 
-SPHERE_RADIUS_MM = 3.0   # 3 mm markers
+SPHERE_RADIUS_MM = 3.0  # 3 mm markers
 
 ROOT_COLLECTION = "FusionExport"
 MESHES_COLLECTION = "Meshes"
 POINTS_COLLECTION = "Construction Points"
 AXES_COLLECTION = "Axis Origins"
 
-COLOR_POINT = (1.0, 0.0, 0.0, 1.0)   # red
-COLOR_AXIS = (1.0, 0.4, 0.0, 1.0)    # orange
+COLOR_POINT = (1.0, 0.0, 0.0, 1.0)  # red
+COLOR_AXIS = (1.0, 0.4, 0.0, 1.0)  # orange
 
 # Label prefix for the source leg assembly (the one physical leg in the
 # CAD — the other three are virtual and only exist in URDF output).
@@ -119,15 +121,15 @@ def _configure_units():
     shows values in mm. Grid and viewport clipping stay sensible for a
     ~200mm-wide robot."""
     scene = bpy.context.scene
-    scene.unit_settings.system = 'METRIC'
-    scene.unit_settings.scale_length = 0.001   # 1 Blender unit = 1 mm
-    scene.unit_settings.length_unit = 'MILLIMETERS'
+    scene.unit_settings.system = "METRIC"
+    scene.unit_settings.scale_length = 0.001  # 1 Blender unit = 1 mm
+    scene.unit_settings.length_unit = "MILLIMETERS"
     # Nudge viewport clip so the 200mm-scale robot is visible without
     # near-clipping artifacts at default settings.
     for area in bpy.context.screen.areas if bpy.context.screen else []:
-        if area.type == 'VIEW_3D':
+        if area.type == "VIEW_3D":
             for space in area.spaces:
-                if space.type == 'VIEW_3D':
+                if space.type == "VIEW_3D":
                     space.clip_start = 0.1
                     space.clip_end = 10000.0
 
@@ -161,7 +163,7 @@ def make_material(name, rgba):
     principled = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
     if principled is not None:
         principled.inputs["Base Color"].default_value = rgba
-    mat.diffuse_color = rgba   # fallback viewport color (solid shading)
+    mat.diffuse_color = rgba  # fallback viewport color (solid shading)
     return mat
 
 
@@ -197,7 +199,9 @@ def import_stl(stl_path, name, matrix_world, target_collection):
     return obj
 
 
-def add_marker(world_pos_mm, name, material, target_collection, radius_mm=SPHERE_RADIUS_MM):
+def add_marker(
+    world_pos_mm, name, material, target_collection, radius_mm=SPHERE_RADIUS_MM
+):
     """Drop a UV sphere at `world_pos_mm` (mm, world frame) into the target
     collection, assign it the given material. Uses a pre/post object-set diff
     to find the newly-created sphere because `bpy.context.active_object` is
@@ -205,9 +209,11 @@ def add_marker(world_pos_mm, name, material, target_collection, radius_mm=SPHERE
     before = set(bpy.data.objects)
     bpy.ops.mesh.primitive_uv_sphere_add(
         radius=radius_mm,
-        location=(world_pos_mm[0] * MM_SCALE,
-                  world_pos_mm[1] * MM_SCALE,
-                  world_pos_mm[2] * MM_SCALE),
+        location=(
+            world_pos_mm[0] * MM_SCALE,
+            world_pos_mm[1] * MM_SCALE,
+            world_pos_mm[2] * MM_SCALE,
+        ),
         segments=16,
         ring_count=8,
     )
@@ -316,7 +322,7 @@ def import_meshes_from_manifest(export, ctx):
 
     for stl_name, entry in manifest.items():
         if not isinstance(entry, dict) or "parts" not in entry:
-            continue   # skip _servo_role_assignment etc.
+            continue  # skip _servo_role_assignment etc.
 
         # parts[0].occurrence is the body-bearing occurrence; we use it both
         # to scope the landmark lookup (so e.g. LegMountFixedPoint resolves
@@ -334,8 +340,10 @@ def import_meshes_from_manifest(export, ctx):
                 export, landmark, scope_occ_path=first_occ_path
             )
             if world_pos is None:
-                print(f"[warn] landmark {landmark!r} not found in tree; "
-                      f"skipping {stl_name}")
+                print(
+                    f"[warn] landmark {landmark!r} not found in tree; "
+                    f"skipping {stl_name}"
+                )
                 continue
 
         stl_path = ctx.meshes_dir / stl_name
@@ -349,14 +357,12 @@ def import_meshes_from_manifest(export, ctx):
         # the leg assembly, so instance_four_legs picks it up as a source-leg
         # object. Otherwise (chassis / brackets) leave the name plain.
         is_leg_internal = first_occ_path.startswith(LEG_ASSEMBLY_OCC_PREFIX)
-        occ_basename = (first_occ_path.split("/")[-1]
-                        if first_occ_path else chassis_occ)
+        occ_basename = first_occ_path.split("/")[-1] if first_occ_path else chassis_occ
         prefix = f"{LEG_SOURCE_PREFIX}_" if is_leg_internal else ""
         obj_name = f"{prefix}{occ_basename}_{stl_name}"
 
         matrix = Matrix.Translation(Vector(world_pos))
-        if import_stl(stl_path, obj_name, matrix,
-                      ctx.collections[MESHES_COLLECTION]):
+        if import_stl(stl_path, obj_name, matrix, ctx.collections[MESHES_COLLECTION]):
             ctx.meshes_imported += 1
 
 
@@ -392,8 +398,9 @@ def visit_occurrence(occ, path, ctx):
         if pt.get("pos_world_mm") is None:
             continue
         label = _label_name(path, f"{occ['name']}/{pt['name']}")
-        add_marker(pt["pos_world_mm"], label,
-                   ctx.mat_point, ctx.collections[POINTS_COLLECTION])
+        add_marker(
+            pt["pos_world_mm"], label, ctx.mat_point, ctx.collections[POINTS_COLLECTION]
+        )
         ctx.points_placed += 1
 
     # Axis origins → orange spheres
@@ -401,8 +408,9 @@ def visit_occurrence(occ, path, ctx):
         if ax.get("origin_world_mm") is None:
             continue
         label = _label_name(path, f"{occ['name']}/{ax['name']}")
-        add_marker(ax["origin_world_mm"], label,
-                   ctx.mat_axis, ctx.collections[AXES_COLLECTION])
+        add_marker(
+            ax["origin_world_mm"], label, ctx.mat_axis, ctx.collections[AXES_COLLECTION]
+        )
         ctx.axes_placed += 1
 
     for child in occ.get("children", []):
@@ -416,15 +424,17 @@ def visit_root(export, ctx):
         if pt.get("pos_world_mm") is None and pt.get("pos_mm") is None:
             continue
         pos = pt.get("pos_world_mm") or pt.get("pos_mm")
-        add_marker(pos, f"root/{pt['name']}",
-                   ctx.mat_point, ctx.collections[POINTS_COLLECTION])
+        add_marker(
+            pos, f"root/{pt['name']}", ctx.mat_point, ctx.collections[POINTS_COLLECTION]
+        )
         ctx.points_placed += 1
     for ax in export.get("root_axes", []):
         pos = ax.get("origin_world_mm") or ax.get("origin_mm")
         if pos is None:
             continue
-        add_marker(pos, f"root/{ax['name']}",
-                   ctx.mat_axis, ctx.collections[AXES_COLLECTION])
+        add_marker(
+            pos, f"root/{ax['name']}", ctx.mat_axis, ctx.collections[AXES_COLLECTION]
+        )
         ctx.axes_placed += 1
 
     for occ, path in ((o, o["name"]) for o in export.get("occurrences", [])):
@@ -438,21 +448,24 @@ def visit_root(export, ctx):
 
 def _rz_4x4(deg):
     import math
+
     a = math.radians(deg)
     c, s = math.cos(a), math.sin(a)
-    return Matrix((
-        (c, -s, 0.0, 0.0),
-        (s,  c, 0.0, 0.0),
-        (0.0, 0.0, 1.0, 0.0),
-        (0.0, 0.0, 0.0, 1.0),
-    ))
+    return Matrix(
+        (
+            (c, -s, 0.0, 0.0),
+            (s, c, 0.0, 0.0),
+            (0.0, 0.0, 1.0, 0.0),
+            (0.0, 0.0, 0.0, 1.0),
+        )
+    )
 
 
 # Per-leg config. Mirrors yaml legs[] in facehugger_config.yaml — same table
 # the URDF generator uses for placement.
 _LEGS = {
-    "FL": {"side": "L", "rpy_z_deg":   0.0},
-    "FR": {"side": "R", "rpy_z_deg":   0.0},
+    "FL": {"side": "L", "rpy_z_deg": 0.0},
+    "FR": {"side": "R", "rpy_z_deg": 0.0},
     "BR": {"side": "L", "rpy_z_deg": 180.0},
     "BL": {"side": "R", "rpy_z_deg": 180.0},
 }
@@ -466,17 +479,18 @@ def _categorize_pool(pool):
     The classification keys off the occurrence basename baked into the
     object name during import: `FL_<occ_basename>_<stl>`.
     """
+
     def first_match(substr):
         return next((o for o in pool if substr in o.name), None)
 
     return {
-        "bracket_L":      first_match("_MotorMount:1_"),
-        "bracket_R":      first_match("_MotorMountR:1_"),
+        "bracket_L": first_match("_MotorMount:1_"),
+        "bracket_R": first_match("_MotorMountR:1_"),
         "shoulder_servo": first_match("_Servo_Mouser_Model:1_"),
-        "link1_L":        first_match("_Link1L:1_"),
-        "link1_R":        first_match("_Link1R:1_"),
-        "link2":          first_match("_Link2L:1_"),
-        "link3":          first_match("_Link3L:1_"),
+        "link1_L": first_match("_Link1L:1_"),
+        "link1_R": first_match("_Link1R:1_"),
+        "link2": first_match("_Link2L:1_"),
+        "link3": first_match("_Link3L:1_"),
     }
 
 
@@ -534,8 +548,11 @@ def instance_four_legs(export, collections, ctx):
     """
     # 1. Pull the 4 LegMountPointXX world positions from FlexibleSkeleton:1.
     fs = next(
-        (o for o in export.get("occurrences", [])
-         if o.get("name") == "FlexibleSkeleton:1"),
+        (
+            o
+            for o in export.get("occurrences", [])
+            if o.get("name") == "FlexibleSkeleton:1"
+        ),
         None,
     )
     if fs is None:
@@ -546,13 +563,15 @@ def instance_four_legs(export, collections, ctx):
     for pt in fs.get("points", []):
         name = pt.get("name", "")
         if name.startswith(PREFIX) and len(name) > len(PREFIX):
-            corner = name[len(PREFIX):].upper()
+            corner = name[len(PREFIX) :].upper()
             pos = pt.get("pos_world_mm") or pt.get("pos_mm")
             if pos:
                 mounts[corner] = Vector(pos)
     if not all(c in mounts for c in _LEGS):
-        print(f"[instance_legs] need {PREFIX}FR/FL/BR/BL, found {sorted(mounts)}; "
-              f"skipping")
+        print(
+            f"[instance_legs] need {PREFIX}FR/FL/BR/BL, found {sorted(mounts)}; "
+            f"skipping"
+        )
         return
 
     # 2. Source anchor = where leg meshes were imported (BodyToLink1Point world).
@@ -569,8 +588,11 @@ def instance_four_legs(export, collections, ctx):
 
     # 3. Categorize the imported FL_-prefixed source pool.
     meshes_coll = collections[MESHES_COLLECTION]
-    pool = [o for o in list(meshes_coll.objects)
-            if o.name.startswith(LEG_SOURCE_PREFIX + "_")]
+    pool = [
+        o
+        for o in list(meshes_coll.objects)
+        if o.name.startswith(LEG_SOURCE_PREFIX + "_")
+    ]
     sources = _categorize_pool(pool)
 
     # Pull every source out of Meshes/ — each one is a template that gets
@@ -663,7 +685,7 @@ def instance_four_legs(export, collections, ctx):
         for src in leg_pool_by_side[side]:
             if src is None:
                 continue
-            stl_part = src.name.split("_", 2)[-1]   # strip "FL_<occ>_" → keep "<stl>"
+            stl_part = src.name.split("_", 2)[-1]  # strip "FL_<occ>_" → keep "<stl>"
             _copy_obj(
                 src,
                 f"{corner}_{stl_part}",
@@ -672,12 +694,16 @@ def instance_four_legs(export, collections, ctx):
             )
             n_legs_total += 1
 
-    print(f"[instance_legs] Brackets/ has {n_brackets}, "
-          f"Shoulders/ has {n_shoulders}, "
-          f"Legs/ has {n_legs_total} parts across 4 corners")
-    print(f"[instance_legs] per-corner rpy_z — "
-          f"FL/FR=0°, BR/BL=180°; side offsets L=({L_offset.x:+.1f}, "
-          f"{L_offset.y:+.1f}, {L_offset.z:+.1f}) mm, R=X-mirror")
+    print(
+        f"[instance_legs] Brackets/ has {n_brackets}, "
+        f"Shoulders/ has {n_shoulders}, "
+        f"Legs/ has {n_legs_total} parts across 4 corners"
+    )
+    print(
+        f"[instance_legs] per-corner rpy_z — "
+        f"FL/FR=0°, BR/BL=180°; side offsets L=({L_offset.x:+.1f}, "
+        f"{L_offset.y:+.1f}, {L_offset.z:+.1f}) mm, R=X-mirror"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -696,8 +722,24 @@ def _script_dir():
 def parse_args():
     """Argparse splits Blender's argv at `--`. Before the `--` are Blender's
     own args; after, our script's args."""
-    default_export = _script_dir() / ".." / ".." / "code" / "simulation" / "generated" / "fusion_export.json"
-    default_meshes = _script_dir() / ".." / ".." / "code" / "simulation" / "generated" / "exported_meshes"
+    default_export = (
+        _script_dir()
+        / ".."
+        / ".."
+        / "code"
+        / "simulation"
+        / "generated"
+        / "fusion_export.json"
+    )
+    default_meshes = (
+        _script_dir()
+        / ".."
+        / ".."
+        / "code"
+        / "simulation"
+        / "generated"
+        / "exported_meshes"
+    )
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--export", type=Path, default=default_export.resolve())
@@ -706,7 +748,7 @@ def parse_args():
 
     argv = sys.argv
     if "--" in argv:
-        argv = argv[argv.index("--") + 1:]
+        argv = argv[argv.index("--") + 1 :]
     else:
         argv = []
     return parser.parse_args(argv)

@@ -1,3 +1,5 @@
+# === Plain Python — no Blender required ===
+# Imported by both the Blender add-on and plain-Python tests.
 """servo_math.py — pure servo-angle conversion helpers (no bpy dependency).
 
 Extracted from fh_clip_panel.py so host-side tests and scripts can import

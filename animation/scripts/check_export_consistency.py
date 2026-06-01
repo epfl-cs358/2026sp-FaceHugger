@@ -1,3 +1,5 @@
+# === Plain Python — no Blender required ===
+# Run as: python <this file>  (or via pytest).
 """Export consistency checker: verifies .h bone angles round-trip to .js
 servo values via _frame_to_servo from animation/lib/servo_math.py.
 

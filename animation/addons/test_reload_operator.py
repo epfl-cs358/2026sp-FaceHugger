@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# === Plain Python — no Blender required ===
+# Run via pytest. Stubs `bpy` at import time.
 """Pure-Python test for the FH_OT_reload_panel operator — the in-place
 "Reload Add-on" button so animators don't have to relaunch Blender after
 editing fh_clip_panel.py.

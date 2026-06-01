@@ -1,3 +1,5 @@
+# === Blender-only ===
+# Imported by the Blender scene builders; requires `mathutils`.
 """urdf_parser.py — shared URDF reader for Blender scene builders.
 
 Extracted from visualize_urdf.py and urdf_to_blender_rigged.py to eliminate

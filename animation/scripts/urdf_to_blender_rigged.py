@@ -1,3 +1,5 @@
+# === Blender-only ===
+# Invoked via: blender --python <this file>
 """
 urdf_to_blender_rigged.py — Armature-based URDF importer with IK
 

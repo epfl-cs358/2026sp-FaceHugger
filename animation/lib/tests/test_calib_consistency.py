@@ -1,3 +1,5 @@
+# === Plain Python — no Blender required ===
+# Run via pytest.
 """Cross-repo CALIB consistency check.
 
 Asserts that servo_math._CALIB_THIGH / _CALIB_KNEE match the #define values
