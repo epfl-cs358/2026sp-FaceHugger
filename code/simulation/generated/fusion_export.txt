@@ -14,7 +14,7 @@ Joint whitelist : Link1Revolute, Link2Revolute, Link3Revolute
     [+1.0000, +0.0000, -0.0000]
     [+0.0000, +0.0000, +1.0000]
   Applied to: joint axis_dir_local_unit and axis_origin_local_mm (leg-assembly-internal joints only).
-  Mesh STLs are produced by combined-rule, which already bakes world-frame vertices.
+  Mesh STLs are produced by combined-rule, already bakes world-frame vertices.
 
 FlexibleSkeleton:1 [xref]
   parent_origin_mm: (0.0, 0.0, 0.0)  world_origin_mm: (0.0, 0.0, 0.0)

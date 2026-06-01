@@ -38,8 +38,8 @@ body   BehindBridge
 body   LipoCage
 
 # --- Leg-assembly bodies (cad/leg/) ---
-leg    LegMountL    +X
-leg    LegMountR    +X
+# leg    LegMountL     +X
+# leg    LegMountR     +X
 leg    Link1L        -X
 leg    Link1R       -X
 leg    Link2        +Z
@@ -47,7 +47,7 @@ leg    Link3        -X
 
 # === EXPORT LOG (auto-managed below — do not edit) ===
 
-# Last export : 2026-05-17 12:09:49 CEST
+# Last export : 2026-06-01 14:04:17 CEST
 # Source doc  : FullBodyAssembly
 # Refinement  : MeshRefinementHigh (binary STL, design units)
 # Exported    : 10 body·ies
