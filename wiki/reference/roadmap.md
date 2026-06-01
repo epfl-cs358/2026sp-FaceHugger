@@ -205,6 +205,6 @@ If servo overheating or current spikes become an issue, add a slew-rate limiter 
 | `doc/animation-pipeline/animation-pipeline-roadmap.md` | Task breakdown, ownership, sequencing, effort estimates. |
 | [Servo conventions](firmware/servo-conventions.md) | Servo numbering proposal and firmware-alignment checklist. |
 | `code/simulation/kinematics.py` | `ik_v2` canonical implementation (to port to C for T1). |
-| `code/firmware/CLIP_PLAYER_TESTING.md` | Test suite for the current joint-angle clip player (reference for `.fhc` test structure). |
+| [`guide/toolchain/flashing.md`](../guide/toolchain/flashing.md) | Build-flash-bench-test walkthrough for the current joint-angle clip player; reference for the `.fhc` test structure when it lands. |
 
 All design decisions in these documents are locked, settled through grill-me sessions and ADRs. Implement as written; if you find a contradiction, check `CONTEXT.md` for the latest resolution.
