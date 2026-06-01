@@ -64,7 +64,7 @@ every `/log` response so the contents are self-describing.
 **Leg-naming note.** Columns use the firmware convention (`fr`/`fl`/`br`/`bl`
 = `leg1..leg4` in `SpinalCord`), *not* the URDF/Python convention
 (`fl`/`fr`/`bl`/`br`). Downstream Python plotting code should remap names
-explicitly. See [`code/simulation/docs/MERGE_AND_CONVENTION.md`](../../simulation/docs/MERGE_AND_CONVENTION.md)
+explicitly. See [`wiki/reference/firmware/kinematics.md`](../../../wiki/reference/firmware/kinematics.md)
 for the full convention table.
 
 **Precision note.** Servo angles are stored internally as `uint16_t` (whole

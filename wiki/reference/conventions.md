@@ -189,7 +189,7 @@ When any of these must change, regenerate `clips_all.h` from source `.blend` fil
 - `code/firmware/src/nervous_system/motion_math.cpp`: `translateToServo()` source
 - `code/firmware/src/nervous_system/spinal_cord.cpp`: `NEUTRAL[]` array
 - `code/firmware/src/shared/config.h`: PCA9685 channel assignments and pulse range
-- `code/simulation/docs/MERGE_AND_CONVENTION.md`: the rest-pose definition and per-leg shoulder derivation
+- [Kinematics conventions](firmware/kinematics.md): rest-pose definition and per-leg shoulder derivation
 - `doc/animation-pipeline/urdf-conventions.md`: joint origins, axis vectors, axis flip rationale
 - [Servo conventions](firmware/servo-conventions.md): servo ID proposal and channel-table reconciliation
 - `code/API_SPEC.md`: WebSocket protocol (gait selection, clip playback, body pose)

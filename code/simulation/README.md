@@ -122,7 +122,7 @@ All semantic parameters live in [facehugger_config.yaml](facehugger_config.yaml)
 
 - `base_link.mesh` — chassis STL filename.
 - `leg_template.links.<role>.mesh` — per-link STL filename template (`{side}` substituted from `legs[].side`).
-- `legs[]` — per-leg `id`, `mount_point`, `side`. Shoulder rest, limits, and back-of-pair flip are no longer in yaml — they're derived from the Fusion JSON's `Link1Revolute.limits_rad` and from `leg_id` per [docs/MERGE_AND_CONVENTION.md](docs/MERGE_AND_CONVENTION.md).
+- `legs[]` — per-leg `id`, `mount_point`, `side`. Shoulder rest, limits, and back-of-pair flip are no longer in yaml — they're derived from the Fusion JSON's `Link1Revolute.limits_rad` and from `leg_id` per [wiki/reference/firmware/kinematics.md](../../wiki/reference/firmware/kinematics.md).
 - `servo` — mass, effort, velocity, optional `visual_flip_rpy_deg`.
 
 Angles are in degrees in the yaml; `generate_urdf.py` converts to the URDF's radians.
@@ -143,7 +143,7 @@ code/simulation/
   facehugger.py                 CLI entry point — runs the packages below via `python -m`
   facehugger_config.yaml        semantic config (hand-edited)
   README.md                     this file
-  docs/                         pipeline reference (MERGE_AND_CONVENTION, SIM_PIPELINE)
+  docs/                         (empty after the 2026-06 wiki migration; kept as a placeholder)
   pybullet_sim/                 runtime package
     simulate.py                 PyBullet simulator front-end (constants/helpers/kinematics/gaits)
     gaits.py kinematics.py helpers.py constants.py sim_monitor.py
@@ -166,5 +166,5 @@ code/simulation/
 ## Design notes
 
 - The `origin_shift_mm` field in `mesh_files` records the landmark each STL was re-origined against — the URDF generator consumes it so leg meshes sit at their joint origins with `<origin xyz="0 0 0"/>`.
-- Per-leg shoulder rest is derived from the FL Fusion-export rest via the formula in [docs/MERGE_AND_CONVENTION.md §4](docs/MERGE_AND_CONVENTION.md): `FR = -FL`, `BL = wrap_pi(FL + π)`, `BR = -wrap_pi(FL + π)`. With the current CAD's `FL = -π/4`, the four legs sit at `FL=-45°, FR=+45°, BL=+135°, BR=-135°` in world space. URDF limits are symmetric `[-90°, +90°]` about each leg's rest.
+- Per-leg shoulder rest is derived from the FL Fusion-export rest via the formula in [wiki/reference/firmware/kinematics.md](../../wiki/reference/firmware/kinematics.md): `FR = -FL`, `BR = wrap_pi(FL + π)`, `BL = -wrap_pi(FL + π)`. With the current CAD's `FL = -π/4`, the four legs sit at `FL=-45°, FR=+45°, BR=+135°, BL=-135°` in world space. URDF limits are symmetric `[-90°, +90°]` about each leg's rest.
 - The geometric back-of-pair flip (chassis bracket positioning) is `0°` for front legs (`fl`, `fr`) and `180°` for back legs (`bl`, `br`), derived from `leg_id` rather than carried in yaml.

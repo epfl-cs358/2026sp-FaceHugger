@@ -91,7 +91,7 @@ npm run ios | npm run android | npm run web
 
 ## Conventions to respect
 
-- **Leg naming**: URDF/Python use `fl`, `fr`, `bl`, `br`. The firmware historically uses `fr`, `fl`, `rr`, `rl` (with `rr`/`rl` = "rear" = `br`/`bl`). Translation table is in [code/simulation/docs/MERGE_AND_CONVENTION.md §5](code/simulation/docs/MERGE_AND_CONVENTION.md). Don't propagate firmware leg names into Python or Blender code.
+- **Leg naming**: URDF/Python use `fl`, `fr`, `bl`, `br`. The firmware historically uses `fr`, `fl`, `rr`, `rl` (with `rr`/`rl` = "rear" = `br`/`bl`). Translation table is in [wiki/reference/firmware/kinematics.md](wiki/reference/firmware/kinematics.md). Don't propagate firmware leg names into Python or Blender code.
 - **Per-leg shoulder rest** is derived from FL via `FR = -FL`, `BL = wrap_pi(FL + π)`, `BR = -wrap_pi(FL + π)`. Don't add per-leg rest values to `facehugger_config.yaml` — that pattern was removed during the convention merge.
 - **Servo numbering**: the firmware uses `LEG_SERVO_CHANNEL[leg][joint]` in [code/firmware/src/shared/config.h](code/firmware/src/shared/config.h); a flat `servo_id = leg_idx*3 + joint_idx` scheme was proposed for the export path but has not been adopted. The `servo_mapping.yaml` bridge file is design intent, not current state. See [wiki/reference/firmware/servo-conventions.md](wiki/reference/firmware/servo-conventions.md) for the full reconciliation and the still-open alignment thread — flag the gap if you're about to bake `.gait` files.
 - **Mesh placement**: leg STLs are re-origined in the Fusion exporter to their URDF joint landmarks, so the URDF emits `<origin xyz="0 0 0"/>` on visuals. The `origin_shift_mm` field in `fusion_export.json`'s `mesh_files` records which landmark was used.
@@ -107,7 +107,7 @@ npm run ios | npm run android | npm run web
 
 Deep "why" content is in markdown files alongside the code, not in the code itself:
 
-- [code/simulation/docs/MERGE_AND_CONVENTION.md](code/simulation/docs/MERGE_AND_CONVENTION.md) — leg-naming, shoulder convention A, URDF θ=0 = Fusion rest pose, why a hand-written `kinematics.py` was rejected in favor of URDF-derived geometry.
+- [wiki/reference/firmware/kinematics.md](wiki/reference/firmware/kinematics.md) — leg-naming, shoulder Convention A, URDF θ=0 = Fusion rest pose, the URDF generation + PyBullet runtime walkthrough (merged from the former `MERGE_AND_CONVENTION.md` + `SIM_PIPELINE.md`).
 - [wiki/reference/animation/urdf-pipeline.md](wiki/reference/animation/urdf-pipeline.md) — CAD-side decisions and the URDF pipeline (merged from the former `PIPELINE_SPEC.md` + `URDF_PIPELINE.md`).
 - [wiki/reference/animation/blender-rig.md](wiki/reference/animation/blender-rig.md) — animator-facing reference for the Blender rig (the former `API_ANIMATION_SPEC.md`).
 - [animation/scripts/README.md](animation/scripts/README.md) — per-script role table, rig anatomy (bone roll / IK chain / foot-target parenting), and the `fh_clip_panel` clip model.
