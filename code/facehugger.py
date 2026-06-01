@@ -66,6 +66,7 @@ def _darwin_app_candidates(version):
         f"/Applications/Blender {version}.app/Contents/MacOS/Blender",
         f"/Applications/Blender-{version}.app/Contents/MacOS/Blender",
         f"/Applications/Blender{version}.app/Contents/MacOS/Blender",
+        "/Applications/Blender.app/Contents/MacOS/Blender",
     ]
 
 
