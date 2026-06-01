@@ -198,33 +198,82 @@ def _back_of_pair_rpy_z_deg(leg_id: str) -> float:
     return 180.0 if leg_id.startswith("b") else 0.0
 
 
-def _foot_tip_from_stl(stl_path: Path, y_tol_mm: float = 2.0) -> list:
-    """Centroid (in mm) of leg_lower STL vertices within y_tol_mm of max Y.
+def _foot_tip_from_stl(stl_path: Path, tol_mm: float = 2.0) -> list:
+    """Centroid (in mm) of leg_lower STL vertices within tol_mm of the vertex
+    farthest from the origin.
 
-    The exporter writes STLs in the leg-assembly-local frame. The lower-leg
-    mesh's far +Y end is the foot tip; the centroid of the few vertices at the
-    max-Y plane gives a stable tip estimate until a dedicated FootTipPoint
-    construction point exists in Fusion.
+    The STL is re-origined to its URDF joint landmark (the knee joint) by the
+    Fusion exporter, so the foot tip is the most distal point from that origin.
     """
+    import math as _math
+
     with open(stl_path, "rb") as f:
         f.read(80)
         n = struct.unpack("<I", f.read(4))[0]
         verts = []
-        y_max = float("-inf")
+        d_max = 0.0
         for _ in range(n):
             f.read(12)
             for _ in range(3):
                 v = struct.unpack("<fff", f.read(12))
                 verts.append(v)
-                if v[1] > y_max:
-                    y_max = v[1]
+                d = v[0] * v[0] + v[1] * v[1] + v[2] * v[2]
+                if d > d_max:
+                    d_max = d
             f.read(2)
-    tip_pts = [v for v in verts if v[1] >= y_max - y_tol_mm]
+    d_max = _math.sqrt(d_max)
+    tip_pts = [
+        v
+        for v in verts
+        if _math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) >= d_max - tol_mm
+    ]
     return [
         round(sum(v[0] for v in tip_pts) / len(tip_pts), 3),
         round(sum(v[1] for v in tip_pts) / len(tip_pts), 3),
         round(sum(v[2] for v in tip_pts) / len(tip_pts), 3),
     ]
+
+
+def _foot_tip_from_export(export: dict) -> list | None:
+    """Foot tip in link3-local frame (mm) from fusion_export.json construction points.
+
+    Prefers this over the STL heuristic when present.  Mirrors the math in
+    urdf_to_blender_rigged.load_foot_tip_in_link3_frame:
+      delta = Link3TipPoint - Link2ToLink3Axis  (source frame)
+      result = Rz(90°) @ delta  →  (x, y, z) = (−dy, dx, dz)
+    """
+
+    knee_mm = None
+    foot_mm = None
+
+    def _walk(node: dict) -> None:
+        nonlocal knee_mm, foot_mm
+        for axis in node.get("axes", []) or []:
+            if axis.get("name") == "Link2ToLink3Axis" and knee_mm is None:
+                xyz = axis.get("origin_mm")
+                if xyz and len(xyz) >= 3:
+                    knee_mm = xyz[:3]
+        for point in node.get("points", []) or []:
+            if point.get("name") == "Link3TipPoint" and foot_mm is None:
+                xyz = point.get("pos_mm")
+                if xyz and len(xyz) >= 3:
+                    foot_mm = xyz[:3]
+        if knee_mm is None or foot_mm is None:
+            for child in node.get("children", []) or []:
+                _walk(child)
+
+    for occ in export.get("occurrences", []) or []:
+        _walk(occ)
+        if knee_mm is not None and foot_mm is not None:
+            break
+
+    if knee_mm is None or foot_mm is None:
+        return None
+
+    dx = foot_mm[0] - knee_mm[0]
+    dy = foot_mm[1] - knee_mm[1]
+    dz = foot_mm[2] - knee_mm[2]
+    return [round(-dy, 3), round(dx, 3), round(dz, 3)]
 
 
 # ---------------------------------------------------------------------------
@@ -919,13 +968,17 @@ def generate(export: dict, cfg: dict, out_path: Path):
     # Emit a machine-parseable comment block with the raw leg-assembly-local
     # Points. Downstream tools (simulate) read this to avoid re-opening
     # fusion_export.json — the URDF remains the single source of truth for
-    # the leg chain geometry. After re-origin, leg_lower.stl's max +Y is
-    # still the foot tip but now relative to Link2ToLink3Point (the new
-    # local origin), not the leg-assembly origin — the centroid calculation
-    # still works since we only need the furthest-+Y vertex cluster.
-    tip_mm = _foot_tip_from_stl(
-        GENERATED_DIR / mesh_dir.rstrip("/\\") / "leg_lower.stl"
-    )
+    # the leg chain geometry.  Prefer the explicit Fusion construction point
+    # (Link3TipPoint relative to Link2ToLink3Axis, rotated by Rz(90°));
+    # fall back to the STL distance-from-origin heuristic when absent.
+    tip_mm = _foot_tip_from_export(export)
+    if tip_mm is not None:
+        tip_source = "Link3TipPoint construction point, in link3 frame"
+    else:
+        tip_mm = _foot_tip_from_stl(
+            GENERATED_DIR / mesh_dir.rstrip("/\\") / "leg_lower.stl"
+        )
+        tip_source = "leg_lower.stl max-distance-from-origin centroid, in link3 frame"
     pts_comment = [
         "LEG ASSEMBLY METADATA (mm, leg-assembly-local frame)",
         f"  BodyToLink1Point : {joint_defs[0]['origin_local_mm'][0]:.3f} "
@@ -937,8 +990,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
         f"  Link2ToLink3Point: {joint_defs[2]['origin_local_mm'][0]:.3f} "
         f"{joint_defs[2]['origin_local_mm'][1]:.3f} "
         f"{joint_defs[2]['origin_local_mm'][2]:.3f}",
-        f"  FootTip (leg_lower.stl max +Y centroid, in link3 frame): "
-        f"{tip_mm[0]:.3f} {tip_mm[1]:.3f} {tip_mm[2]:.3f}",
+        f"  FootTip ({tip_source}): {tip_mm[0]:.3f} {tip_mm[1]:.3f} {tip_mm[2]:.3f}",
     ]
     urdf.comment("\n       ".join(pts_comment))
 

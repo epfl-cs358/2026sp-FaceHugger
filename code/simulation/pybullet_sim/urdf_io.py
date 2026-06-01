@@ -69,30 +69,36 @@ def _load_urdf_joints(urdf_path):
     return out
 
 
-def _stl_foot_tip_m(stl_path, y_tol_mm=2.0):
-    """Centroid (in metres) of leg_lower STL vertices within y_tol_mm of max Y.
+def _stl_foot_tip_m(stl_path, tol_mm=2.0):
+    """Centroid (in metres) of leg_lower STL vertices within tol_mm of the
+    vertex farthest from the origin.
 
-    ASSUMPTION: STL vertices are in the leg-assembly root frame (shoulder at
-    origin). Verified by stacking alignment: leg_shoulder.stl y in [-13, 111],
-    leg_upper.stl y in [51, 172] (matches hip origin at 51), leg_lower.stl y in
-    [144, 232] (matches knee origin at 146). If the pipeline ever re-centres
-    meshes into their own link frames this function will silently return the
-    wrong tip -- sanity-check against NEUTRAL_FOOT z after any pipeline change.
+    The STL is re-origined to its URDF joint landmark (the knee joint) by the
+    Fusion exporter, so the foot tip is the most distal point from that origin —
+    not the max-Y extreme (which would be the knee end after re-origining).
     """
     with open(stl_path, "rb") as f:
         f.read(80)
         n = struct.unpack("<I", f.read(4))[0]
         verts = []
-        y_max = float("-inf")
+        d_max = 0.0
         for _ in range(n):
             f.read(12)
             for _ in range(3):
                 v = struct.unpack("<fff", f.read(12))
                 verts.append(v)
-                if v[1] > y_max:
-                    y_max = v[1]
+                d = v[0] * v[0] + v[1] * v[1] + v[2] * v[2]
+                if d > d_max:
+                    d_max = d
             f.read(2)
-    tip_pts = [v for v in verts if v[1] >= y_max - y_tol_mm]
+    import math as _math
+
+    d_max = _math.sqrt(d_max)
+    tip_pts = [
+        v
+        for v in verts
+        if _math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) >= d_max - tol_mm
+    ]
     cx = sum(v[0] for v in tip_pts) / len(tip_pts) / 1000.0
     cy = sum(v[1] for v in tip_pts) / len(tip_pts) / 1000.0
     cz = sum(v[2] for v in tip_pts) / len(tip_pts) / 1000.0
