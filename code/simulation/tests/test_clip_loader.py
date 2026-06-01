@@ -1,4 +1,4 @@
-# code/simulation/firmware_port/tests/test_clip_loader.py
+# code/simulation/tests/test_clip_loader.py
 """Tests for clip_loader.py.
 
 Uses the real animation/exported_clips/clips_all.h as test fixture —

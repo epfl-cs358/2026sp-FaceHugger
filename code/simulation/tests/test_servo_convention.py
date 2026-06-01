@@ -1,4 +1,4 @@
-# code/simulation/firmware_port/tests/test_servo_convention.py
+# code/simulation/tests/test_servo_convention.py
 """Property tests for `translate_to_servo`.
 
 Earlier versions of this file kept a verbatim copy of the firmware
