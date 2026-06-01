@@ -27,8 +27,9 @@ _REQUIRED_JOINTS = ("Link1Revolute", "Link2Revolute", "Link3Revolute")
 
 
 def verify_against_assembly_hierarchy(occurrences_json, joints, mesh_files):
-    """Lightweight diagnostic against ASSEMBLY_HIERARCHY.md. Returns a list of
-    human-readable lines (✓/✗ rows). Does not fail the export — just reports."""
+    """Lightweight diagnostic against the FaceHugger assembly hierarchy spec
+    (wiki/guide/assembly.md). Returns a list of human-readable lines (✓/✗
+    rows). Does not fail the export — just reports."""
     fs = next(
         (o for o in occurrences_json if o.get("name") == "FlexibleSkeleton:1"),
         None,

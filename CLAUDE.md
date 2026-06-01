@@ -108,8 +108,8 @@ npm run ios | npm run android | npm run web
 Deep "why" content is in markdown files alongside the code, not in the code itself:
 
 - [code/simulation/docs/MERGE_AND_CONVENTION.md](code/simulation/docs/MERGE_AND_CONVENTION.md) — leg-naming, shoulder convention A, URDF θ=0 = Fusion rest pose, why a hand-written `kinematics.py` was rejected in favor of URDF-derived geometry.
-- [code/simulation/docs/PIPELINE_SPEC.md](code/simulation/docs/PIPELINE_SPEC.md) — CAD-side decisions: mirror plane, mount-point naming, joint zero/limits, mesh orientation.
-- [code/simulation/docs/API_ANIMATION_SPEC.md](code/simulation/docs/API_ANIMATION_SPEC.md) — animator-facing reference for the Blender rig.
+- [wiki/reference/animation/urdf-pipeline.md](wiki/reference/animation/urdf-pipeline.md) — CAD-side decisions and the URDF pipeline (merged from the former `PIPELINE_SPEC.md` + `URDF_PIPELINE.md`).
+- [wiki/reference/animation/blender-rig.md](wiki/reference/animation/blender-rig.md) — animator-facing reference for the Blender rig (the former `API_ANIMATION_SPEC.md`).
 - [animation/scripts/README.md](animation/scripts/README.md) — per-script role table, rig anatomy (bone roll / IK chain / foot-target parenting), and the `fh_clip_panel` clip model.
 - [doc/animation-pipeline/leg-coordinates.md](doc/animation-pipeline/leg-coordinates.md) — design canon for the upcoming `.fhc` on-board animation format. Read before writing any code touching the new format.
 - [doc/reorg-plan-2026-05-13.md](doc/reorg-plan-2026-05-13.md) — drafted but deferred layout reshuffle of `code/simulation/` and `animation/`. Worth a glance before suggesting structural changes so you don't propose a conflicting layout.
