@@ -1,0 +1,9 @@
+usage: generate_urdf.py [-h] [--export EXPORT] [--config CONFIG] [--out OUT]
+
+Generate FaceHugger URDF from Fusion export
+
+options:
+  -h, --help       show this help message and exit
+  --export EXPORT  Path to fusion_export.json (default: <REPO>/code/simulation/generated/fusion_export.json)
+  --config CONFIG  Path to facehugger_config.yaml (default: <REPO>/code/simulation/facehugger_config.yaml)
+  --out OUT        Output URDF path (default: <REPO>/code/simulation/generated/facehugger.urdf)
