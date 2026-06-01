@@ -143,7 +143,7 @@ code/simulation/
   facehugger.py                 CLI entry point — runs the packages below via `python -m`
   facehugger_config.yaml        semantic config (hand-edited)
   README.md                     this file
-  docs/                         pipeline docs (PIPELINE_SPEC, ASSEMBLY_HIERARCHY, …)
+  docs/                         pipeline reference (MERGE_AND_CONVENTION, SIM_PIPELINE)
   pybullet_sim/                 runtime package
     simulate.py                 PyBullet simulator front-end (constants/helpers/kinematics/gaits)
     gaits.py kinematics.py helpers.py constants.py sim_monitor.py
