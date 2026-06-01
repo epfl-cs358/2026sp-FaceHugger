@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# === Blender-only ===
+# Invoked via: blender --background --python <this file>
 """Headless re-export of every clip in the open .blend to
 animation/exported_clips/<clip>/{<clip>.js,.h,.csv}.
 

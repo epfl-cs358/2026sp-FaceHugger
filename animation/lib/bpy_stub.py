@@ -1,3 +1,6 @@
+# === Plain Python — no Blender required ===
+# Test utility — stubs `bpy` in sys.modules so addons can be import-tested
+# without launching Blender.
 """Shared bpy shim for importing Blender add-ons under plain Python."""
 
 import sys

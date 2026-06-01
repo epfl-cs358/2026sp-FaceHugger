@@ -1,3 +1,5 @@
+# === Blender-only ===
+# Invoked via: blender --python <this file>
 """
 visualize_urdf.py — Blender debug scene builder driven by the URDF (no rigging)
 

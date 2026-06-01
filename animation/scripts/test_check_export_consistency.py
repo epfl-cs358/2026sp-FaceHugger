@@ -1,3 +1,5 @@
+# === Plain Python — no Blender required ===
+# Run via pytest.
 """Unit test using wiggle clip frame 0 as a known fixture.
 
 Frame 0 of wiggle.h (bone order: fl_link1..3, fr_link1..3, bl_link1..3, br_link1..3):

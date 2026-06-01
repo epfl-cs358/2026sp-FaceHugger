@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# === Plain Python — no Blender required ===
+# Run as: python <this file>  (or via pytest). Stubs `bpy` at import time.
 """Pure-Python parity test — the lockstep contract between the Blender
 exporter's `_frame_to_servo` and the firmware's `tickGait` →
 `translateToServo` switch at origin/feat/hardware-integration-milestone-2

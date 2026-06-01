@@ -1,3 +1,6 @@
+# === Blender-only ===
+# Installed via Edit > Preferences > Add-ons (or reloaded in place by
+# the FH_OT_reload_panel operator).
 """
 fh_clip_panel.py — FaceHugger clip manager (Blender 5.1.1)
 

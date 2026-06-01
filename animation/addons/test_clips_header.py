@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# === Plain Python — no Blender required ===
+# Run via pytest. Stubs `bpy` at import time.
 """Pure-Python test for to_clips_header() — the bundled clips_all.h
 converter (Phase-2 clip player). No Blender: stubs bpy, then feeds
 synthetic baked rows. Run via:
