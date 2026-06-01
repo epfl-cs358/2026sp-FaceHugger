@@ -17,7 +17,7 @@
 1. **Next-gen `.fhc` foot-space pipeline:** Designed but not built. Replaces joint-angle baking with foot XYZ + Bezier handles, enabling runtime IK and adaptability.
 2. **Mobile app clips UI:** T:7 backend is ready; front-end integration needed.
 3. **Runtime adaptability:** IMU correction, terrain adaptation, and clip mirroring designed; no implementation yet.
-4. **Servo numbering alignment:** Proposal in `animation/SERVO_ID_CONVENTION.md` needs firmware confirmation.
+4. **Servo numbering alignment:** Proposal in [Servo conventions](firmware/servo-conventions.md) needs firmware confirmation.
 5. **Clip-based walk (proposed, not started):** Drive locomotion from authored *cyclic* clips played looping per joystick direction, instead of the procedural gaits - a clip per direction (forward/back/left/right + diagonals) with an optional left↔right mirror. The reusable pieces exist (the clip player now loops); the new work is a Blender direction→clip map, an exported lookup table, a `GAIT_CLIPWALK` firmware mode, and a sagittal (L↔R) clip-mirror function (the one genuinely new piece). Dropped for now in favour of the procedural trot/crab.
 
 ## Known issues and limitations
@@ -121,7 +121,7 @@ Code location hints: gait control UI is in `code/remote-control-app/`; T:6 (inve
 
 ## Servo numbering alignment
 
-**Status:** Proposal in `animation/SERVO_ID_CONVENTION.md`. Pending firmware confirmation.
+**Status:** Proposal in [Servo conventions](firmware/servo-conventions.md). Pending firmware confirmation.
 
 The proposed numbering (`servo_id = leg_idx * 3 + joint_idx`, FL->FR->BL->BR order) disagrees with the current firmware leg ordering (FR->FL->RR->RL). This matters because `.gait` files bake servo IDs at export time, and wrong numbering means every leg moves wrong on hardware. See [conventions.md](conventions.md) for leg-naming context.
 
@@ -129,7 +129,7 @@ The proposed numbering (`servo_id = leg_idx * 3 + joint_idx`, FL->FR->BL->BR ord
 
 - [ ] Confirm firmware's `SERVO_CONFIG[]` ordering in `code/firmware/.../config.h`.
 - [ ] If it differs from the proposal, update the proposal table and `servo_mapping.yaml` `servo_id:` values.
-- [ ] Mark `SERVO_ID_CONVENTION.md` as confirmed (no longer PROPOSAL).
+- [ ] Mark [Servo conventions](firmware/servo-conventions.md) as confirmed (no longer PROPOSAL).
 - [ ] Regenerate any `.gait` or `.fhc` files against the finalized numbering.
 
 `servo_mapping.yaml` is the single point of agreement between Blender/Python and firmware. Keep it in sync.
@@ -168,7 +168,7 @@ This is a v2+ feature. Pursue only if authoring new gaits becomes a bottleneck.
 **Issue:** The `config.h` channel mapping was set empirically; no formal cross-check against the physical wiring or URDF.
 
 **Fix:**
-1. Document the current firmware servo order in a table (like Table 1 of `SERVO_ID_CONVENTION.md`).
+1. Document the current firmware servo order in a table (like the channel-map table in [Servo conventions](firmware/servo-conventions.md)).
 2. Compare against the physical wiring diagram. If they agree, mark the document confirmed. If not, fix firmware or the document, then re-export clips.
 
 **Effort:** ~2 hours + inspection time. Prevents silent servo-order bugs.
@@ -183,7 +183,7 @@ If servo overheating or current spikes become an issue, add a slew-rate limiter 
 
 | Priority | Task | Effort |
 |---|---|---|
-| Short (1-2 wk) | Align servo numbering against `SERVO_ID_CONVENTION.md` | 2 hrs |
+| Short (1-2 wk) | Align servo numbering against [Servo conventions](firmware/servo-conventions.md) | 2 hrs |
 | Short (1-2 wk) | Mobile app clips UI: read manifest, send T:7, show progress | 1-2 days |
 | Short (1-2 wk) | Pin main loop to 50 Hz | 2 hrs |
 | Medium (3-4 wk) | Port `ik_v2` to C | 1-2 days |
@@ -203,7 +203,7 @@ If servo overheating or current spikes become an issue, add a slew-rate limiter 
 | `doc/animation-pipeline/leg-coordinates.md` | Spec for `.fhc` format, foot-space, IK, Bezier, pole signs, track layouts, IMU correction. Locked design. |
 | `doc/animation-pipeline/onboard-clip-player-design.md` | Earlier joint-angle clip design (some parts stale; end-behavior spec is still good). |
 | `doc/animation-pipeline/animation-pipeline-roadmap.md` | Task breakdown, ownership, sequencing, effort estimates. |
-| `animation/SERVO_ID_CONVENTION.md` | Servo numbering proposal and firmware-alignment checklist. |
+| [Servo conventions](firmware/servo-conventions.md) | Servo numbering proposal and firmware-alignment checklist. |
 | `code/simulation/kinematics.py` | `ik_v2` canonical implementation (to port to C for T1). |
 | `code/firmware/CLIP_PLAYER_TESTING.md` | Test suite for the current joint-angle clip player (reference for `.fhc` test structure). |
 

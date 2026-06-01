@@ -104,8 +104,8 @@ See [`doc/animation-pipeline/onboard-clip-player-design.md`](../../doc/animation
 `tickGait translateToServo` switch. Run `uv run python animation/addons/test_servo_parity.py`
 to assert both the math and the channel table against `origin/main`.
 
-See [`animation/SERVO_ID_CONVENTION.md`](../SERVO_ID_CONVENTION.md) for the
-broader servo ID / channel convention.
+See [`wiki/reference/firmware/servo-conventions.md`](../../wiki/reference/firmware/servo-conventions.md)
+for the broader servo ID / channel convention.
 
 ### What's next
 

@@ -10,7 +10,7 @@ and the surrounding [README](../../../animation/scripts/README.md).
 For the joint-angle convention authority, see
 [`MERGE_AND_CONVENTION.md`](MERGE_AND_CONVENTION.md). For servo
 numbering, see
-[`animation/SERVO_ID_CONVENTION.md`](../../../animation/SERVO_ID_CONVENTION.md).
+[`wiki/reference/firmware/servo-conventions.md`](../../../wiki/reference/firmware/servo-conventions.md).
 
 ---
 
@@ -234,7 +234,7 @@ Per-bone fields come from
 - **`servo_id`** — firmware-side per-PWM-channel index. The default
   numbering uses URDF leg ordering (`fl=0..2, fr=3..5, bl=6..8,
   br=9..11`); see
-  [`SERVO_ID_CONVENTION.md`](../../../animation/SERVO_ID_CONVENTION.md)
+  [`wiki/reference/firmware/servo-conventions.md`](../../../wiki/reference/firmware/servo-conventions.md)
   for the proposal status and how it aligns (or not) with the
   firmware's `SERVO_CONFIG[]` ordering.
 
@@ -287,7 +287,7 @@ Clip name→id mapping is emitted alongside in `clips_manifest.json`.
 
 - [`animation/scripts/urdf_to_blender_rigged.py`](../../../animation/scripts/urdf_to_blender_rigged.py) — implementation
 - [`animation/scripts/README.md`](../../../animation/scripts/README.md) — script-level overview
-- [`animation/SERVO_ID_CONVENTION.md`](../../../animation/SERVO_ID_CONVENTION.md) — servo numbering
+- [`wiki/reference/firmware/servo-conventions.md`](../../../wiki/reference/firmware/servo-conventions.md) — servo numbering
 - [`code/simulation/docs/MERGE_AND_CONVENTION.md`](MERGE_AND_CONVENTION.md) — joint angle convention
 - [`doc/gait-design/specs/blender-rig-and-export.md`](../../../doc/gait-design/specs/blender-rig-and-export.md) — `servo_mapping.yaml` schema, export details
 - [`doc/gait-design/specs/gait-file-format.md`](../../../doc/gait-design/specs/gait-file-format.md) — `.gait` JSON format

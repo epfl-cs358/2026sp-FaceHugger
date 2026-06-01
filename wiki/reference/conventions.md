@@ -155,7 +155,7 @@ LEG_SERVO_CHANNEL[4][3] = {
 }
 ```
 
-A proposed servo ID scheme (`animation/SERVO_ID_CONVENTION.md`) uses `servo_id = leg_idx * 3 + joint_idx` with legs in alphabetical order (`fl:0, fr:1, bl:2, br:3`). **STATUS: PROPOSAL** pending firmware sign-off. Until `SERVO_CONFIG[]` is finalized, the channel table above is authoritative, and the animation exporter's `servo_mapping.yaml` must match it exactly.
+A proposed servo ID scheme (see [Servo conventions](firmware/servo-conventions.md)) uses `servo_id = leg_idx * 3 + joint_idx` with legs in alphabetical order (`fl:0, fr:1, bl:2, br:3`). **STATUS: PROPOSAL** pending firmware sign-off. Until `SERVO_CONFIG[]` is finalized, the channel table above is authoritative, and the animation exporter's `servo_mapping.yaml` must match it exactly.
 
 ## SCALE Factor
 
@@ -191,5 +191,5 @@ When any of these must change, regenerate `clips_all.h` from source `.blend` fil
 - `code/firmware/src/shared/config.h`: PCA9685 channel assignments and pulse range
 - `code/simulation/docs/MERGE_AND_CONVENTION.md`: the rest-pose definition and per-leg shoulder derivation
 - `doc/animation-pipeline/urdf-conventions.md`: joint origins, axis vectors, axis flip rationale
-- `animation/SERVO_ID_CONVENTION.md`: servo ID proposal
+- [Servo conventions](firmware/servo-conventions.md): servo ID proposal and channel-table reconciliation
 - `code/API_SPEC.md`: WebSocket protocol (gait selection, clip playback, body pose)
