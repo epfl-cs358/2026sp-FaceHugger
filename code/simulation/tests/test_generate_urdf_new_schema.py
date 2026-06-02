@@ -7,20 +7,17 @@ New schema uses:
 Old names are still accepted as fallback.
 """
 
-import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
-_GU_PATH = Path(__file__).parents[1] / "urdf_gen/generate_urdf.py"
-_spec = importlib.util.spec_from_file_location("_generate_urdf", _GU_PATH)
-_gu = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_gu)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-get_physics = _gu.get_physics
-_servo_rot_by_role = _gu._servo_rot_by_role
-_find_occ_rot = _gu._find_occ_rot
+from urdf_gen.lib.fusion_export import _find_occ_rot
+from urdf_gen.lib.mesh_servo import _servo_rot_by_role
+from urdf_gen.lib.physics_fallback import get_physics
 
 
 def _cad_axis_dir(cad: dict):
