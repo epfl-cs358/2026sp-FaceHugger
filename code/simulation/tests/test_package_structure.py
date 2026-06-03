@@ -36,7 +36,7 @@ def test_runtime_package_imports():
         [
             "-c",
             "import pybullet_sim.gaits, pybullet_sim.kinematics, "
-            "pybullet_sim.constants, pybullet_sim.sim_monitor",
+            "pybullet_sim.paths, pybullet_sim.sim_monitor",
         ]
     )
     assert r.returncode == 0, r.stderr

@@ -16,7 +16,7 @@ implementation.
 
 import math
 
-from .constants import TIMESTEP
+from .paths import TIMESTEP
 
 STALL_TORQUE_NM = 2.94  # QYRC DSS-230MG 30 kg·cm stall (== servo.effort_nm)
 STALL_CURRENT_A = 2.0  # QYRC DSS-230MG — ~2 A max draw at stall
