@@ -14,139 +14,36 @@ Build the module first:
     cmake -S . -B build -DPython_EXECUTABLE=$(which python) && cmake --build build
 """
 
-import os
 import re
-import subprocess
 import sys
 import time
-from pathlib import Path
 
-_HERE = Path(__file__).resolve().parent
-_BUILD = _HERE / "build"
-_FW_SRC = (_HERE / ".." / ".." / "firmware" / "src").resolve()
-
-# Source trees whose changes invalidate the compiled module.
-_SOURCE_DIRS = [_FW_SRC, _HERE / "hal"]
-_SOURCE_FILES = [_HERE / "bindings.cpp", _HERE / "CMakeLists.txt"]
-_SOURCE_EXTS = {".cpp", ".c", ".h", ".hpp", ".inl", ".txt"}
-
-# firmware LegId order (FR, FL, RR/BR, RL/BL); each leg = (hip, thigh, knee).
 from firmware_port.servo_convention import (  # noqa: E402
-    LEG_FR,
     LEG_FL,
-    LEG_RR,
-    LEG_RL,
+    LEG_FR,
     LEG_ID_TO_SIM_NAME,
     LEG_ID_TO_URDF_AXIS_SIGN,
+    LEG_RL,
+    LEG_RR,
     servo_to_radians,
 )
 
+from .build import _BUILD, _FW_SRC, _HERE, _compiled_so, _newest_source_mtime  # noqa: F401
+from .build import build, load_fh_sim, staleness
+from .imu import _IMU_CLEAR_COS, _IMU_FLIP_COS  # noqa: F401
+from .imu import _body_up_z, imu_hysteresis_step, imu_pitch_roll_deg  # noqa: F401
+from .imu import update_imu_from_pybullet
+from .telemetry import _BAND_RGBA, _SIM_NAME_TO_LEG_ID, _TELEM_JOINTS, _TELEM_LEGS  # noqa: F401
+from .telemetry import apply_torque_colors, build_telemetry_frame, torque_color  # noqa: F401
+from .trace import _GAIT_NAME_TO_ID, trace_clip, trace_gait  # noqa: F401
+
 _LEG_IDS = (LEG_FR, LEG_FL, LEG_RR, LEG_RL)
 
-# Firmware GaitType enum (movements.h): NONE=0, WALK=1, TROT=2, CRAB=3.
-_GAIT_NAME_TO_ID = {"walk": 1, "trot": 2, "crab": 3}
-
-
-def _compiled_so():
-    """The built module file, or None if not present."""
-    hits = sorted(_BUILD.glob("fh_sim*.so")) + sorted(_BUILD.glob("fh_sim*.pyd"))
-    return hits[0] if hits else None
-
-
-def _newest_source_mtime():
-    """mtime of the most recently changed firmware / hal / binding source."""
-    newest = 0.0
-    for d in _SOURCE_DIRS:
-        if d.is_dir():
-            for f in d.rglob("*"):
-                if f.suffix in _SOURCE_EXTS and f.is_file():
-                    newest = max(newest, f.stat().st_mtime)
-    for f in _SOURCE_FILES:
-        if f.is_file():
-            newest = max(newest, f.stat().st_mtime)
-    return newest
-
-
-def staleness():
-    """(is_stale, reason) — is the compiled .so missing or older than its sources?"""
-    so = _compiled_so()
-    if so is None:
-        return True, "fh_sim is not built"
-    src = _newest_source_mtime()
-    if src > so.stat().st_mtime:
-        return True, "firmware/hal/binding sources are newer than the built fh_sim"
-    return False, "fh_sim is up to date"
-
-
-def build(quiet=False):
-    """Configure (if needed) and compile fh_sim via CMake. Raises on failure."""
-    out = subprocess.DEVNULL if quiet else None
-    if not (_BUILD / "CMakeCache.txt").is_file():
-        subprocess.run(
-            [
-                "cmake",
-                "-S",
-                str(_HERE),
-                "-B",
-                str(_BUILD),
-                f"-DPython_EXECUTABLE={sys.executable}",
-            ],
-            check=True,
-            stdout=out,
-            stderr=out,
-        )
-    subprocess.run(
-        ["cmake", "--build", str(_BUILD)], check=True, stdout=out, stderr=out
-    )
-
-
-def load_fh_sim(auto_build=True):
-    """Import the compiled fh_sim module, rebuilding it first if it is stale.
-
-    --sil must never run a stale firmware: by default this checks the .so against
-    the firmware/hal/binding sources and, if older or missing, recompiles before
-    importing. Set auto_build=False (or env FH_SIL_NO_BUILD=1) to skip the rebuild
-    and instead warn loudly / error if stale.
-    """
-    if os.environ.get("FH_SIL_NO_BUILD"):
-        auto_build = False
-
-    stale, reason = staleness()
-    if stale:
-        if auto_build:
-            print(f"[sil] {reason} — rebuilding fh_sim...", flush=True)
-            try:
-                build()
-            except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                raise ImportError(
-                    f"[sil] auto-build failed ({e}). Build it manually:\n"
-                    "  cd code/simulation/firmware_sil\n"
-                    "  cmake -S . -B build -DPython_EXECUTABLE=$(which python)\n"
-                    "  cmake --build build\n"
-                    "(needs CMake >= 3.15 + a C++17 compiler + pybind11)"
-                ) from e
-        else:
-            print(
-                f"\n*** [sil] WARNING: {reason}. The .so may not reflect the current "
-                "firmware. Rebuild with `cmake --build firmware_sil/build`, or unset "
-                "FH_SIL_NO_BUILD to auto-rebuild. ***\n",
-                file=sys.stderr,
-                flush=True,
-            )
-
-    if str(_BUILD) not in sys.path:
-        sys.path.insert(0, str(_BUILD))
-    try:
-        import fh_sim
-    except ImportError as e:
-        raise ImportError(
-            "fh_sim (the compiled firmware) could not be imported. Build it:\n"
-            "  cd code/simulation/firmware_sil\n"
-            "  cmake -S . -B build -DPython_EXECUTABLE=$(which python)\n"
-            "  cmake --build build\n"
-            f"(underlying import error: {e})"
-        ) from e
-    return fh_sim
+# ── out-of-range ([OOR]) capture ──────────────────────────────────────────────
+# The firmware itself prints "[OOR] servo <channel> requested <deg>" from its
+# setJointAngles / setServoAngle guards (visible on hardware too). We parse the
+# lines the firmware emitted; we don't synthesize them.
+_OOR_RE = re.compile(r"\[OOR\] servo (\d+) requested ([-\d.]+)")
 
 
 def servo_angles_to_joint_targets(angles12):
@@ -167,13 +64,6 @@ def servo_angles_to_joint_targets(angles12):
         targets[f"{name}_link2_joint"] = axis * servo_to_radians(thigh)
         targets[f"{name}_link3_joint"] = -axis * servo_to_radians(knee)
     return targets
-
-
-# ── out-of-range ([OOR]) capture ──────────────────────────────────────────────
-# The firmware itself prints "[OOR] servo <channel> requested <deg>" from its
-# setJointAngles / setServoAngle guards (visible on hardware too). We parse the
-# lines the firmware emitted; we don't synthesize them.
-_OOR_RE = re.compile(r"\[OOR\] servo (\d+) requested ([-\d.]+)")
 
 
 def parse_oor(lines):
@@ -197,228 +87,8 @@ def channel_to_joint(fc):
     return out
 
 
-# ── PyBullet -> firmware IMU emulation ────────────────────────────────────────
-# The host has no MPU6050. We synthesise the firmware's "upside-down" latch from
-# PyBullet's body orientation each tick and push it through the FirmwareControl
-# binding, so SpinalCord sees the same imuIsInverted() it would see on hardware.
-#
-# Hysteresis matches code/firmware/src/brain/imu_hysteresis.h:
-#   flip:  tilt > 150 deg     (body_up_z < cos(150 deg) ≈ -0.866)
-#   clear: tilt <  30 deg     (body_up_z > cos( 30 deg) ≈  0.866)
-# The tilt angle is acos(body_up_z) where body_up_z is the world-z component
-# of the body frame's local +z axis (the rotated "up"). cos is monotone
-# decreasing on [0,180] so the inequality direction reverses against the dot
-# product. Boundary values (cos(150°), cos(30°)) are NOT crossed — strict
-# inequalities, same as the firmware.
-import math as _math  # noqa: E402  (kept private; the public re-export is `math`)
-
-_IMU_FLIP_COS = _math.cos(_math.radians(150.0))  # ≈ -0.866
-_IMU_CLEAR_COS = _math.cos(_math.radians(30.0))  # ≈  0.866
-
-
-def _body_up_z(quat):
-    """World-frame z-component of the body-frame +z axis, from quaternion (x,y,z,w).
-
-    The rotation matrix's third column is the rotated +z; we only need the z
-    row of that column. body_up_z == 1.0 upright, -1.0 upside-down.
-    """
-    x, y, z, w = quat
-    return 1.0 - 2.0 * (x * x + y * y)
-
-
-def imu_hysteresis_step(body_up_z, prev_state):
-    """Apply the firmware hysteresis to a single body_up_z sample."""
-    if prev_state:
-        # currently inverted: clear only when we drop below 30° tilt
-        return not (body_up_z > _IMU_CLEAR_COS)
-    # currently upright: flip only when we cross 150° tilt
-    return body_up_z < _IMU_FLIP_COS
-
-
-def imu_pitch_roll_deg(quat):
-    """(pitch_deg, roll_deg) from quaternion (x,y,z,w) using the same accel-only
-    convention as the firmware: pitch = atan2(ay, sqrt(ax^2+az^2)),
-    roll = atan2(-ax, az), where (ax,ay,az) is the body's local gravity vector
-    (== the world -z rotated INTO the body frame). With gravity pointing -z
-    in the world, the body-frame gravity is the third row of R^T == third
-    column of R, negated."""
-    x, y, z, w = quat
-    # body-frame gravity unit vector: -R^T @ ẑ  (rows of R as columns of R^T).
-    # The "body up" components (third column of R) point opposite to gravity.
-    ax = 2.0 * (x * z - w * y)  # = -(-2(xz - wy)) third row of R^T col 0... see below
-    ay = 2.0 * (y * z + w * x)
-    az = 1.0 - 2.0 * (x * x + y * y)
-    # Match firmware sign convention (pitch nose-up positive, roll right-down positive).
-    pitch = _math.atan2(ay, _math.sqrt(ax * ax + az * az)) * 180.0 / _math.pi
-    roll = _math.atan2(-ax, az) * 180.0 / _math.pi
-    return pitch, roll
-
-
-def update_imu_from_pybullet(fc, p, robot_id, prev_state):
-    """Read PyBullet body orientation, hysteresise, push into firmware.
-
-    Returns the new latched state so the caller can thread it across ticks.
-    """
-    _, quat = p.getBasePositionAndOrientation(robot_id)
-    up_z = _body_up_z(quat)
-    new_state = imu_hysteresis_step(up_z, prev_state)
-    pitch, roll = imu_pitch_roll_deg(quat)
-    fc.set_imu_upside_down(new_state)
-    fc.set_imu_pitch_deg(pitch)
-    fc.set_imu_roll_deg(roll)
-    return new_state
-
-
-# ── torque-based link coloring (PyBullet visual feedback) ─────────────────────
-_BAND_RGBA = {
-    "green": (0.2, 0.8, 0.2, 1.0),  # safe continuous hold
-    "yellow": (0.9, 0.7, 0.1, 1.0),  # burst-only: over continuous, under stall
-    "red": (0.9, 0.2, 0.1, 1.0),  # saturated: at/over stall, can't track
-}
-
-
-def torque_color(torque_nm):
-    """rgba for a joint's applied torque, via the shared sim_monitor.band() — so the
-    link colors mean the same thing as the --monitor [CONT]/[STALL] flags. Brief
-    fast-clip spikes show yellow (honest burst); red is reserved for true saturation
-    at the effort cap, not merely 'fast'."""
-    from pybullet_sim import sim_monitor
-
-    return _BAND_RGBA[sim_monitor.band(torque_nm)]
-
-
-def apply_torque_colors(p, robot_id, joint_map):
-    """Tint each leg link by its current applied torque (call every ~12 steps)."""
-    for name, idx in joint_map.items():
-        if idx < 0:
-            continue
-        torque = p.getJointState(robot_id, idx)[3]
-        p.changeVisualShape(robot_id, idx, rgbaColor=torque_color(torque))
-
-
-# ── per-step telemetry frame (the control panel's "Sim telemetry" table) ──────
-# Joint order the panel renders: FL, FR, BL, BR x shoulder, hip, knee. Each joint
-# carries BOTH the firmware servo-space command (0-180, what the real servos get)
-# and that same command in URDF-joint degrees, so the delta vs the measured joint
-# angle is a true tracking error rather than a constant ~90 offset between spaces.
-_TELEM_LEGS = ("fl", "fr", "bl", "br")
-_TELEM_JOINTS = (("sh", 1), ("hip", 2), ("knee", 3))  # label -> URDF link number
-_SIM_NAME_TO_LEG_ID = {v: k for k, v in LEG_ID_TO_SIM_NAME.items()}
-
-
-def build_telemetry_frame(fc, p, robot_id, joint_map, t_s, oor=None):
-    """One telemetry frame: {t, joints:[12 x {servo/joint cmd, actual, delta, ...}]}.
-
-    `oor` is the {pca_channel: requested_deg} from parse_oor(fc.drain_serial()) for
-    this tick (the firmware's pre-clamp report); pre_clamp_deg is null where a servo
-    had no [OOR] line. Reads firmware servo angles + channels from `fc`, measured
-    joint state from `p` (any object exposing getJointState).
-    """
-    from math import degrees
-
-    from pybullet_sim import sim_monitor
-
-    oor = oor or {}
-    angles = fc.servo_angles()
-    targets = servo_angles_to_joint_targets(angles)  # urdf joint name -> radians
-    channels = list(fc.servo_channels())
-
-    joints = []
-    for leg in _TELEM_LEGS:
-        leg_id = _SIM_NAME_TO_LEG_ID[leg]
-        for label, link in _TELEM_JOINTS:
-            servo_idx = leg_id * 3 + (link - 1)
-            urdf = f"{leg}_link{link}_joint"
-            commanded_servo = float(angles[servo_idx])
-            commanded_joint = degrees(targets[urdf])
-            idx = joint_map.get(urdf)
-            if idx is not None and idx >= 0:
-                state = p.getJointState(robot_id, idx)
-                actual_joint = degrees(state[0])
-                torque = state[3]
-                delta = commanded_joint - actual_joint
-            else:
-                actual_joint = delta = None
-                torque = 0.0
-            joints.append(
-                {
-                    "name": f"{leg}_{label}",
-                    "commanded_servo_deg": round(commanded_servo, 2),
-                    "commanded_joint_deg": round(commanded_joint, 2),
-                    "actual_joint_deg": None
-                    if actual_joint is None
-                    else round(actual_joint, 2),
-                    "delta_deg": None if delta is None else round(delta, 2),
-                    "torque_nm": round(torque, 4),
-                    "current_a": round(sim_monitor.estimate_current_a(torque), 3),
-                    "pre_clamp_deg": oor.get(channels[servo_idx]),
-                }
-            )
-    return {"t": round(t_s, 4), "joints": joints}
-
-
-def trace_clip(fc, clip_name, record_every=24, step_hz=240, preroll_ms=200):
-    """Deterministic servo-angle trace of a clip through the firmware.
-
-    Ticks the firmware at `step_hz` over the clip's duration plus `preroll_ms`
-    (t_ms = step*1000/hz) and records the 12 servo angles (whole degrees, as the
-    robot receives them) every `record_every` steps. The window includes the clip
-    pre-roll (the eased glide from the live pose into frame 0 that playClip starts
-    with), so the full motion is captured. Used by both the reference generator and
-    the clip suite, so they tick the *identical* sequence — the trace is a pure
-    function of the firmware code + the clip data, making any servo-angle change
-    detectable. `preroll_ms` must match the firmware CLIP_PREROLL_MS.
-
-    Returns: list of [t_ms, [12 int degrees]].
-    """
-    cid = fc.clip_id_by_name(clip_name)
-    if cid < 0:
-        raise KeyError(f"clip {clip_name!r} not found")
-    duration_ms = fc.clip_duration_ms(cid)
-    end_ms = duration_ms + preroll_ms
-    fc.set_clock_ms(0)
-    fc.play_clip(cid)
-    samples = []
-    step = 0
-    while True:
-        t_ms = int(step * 1000.0 / step_hz)
-        fc.tick(t_ms)
-        if step % record_every == 0:
-            samples.append([t_ms, [int(round(a)) for a in fc.servo_angles()]])
-        if t_ms >= end_ms:
-            break
-        step += 1
-    return samples
-
-
-def trace_gait(fc, gait_name, direction="FW", steps=480, step_hz=240, record_every=24):
-    """Deterministic servo-angle trace of a firmware gait through the SIL.
-
-    Drives the gait the way the app/robot does: set the gait once (T:5), then
-    RE-ISSUE the move (T:1) every tick — the full CMD_MOVE path arms STATE_WALK and
-    resets the 500 ms deadman, so the gait keeps running instead of graceful-stopping.
-    Records the 12 servo angles (whole degrees) every `record_every` steps. Shared
-    driving sequence with FirmwareSILDriver.run_gait_blocking, minus PyBullet.
-
-    Returns: list of [t_ms, [12 int degrees]]. Raises KeyError for an unknown gait.
-    """
-    import json
-
-    gait_id = _GAIT_NAME_TO_ID[gait_name]  # KeyError for an unknown gait name
-    fc.set_clock_ms(0)
-    fc.handle_message(json.dumps({"T": 5, "g": gait_id}))
-    samples = []
-    for step in range(steps):
-        t_ms = int(step * 1000.0 / step_hz)
-        fc.handle_message(json.dumps({"T": 1, "dir": direction}))  # beat the deadman
-        fc.tick(t_ms)
-        if step % record_every == 0:
-            samples.append([t_ms, [int(round(a)) for a in fc.servo_angles()]])
-    return samples
-
-
 class FirmwareSILDriver:
-    """Plays clips through the real firmware code, driving PyBullet joints."""
+    """Plays clips and gaits through the real firmware code, driving PyBullet joints."""
 
     def __init__(self):
         self._fh = load_fh_sim()
@@ -503,7 +173,7 @@ class FirmwareSILDriver:
         timestep=1.0 / 240.0,
         duration_s=None,
     ):
-        """Run a firmware GAIT through PyBullet at 240 Hz (the exact tickGait/tickTrot).
+        """Run a firmware gait through PyBullet at 240 Hz (the exact tickGait/tickTrot).
 
         Same per-tick PyBullet drive as play_clip_blocking, but instead of a clip it
         sets the gait (T:5) once and re-issues the move (T:1) every tick so STATE_WALK
@@ -553,6 +223,113 @@ class FirmwareSILDriver:
             step += 1
             if duration_s is not None and t_ms >= duration_s * 1000.0:
                 break
+
+
+# --------------------------------------------------------------------------- #
+# SIL run loops (moved from pybullet_sim.runner in Phase 4 of the sim-reorg
+# to break the bidirectional pybullet_sim ↔ firmware_sil import edge).
+# --------------------------------------------------------------------------- #
+
+
+def run_clip_sil(
+    cfg, clip_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
+):
+    """Play a clip through the compiled firmware (software-in-the-loop)."""
+    import pybullet as p_
+
+    from pybullet_sim.scene import connect_and_setup, print_banner, settle
+    from pybullet_sim.sim_monitor import finalize_log, setup_step_hook
+
+    try:
+        driver = FirmwareSILDriver()  # auto-builds fh_sim if stale/missing
+    except ImportError as e:
+        raise SystemExit(
+            f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
+            "play clips with the Python re-port instead:\n"
+            f"  python facehugger.py sim --clip {clip_name!r} --python-port"
+        ) from e
+    if clip_name not in driver.clip_names():
+        raise KeyError(
+            f"clip {clip_name!r} not in firmware clips {driver.clip_names()}"
+        )
+
+    robot_id, joint_map = connect_and_setup(cfg, gui, float_mode=float_mode)
+    print_banner(cfg)
+    if float_mode:
+        print("[float] no gravity/floor, body pinned — showing joint geometry")
+    elif settle_s > 0:
+        print(f"\n[settle] holding stance for {settle_s:.2f}s before clip")
+        settle(robot_id, joint_map, cfg, settle_s)
+
+    mon_note = "  [monitor: torque/current]" if monitor else ""
+    print(f"\n[clip][SIL] playing '{clip_name}' via exact firmware code{mon_note}")
+    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
+    try:
+        driver.play_clip_blocking(
+            robot_id,
+            joint_map,
+            clip_name,
+            cfg.servo_force,
+            cfg.servo_velocity,
+            gui=gui,
+            on_step=on_step,
+        )
+    except (KeyboardInterrupt, p_.error):
+        pass
+    finally:
+        if p_.isConnected():
+            p_.disconnect()
+        finalize_log(logger)
+
+
+def run_gait_sil(
+    cfg, gait_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
+):
+    """Run a gait through the compiled firmware (software-in-the-loop) — the EXACT
+    tickGait/tickTrot. Spawns at the neutral-stance body height (like clips), which
+    is stable since the gait oscillates around NEUTRAL[]; no Python body-height solve."""
+    import pybullet as p_
+
+    from pybullet_sim.scene import connect_and_setup, print_banner, settle
+    from pybullet_sim.sim_monitor import finalize_log, setup_step_hook
+
+    try:
+        driver = FirmwareSILDriver()  # auto-builds fh_sim if stale/missing
+    except ImportError as e:
+        raise SystemExit(
+            f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
+            "run the gait with the Python re-port instead:\n"
+            f"  python facehugger.py sim --{gait_name} --python-port"
+        ) from e
+
+    robot_id, joint_map = connect_and_setup(cfg, gui, float_mode=float_mode)
+    print_banner(cfg)
+    if float_mode:
+        print("[float] no gravity/floor, body pinned")
+    elif settle_s > 0:
+        print(f"\n[settle] holding stance for {settle_s:.2f}s before gait")
+        settle(robot_id, joint_map, cfg, settle_s)
+
+    mon_note = "  [monitor: torque/current]" if monitor else ""
+    print(f"\n[gait][SIL] running '{gait_name}' (FW) via exact firmware code{mon_note}")
+    on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
+    try:
+        driver.run_gait_blocking(
+            robot_id,
+            joint_map,
+            gait_name,
+            cfg.servo_force,
+            cfg.servo_velocity,
+            gui=gui,
+            on_step=on_step,
+            duration_s=None if gui else 3.0,  # headless: finite smoke run
+        )
+    except (KeyboardInterrupt, p_.error):
+        pass
+    finally:
+        if p_.isConnected():
+            p_.disconnect()
+        finalize_log(logger)
 
 
 def _main():

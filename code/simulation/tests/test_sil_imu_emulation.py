@@ -72,15 +72,13 @@ def test_inverted_pose_drives_firmware_imuIsInverted():
     import pybullet as p
 
     from firmware_sil.sil_bridge import update_imu_from_pybullet
-    from pybullet_sim import constants
+    from pybullet_sim import paths
     from pybullet_sim.motor import build_joint_map
 
     fc = _fc_or_skip()
     cid = p.connect(p.DIRECT)
     try:
-        robot = p.loadURDF(
-            constants.URDF_PATH, basePosition=[0, 0, 0.1], useFixedBase=True
-        )
+        robot = p.loadURDF(paths.URDF_PATH, basePosition=[0, 0, 0.1], useFixedBase=True)
         _ = build_joint_map(robot)
 
         # Flip the body 180° about X (upside-down).

@@ -6,7 +6,7 @@ import os
 import pybullet as p
 import pybullet_data
 
-from .constants import TIMESTEP
+from .paths import TIMESTEP
 from .math_utils import _wrap_pi
 from .motor import apply_leg_pose, build_joint_map, reset_to_stance
 
