@@ -2517,31 +2517,35 @@ def to_clips_header(clips, convention, write=True, out_dir=None):
 
 def to_clips_extra_json(clips, convention, write=True, out_dir=None):
     """Bundle clips into clips_extra.json — the format the remote-control app
-    streams client-side (no flash). Unlike clips_all.h (math-space, scaled; the
-    firmware applies translateToServo at runtime), this stores the FINAL per-leg
-    servo degrees [hip, thigh, knee] via _frame_to_servo — the exact wire values
-    the app sends as CMD_CALIBRATE (T:4), identical to what the .js players emit.
+    streams client-side (no flash). Math-space joint degrees [sh, th, kn] via
+    _scale_from_neutral; the firmware applies translateToServo + CALIB on
+    receipt of each T:12 (CMD_STREAM_FRAME) packet, so the exporter never
+    needs to know hardware calibration values.
+
+    Top-level `wire: "T12"` is the schema discriminator: the mobile app
+    refuses to stream a bundle without it, catching stale CALIB-baked
+    bundles at runtime.
 
     `clips` is a dict {clip_name: baked_rows}. Clips are emitted **sorted
     alphabetically by name** so the app-bundle order matches clips_all.h
     and stays stable across exports (Task #7). Returns the JSON string;
     when write=True also writes clips_extra.json to out_dir (default
     animation/exported_clips/)."""
-    out = {"clips": []}
+    out = {"wire": "T12", "clips": []}
     for name in sorted(clips.keys()):
         rows = clips[name]
         if not rows:
             raise ValueError(f"Clip '{name}' has no frames; refusing to emit")
         frames = []
         for row in rows:
-            s = _frame_to_servo(row, convention)
+            m = _scale_from_neutral(row, convention)
             frames.append(
                 {
                     "t": int(row["time_ms"]),
-                    "fr": s["fr"],
-                    "fl": s["fl"],
-                    "br": s["br"],
-                    "bl": s["bl"],
+                    "fr": m["fr"],
+                    "fl": m["fl"],
+                    "br": m["br"],
+                    "bl": m["bl"],
                 }
             )
         out["clips"].append(

@@ -12,7 +12,7 @@
 struct NeutralPose { float sh, th, kn; };
 constexpr NeutralPose NEUTRAL[LEG_COUNT] = {
     {  45.0f, -60.0f, -37.0f },  // LEG_FR (0)
-    { 135.0f, -60.0f, -40.0f },  // LEG_FL (1) Change B: 135 = outward
+    { 135.0f, -60.0f, -40.0f },  // LEG_FL (1)
     { -45.0f, -50.0f, -50.0f },  // LEG_RR / BR (2)
     {-135.0f, -60.0f, -35.0f },  // LEG_RL / BL (3)
 };
