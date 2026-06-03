@@ -391,7 +391,25 @@ def _emit_leg(urdf: URDF, leg: dict, state: _GenState) -> None:
     # not — the shaft direction does not flip. Hip/knee DO get the R-side
     # flip because those servos are physically rotated 180° for FR/BL.
     shoulder_axis = list(sj.axis_dir)
-    sh_lo, sh_hi = state.shoulder_lower_deg, state.shoulder_upper_deg
+    # Shoulder limit window is per-body-side asymmetric. With the uniform +Z
+    # axis the URDF +θ direction is the same right-hand-rule rotation for
+    # every leg, but the physical "outward" (loose) side is mirrored across
+    # the body-X axis: for LEFT-body legs the loose side is +θ (URDF upper),
+    # for RIGHT-body legs it's −θ (URDF lower). Mirror the L-derived window
+    # for right-side legs so each shoulder's URDF <limit> reflects the actual
+    # mechanical envelope on that side. Pinned by the same constants the
+    # firmware safety net (config.h SHOULDER_THETA_NARROW/WIDE_DEG) and the
+    # Blender rig builder (LIMIT_ROTATION + use_ik_limit_z) consume.
+    #
+    # NB: the `side` field in facehugger_config.yaml is the BRACKET pairing
+    # (L-bracket = FL+BR, R-bracket = FR+BL), used for hip/knee axis flipping.
+    # Body-side (which is what the shoulder asymmetry actually depends on)
+    # comes from the leg_id suffix: 'r' → right body, 'l' → left body.
+    is_left_body = leg_id.endswith("l")
+    if is_left_body:
+        sh_lo, sh_hi = state.shoulder_lower_deg, state.shoulder_upper_deg
+    else:
+        sh_lo, sh_hi = -state.shoulder_upper_deg, -state.shoulder_lower_deg
 
     urdf.comment(
         f"LEG: {leg_id.upper()}  (side={side}, "
