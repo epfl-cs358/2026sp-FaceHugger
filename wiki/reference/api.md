@@ -94,6 +94,12 @@ Intended payload: `{"T": 3, "h": <height_mm>, "p": <pitch_deg>, "r": <roll_deg>}
 
 ### T:4 CMD_CALIBRATE (Servo Calibration)
 
+Direct angle control over a specific PCA9685 channel — a raw servo write that
+bypasses `translateToServo` and CALIB. Reserved for hardware calibration
+sessions (the `LegControl` per-joint sweep); clip streaming uses T:12
+(`CMD_STREAM_FRAME`) so the firmware applies translateToServo + CALIB at
+playback and the bundle stays CALIB-independent.
+
 Payload: `{"T": 4, "id": <leg_id>, "servo_id": <servo_id>, "a": <angle_0_180>}`
 
 | Field      | Type | Description          | Range |

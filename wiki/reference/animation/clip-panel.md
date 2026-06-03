@@ -26,14 +26,14 @@ flowchart TD
     H -. hand-copy .-> FW["firmware clips_all.h<br/>on-board clip player"]
 ```
 
-Why two output representations? The `.js` ships **finished servo degrees** because the firmware's calibrate path (`T:4`) writes whatever number it receives straight to a PCA channel without converting. The `clips_all.h` bundle instead stays in **pre-scaled math-space**, because the on-board player runs `translateToServo` at playback time, so converting at export would double-apply it.
+Both the `.js` and `clips_all.h` formats ship **pre-scaled math-space angles**. The `.js` files send one `T:12` (`CMD_STREAM_FRAME`) packet per frame from a browser console, and the on-board clip player reads `clips_all.h` and runs `translateToServo` at playback time — applying CALIB on the firmware side only. The mobile-app bundle `clips_extra.json` follows the same math-space convention, tagged `wire: "T12"` so a stale CALIB-baked bundle fails loudly in the app. `T:4` is reserved for raw per-servo calibration sessions (the `LegControl` screen), not for clip streaming.
 
 ## Key functions and why they exist
 
 - **`_read_bone_angles`** recovers each joint angle from the *evaluated* pose. IK joints store the solved result only in the bone's evaluated matrix, not in `rotation_euler`, so the function inverts the pose composition and reads bone-local Z. Reading `rotation_euler` naively was the original "all-zero export" bug.
 - **`_link1_delta_to_absolute`** fixes the shoulder. The rig's analytic yaw driver outputs a *delta from rest* (zero at the standing pose), but everything downstream expects *absolute* math-space angles where standing equals `NEUTRAL`. This converts `absolute = NEUTRAL + sign * delta` per leg, once, so both export paths inherit it.
-- **`_frame_to_servo`** is the host twin of the firmware `translateToServo`. Three steps: scale toward `NEUTRAL` by 2/3, apply the per-leg servo branch (`FL: 90 + (sh - 135)`, `FR: 90 + (sh - 45)`, `BL: 90 + (sh + 135)`, `BR: 90 + (sh + 45)`, with thigh/knee mirrored per side), then clamp to 0-180 and round. It feeds the `.js`.
-- **`_scale_from_neutral`** does only the 2/3 scale, no per-leg conversion. It feeds `clips_all.h`.
+- **`_scale_from_neutral`** does only the 2/3 scale, no per-leg conversion. Both the `.js` exporter (`to_js`) and the firmware bundle (`to_clips_header`) and the app bundle (`to_clips_extra_json`) emit through it — all three are math-space, with the firmware applying `translateToServo` + CALIB at playback / receipt.
+- **`_frame_to_servo`** is the host twin of the firmware `translateToServo` (lives in `code/simulation/firmware_port/exporter_parity.py`, not in the exporter's `servo_math.py` — the exporter is CALIB-free). Three steps: scale toward `NEUTRAL` by 2/3, apply the per-leg servo branch (`FL: 90 + (sh - 135)`, `FR: 90 + (sh - 45)`, `BL: 90 + (sh + 135)`, `BR: 90 + (sh + 45)`, with thigh/knee mirrored per side), then clamp to 0-180 and round. It powers two surfaces: the firmware-parity test (`gen_clip_parity_reference.py`) and the Blender panel's "current servo angles" preview.
 - **`to_js` / `to_c_header` / `to_clips_header`** emit the three artifacts. `to_js` bakes a configurable ESP IP into a self-contained WebSocket player; `to_clips_header` bundles the clips it is handed into one `clips_all.h` plus a `clips_manifest.json`, enforcing strictly increasing frame times and `uint16` limits. The panel passes it the ticked export selection, so the bundle is the curated firmware set, not necessarily every clip in the file.
 
 ## Conventions baked at export

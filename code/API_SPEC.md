@@ -77,7 +77,14 @@ Orientation of the chassis with feet planted.
 ---
 
 ### 4. Servo Calibration (`T: 4`)
-Direct angle control over a specific PCA9685 channel.
+Direct angle control over a specific PCA9685 channel — a **raw servo write**
+that bypasses `translateToServo` and CALIB. Reserved for hardware calibration
+sessions (the per-joint zero-point sweep, `LegControl` screen). **Do not use
+for clip streaming** — that path is T:12 (`CMD_STREAM_FRAME`), which sends
+math-space joint angles and lets the firmware apply translateToServo + CALIB
+on receipt. Coupling clip authoring to firmware CALIB via T:4 was retired in
+Phase 2 of the CALIB-decoupling plan.
+
 | Key  | Type | Description              | Range     |
 | :--- | :--- | :----------------------- | :-------- |
 | `id` | int  | leg id                   |   0 - 3   |
@@ -177,7 +184,11 @@ used by gaits and the on-board clip player.
 **Example:** `{"T": 12, "fr": [0.0, -10.5, 20.3], "fl": [0.0, -10.5, 20.3], "br": [0.0, -10.5, 20.3], "bl": [0.0, -10.5, 20.3]}`
 
 Missing or wrongly-typed leg arrays are silently rejected (the whole frame is
-dropped). Used by browser-streamed clip playback (exported `.js` files).
+dropped). Used by browser-streamed clip playback (exported `.js` files) **and
+by the mobile-app clip streamer** (`code/remote-control-app/MyApp/services/
+clipStreamer.ts`); both read math-space frames from the same exporter pipeline
+(`fh_clip_panel.py:to_js` / `to_clips_extra_json`, bundle tagged
+`wire: "T12"`).
 
 ---
 

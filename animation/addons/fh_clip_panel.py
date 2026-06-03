@@ -2104,15 +2104,19 @@ def bake_clip(clip_name, context):
 # LAYER 2 — converters: baked rows -> animation/exported_clips/<clip>/
 # ---------------------------------------------------------------------------
 
-# _LEGS, _CALIB_THIGH, _CALIB_KNEE, _frame_to_servo, _scale_from_neutral
-# are imported from animation/lib/servo_math.py (see top of file).
+# _LEGS, _scale_from_neutral, _link1_delta_to_absolute come from
+# animation/lib/servo_math.py (math-space only). _frame_to_servo (the
+# servo-space twin used by the panel's "current angles" preview and
+# the firmware-parity test) comes from firmware_port.exporter_parity —
+# see top of file. CALIB lives on the firmware side; the exporter does
+# not reference it on any on-wire path.
 
 # Blender leg name -> firmware LegId (matches `enum LegId` in
 # code/firmware/src/nervous_system/movements.h on origin/main). Used as
-# the wire `id` field in CMD_CALIBRATE (T:4) — firmware then does the
-# PCA-channel mapping via LEG_SERVO_CHANNEL[id][servo_id] (config.h:64),
-# so the exporter no longer needs convention.json's `channels` on the
-# wire. The Python list-of-3 returned by _frame_to_servo is indexed by
+# the wire `id` field in CMD_STREAM_FRAME (T:12) — firmware then does
+# the PCA-channel mapping via LEG_SERVO_CHANNEL[id][servo_id]
+# (config.h:64), so the exporter no longer needs convention.json's
+# `channels` on the wire. The Python list-of-3 returned by _frame_to_servo is indexed by
 # firmware `servo_id` (0=hip, 1=thigh, 2=knee).
 _LEG_ID = {"fr": 0, "fl": 1, "br": 2, "bl": 3}
 
