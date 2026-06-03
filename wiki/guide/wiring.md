@@ -6,8 +6,8 @@ This document details the complete electrical nervous system of the FaceHugger q
     The exact pinout is not final. Treat pin assignments here as the current proposal, not a contract. Always confirm against the firmware `config.h` before wiring or soldering.
 
 ## Schematic
-*(Insert KiCad SVG Export Here)*
-`![Circuit Schematic](../assets/img/assembly/Schematic_Clean-Robot-Schema_2026-05-28.svg)`
+
+![Circuit Schematic](../assets/img/assembly/Schematic_Clean-Robot-Schema_2026-05-28.svg)
 
 ### Block-by-Block Walkthrough
 - **The Power Block:** Raw 2S LiPo voltage flows through the BMS. It then splits into two paths: the heavy-duty Domino blocks (for the servos) and the Buck Converter (stepping down to 5V for the ESP32).

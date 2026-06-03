@@ -105,8 +105,9 @@ JOINT_BONES = [
 # across all 12 bones. The rig builder calls EditBone.align_roll(joint_axis)
 # so bone-local Z == the URDF joint axis for ALL joints, including the
 # per-side ± sign — see urdf_to_blender_rigged.py and
-# code/simulation/docs/API_ANIMATION_SPEC.md §2 ("No per-joint axis
-# branching anywhere", "rotation_euler[2] == joint angle"). The URDF axis
+# the Blender-rig reference at wiki/reference/animation/blender-rig.md
+# ("No per-joint axis branching anywhere", "rotation_euler[2] == joint
+# angle"). The URDF axis
 # being Y for link2/link3 is the *URDF-frame* axis, NOT the Blender
 # bone-local axis: do not branch per-bone here. (A prior per-bone
 # {link2/3: Y} map was wrong and silently exported zeros.)
@@ -1503,8 +1504,8 @@ class FH_OT_new_clip(bpy.types.Operator):
 
         # Key the current pose so the clip is non-empty and starts at the
         # pose the animator is looking at (rest pose by convention — see
-        # API_ANIMATION_SPEC.md §4). Keys land in the just-assigned
-        # action/slot of each object.
+        # wiki/reference/animation/blender-rig.md). Keys land in the
+        # just-assigned action/slot of each object.
         frame = context.scene.frame_current
         keyed = 0
         for target in CLIP_TARGETS:

@@ -68,10 +68,10 @@ This is the default standing posture, defined in math-space and indexed by firmw
 | 2 | RR/BR | back-right | -45 | -50 | -50 | leg splayed right-back, knee bent |
 | 3 | RL/BL | back-left | -135 | -60 | -35 | leg splayed left-back, knee bent |
 
-Each leg's NEUTRAL shoulder equals that leg's **outward (flat-spread) direction** on the yaw circle: **FR +45°, FL +135°, BR −45°, BL −135°**. Since change B regularized FL (75° → 135°), *servo 90 now means "outward" for all four legs*. Every leg's standing shoulder math-angle maps to servo 90, and the all-servos-90 pose is the symmetric outward "X" (the flat calibration pose). The thigh/knee values are per-leg physical-calibration choices, tuned on hardware.
+Each leg's NEUTRAL shoulder equals that leg's **outward (flat-spread) direction** on the yaw circle: **FR +45°, FL +135°, BR -45°, BL -135°**. For all four legs, servo 90 corresponds to the outward standing shoulder direction, so the all-servos-90 pose is the symmetric outward "X" - the flat calibration pose. The thigh/knee values are per-leg physical-calibration choices, tuned on hardware.
 
-!!! warning "Change B hardware step pending"
-    FL's 75° → 135° move is committed in code, but its **hardware step (re-mounting the FL shoulder horn so servo 90 points outward) is not yet done**, and the FL clips have not been re-exported. Until both happen, the *running* robot still expects the old servo-75 FL standing pose, so the symmetric "X" holds in code only. FR/BR/BL are unaffected.
+!!! note "FL shoulder horn orientation"
+    The FL shoulder horn must be mounted so that servo 90 points outward (matching FR/BR/BL). If you are re-mounting the FL shoulder or building from scratch, verify this before calibrating. If you re-mount the horn, re-export all clips.
 
 Leg positions at NEUTRAL (top view, front at top):
 
@@ -99,7 +99,7 @@ Output: servo-space angles for hip, thigh, and knee servos.
 | RR/BR (LegId=2) | `90 + (sh + 45)` | `90 + th` | `90 - kn` |
 | RL/BL (LegId=3) | `90 + (sh + 135)` | `90 - th` | `90 + kn` |
 
-The shoulder offsets (−45, −135, +45, +135) just *centre* each leg's outward direction on servo 90. All four are `90 + (sh ± offset)` with a **+1 slope**: a positive `sh` (CCW yaw) drives every shoulder servo up. FL's historic `hip = sh` special case is gone (change B), and BR's old `90 − (sh + 45)` mirror was removed when its shoulder was un-mirrored, 2026-05-25, since all four shoulder shafts share one vertical axis. The **thigh/knee** signs, by contrast, *do* mirror on the {FL,BR} ↔ {FR,BL} diagonal because those servo horns face opposite ways:
+The shoulder offsets (−45, −135, +45, +135) just *centre* each leg's outward direction on servo 90. All four are `90 + (sh ± offset)` with a **+1 slope**: a positive `sh` (CCW yaw) drives every shoulder servo up. All four shoulder shafts share one vertical axis, so every shoulder uses the same +1 slope with no mirroring. The **thigh/knee** signs, by contrast, *do* mirror on the {FL,BR} ↔ {FR,BL} diagonal because those servo horns face opposite ways:
 
 | leg | shoulder | thigh | knee |
 |-----|:--------:|:-----:|:----:|
@@ -138,7 +138,7 @@ The **shoulder (yaw) joint** uses `+Z` (vertical up) as its axis uniformly acros
 
 The **thigh and knee (pitch) joints** use an axis along the leg's longitudinal direction at rest. L-side legs (FL, BL) use `+Y` in the body frame; R-side legs (FR, BR) use `-Y` (mirrored mounting). This axis flip means the same positive theta lifts the foot toward the chassis on every leg. URDF limits are expressed as signed bounds in radians relative to rest; R-side limits are negated and swapped to account for the axis flip.
 
-The URDF limits also flow into the firmware as a clip-playback envelope. `clampClipServos` (`motion_math.cpp`) builds a per-leg window centred on each joint's `CALIB`: shoulder uniform `90 ± 52°` (the tight side of every URDF shoulder), thigh `CALIB_THIGH ± 60°`, knee `CALIB_KNEE ± 90°`. Half-widths live as macros in `shared/config.h` (`HIP_CLAMP_FROM_NINETY`, `THIGH_CLAMP_FROM_CALIB`, `KNEE_CLAMP_FROM_CALIB`). The clamp is *clip-only* — gait output stays bit-for-bit — and runs before `applyServos`, so an authored clip that drifts past a mechanical stop is silently brought back to the URDF-legal range instead of stalling the servo. See [Motion engine → URDF clip-clamp envelope](firmware/motion-engine.md#urdf-clip-clamp-envelope).
+The URDF limits also flow into the firmware as a clip-playback envelope. `clampClipServos` (`motion_math.cpp`) builds a per-leg window centred on each joint's `CALIB`: shoulder uniform `90 ± 52°` (the tight side of every URDF shoulder), thigh `CALIB_THIGH ± 60°`, knee `CALIB_KNEE ± 90°`. Half-widths live as macros in `shared/config.h` (`HIP_CLAMP_FROM_NINETY`, `THIGH_CLAMP_FROM_CALIB`, `KNEE_CLAMP_FROM_CALIB`). The clamp is *clip-only* - gait output stays bit-for-bit - and runs before `applyServos`, so an authored clip that drifts past a mechanical stop is silently brought back to the URDF-legal range instead of stalling the servo. See [Motion engine → URDF clip-clamp envelope](firmware/motion-engine.md#urdf-clip-clamp-envelope).
 
 ## Servo Channels and Hardware
 
@@ -155,7 +155,7 @@ LEG_SERVO_CHANNEL[4][3] = {
 }
 ```
 
-A proposed servo ID scheme (`animation/SERVO_ID_CONVENTION.md`) uses `servo_id = leg_idx * 3 + joint_idx` with legs in alphabetical order (`fl:0, fr:1, bl:2, br:3`). **STATUS: PROPOSAL** pending firmware sign-off. Until `SERVO_CONFIG[]` is finalized, the channel table above is authoritative, and the animation exporter's `servo_mapping.yaml` must match it exactly.
+A proposed servo ID scheme (see [Servo conventions](firmware/servo-conventions.md)) uses `servo_id = leg_idx * 3 + joint_idx` with legs in alphabetical order (`fl:0, fr:1, bl:2, br:3`). **STATUS: PROPOSAL** pending firmware sign-off. Until `SERVO_CONFIG[]` is finalized, the channel table above is authoritative, and the animation exporter's `servo_mapping.yaml` must match it exactly.
 
 ## SCALE Factor
 
@@ -189,7 +189,7 @@ When any of these must change, regenerate `clips_all.h` from source `.blend` fil
 - `code/firmware/src/nervous_system/motion_math.cpp`: `translateToServo()` source
 - `code/firmware/src/nervous_system/spinal_cord.cpp`: `NEUTRAL[]` array
 - `code/firmware/src/shared/config.h`: PCA9685 channel assignments and pulse range
-- `code/simulation/docs/MERGE_AND_CONVENTION.md`: the rest-pose definition and per-leg shoulder derivation
+- [Kinematics conventions](firmware/kinematics.md): rest-pose definition and per-leg shoulder derivation
 - `doc/animation-pipeline/urdf-conventions.md`: joint origins, axis vectors, axis flip rationale
-- `animation/SERVO_ID_CONVENTION.md`: servo ID proposal
+- [Servo conventions](firmware/servo-conventions.md): servo ID proposal and channel-table reconciliation
 - `code/API_SPEC.md`: WebSocket protocol (gait selection, clip playback, body pose)
