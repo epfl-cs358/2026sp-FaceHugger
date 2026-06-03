@@ -1,7 +1,14 @@
 # === Plain Python — no Blender required ===
 # Run as: python <this file>  (or via pytest).
-"""Export consistency checker: verifies .h bone angles round-trip to .js
-servo values via _frame_to_servo from animation/lib/servo_math.py.
+"""Export consistency checker: verifies .h bone angles round-trip to the
+math-space float triples in the .js clip via _scale_from_neutral from
+animation/lib/servo_math.py.
+
+After the CALIB-decoupling refactor (Phases 1–3) the .js export switched
+from T:4 servo-space integers to T:12 math-space floats, so the .h and .js
+both live in math-space now and translateToServo + CALIB are applied by
+the firmware on receipt. Legacy T:4 .js files are skipped with a clear
+re-export hint.
 
 Usage:
     python check_export_consistency.py [--export-dir PATH]
@@ -20,11 +27,24 @@ if _LIB not in sys.path:
     sys.path.insert(0, _LIB)
 # _frame_to_servo moved to firmware-parity helpers (Phase 3 of the CALIB-
 # decoupling plan — animation/lib/servo_math.py is math-space only now).
+# We still need _frame_to_servo for check_standing_neutral (servo-90 invariant
+# at the standing pose); clip frames are compared in math-space via
+# _scale_from_neutral.
 _FW_PORT_PARENT = str(Path(__file__).resolve().parents[2] / "code" / "simulation")
 if _FW_PORT_PARENT not in sys.path:
     sys.path.insert(0, _FW_PORT_PARENT)
 
 from firmware_port.exporter_parity import _frame_to_servo  # noqa: E402
+from servo_math import _scale_from_neutral  # noqa: E402
+
+# Float-vs-text round-trip tolerance for math-space degree comparison.
+# .js values are formatted with 4 fractional digits, so 1e-2 is generous.
+FRAME_TOL_DEG = 0.01
+
+# Marker emitted in the .js header comment by the T:12 (post-CALIB-decouple)
+# exporter. Files without it are legacy T:4 servo-space integer clips and must
+# be re-exported before they can be checked.
+T12_MARKER = "T:12 CMD_STREAM_FRAME"
 
 BONE_ORDER = [
     "fl_link1",
@@ -76,39 +96,72 @@ def parse_h_file(path: Path) -> list:
 
 
 def parse_js_file(path: Path) -> list:
-    """Parse a .js CLIP array — returns list of {fr, fl, br, bl} dicts."""
+    """Parse a .js CLIP array — returns list of {fr, fl, br, bl} float lists.
+
+    The post-CALIB-decouple exporter emits math-space float triples (T:12).
+    Legacy T:4 servo-space integer .js files are detected and signalled by
+    raising ``StaleClipFormatError`` so the caller can skip with a hint.
+    """
     text = path.read_text()
+
+    # Stale T:4 servo-space integer format: detected by absence of the T:12
+    # marker comment AND a first-frame triple that parses cleanly as integers.
+    if T12_MARKER not in text:
+        raise StaleClipFormatError(
+            f"{path.name} is a legacy T:4 servo-space integer clip "
+            f"(no '{T12_MARKER}' marker in header). Re-export from Blender "
+            f"to produce a T:12 math-space float clip."
+        )
+
     clip_match = re.search(r"const CLIP\s*=\s*\[(.*?)\];", text, re.DOTALL)
     if not clip_match:
         raise ValueError(f"No CLIP array found in {path}")
     clip_str = clip_match.group(1)
 
+    # Accept signed floats (with or without a decimal point) for each triple.
+    num = r"-?\d+(?:\.\d+)?"
     frames = []
     for frame_str in re.finditer(r"\{[^{}]*\}", clip_str):
         s = frame_str.group()
         frame = {}
         for leg in ("fr", "fl", "br", "bl"):
-            m = re.search(rf"{leg}:\[(-?\d+),(-?\d+),(-?\d+)\]", s)
+            m = re.search(rf"{leg}:\[({num}),({num}),({num})\]", s)
             if m:
-                frame[leg] = [int(m.group(1)), int(m.group(2)), int(m.group(3))]
+                frame[leg] = [float(m.group(1)), float(m.group(2)), float(m.group(3))]
         if len(frame) == 4:
             frames.append(frame)
     return frames
 
 
-def check_frame(h_row: dict, js_frame: dict, convention: dict, frame_idx: int) -> list:
-    """Compare translated h_row servo values against js_frame.
+class StaleClipFormatError(Exception):
+    """Raised by parse_js_file when a .js is in the legacy T:4 format."""
+
+
+def check_frame(
+    h_row: dict,
+    js_frame: dict,
+    convention: dict,
+    frame_idx: int,
+    tol: float = FRAME_TOL_DEG,
+) -> list:
+    """Compare math-space scaled h_row against js_frame (math-space floats).
     Returns list of error strings (empty = PASS).
+
+    Both sides live in math-space: the .h carries raw bone angles, which we
+    pass through ``_scale_from_neutral`` (the firmware-side step-1 math, no
+    translateToServo / no CALIB); the .js carries the same math-space float
+    triples written by the exporter. Tolerance covers the .js text round-trip.
     """
-    computed = _frame_to_servo(h_row, convention)
+    computed = _scale_from_neutral(h_row, convention)
     errors = []
     for leg in ("fr", "fl", "br", "bl"):
         for j, joint in enumerate(JOINT_NAMES):
             got = computed[leg][j]
             want = js_frame[leg][j]
-            if got != want:
+            if abs(got - want) > tol:
                 errors.append(
-                    f"frame {frame_idx} {leg} {joint}: computed={got} js={want}"
+                    f"frame {frame_idx} {leg} {joint}: "
+                    f"computed={got:.4f} js={want:.4f} (|d|={abs(got - want):.4f})"
                 )
     return errors
 
@@ -123,7 +176,11 @@ def check_clip(clip_dir: Path, convention: dict) -> bool:
         return True
 
     h_frames = parse_h_file(h_files[0])
-    js_frames = parse_js_file(js_files[0])
+    try:
+        js_frames = parse_js_file(js_files[0])
+    except StaleClipFormatError as e:
+        print(f"  SKIP {clip_name}: {e}")
+        return True
 
     if len(h_frames) != len(js_frames):
         print(

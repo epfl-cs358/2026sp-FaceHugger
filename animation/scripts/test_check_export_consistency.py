@@ -17,6 +17,7 @@ sys.path.insert(0, str(ADDONS_DIR))
 
 from check_export_consistency import (
     _frame_to_servo,
+    _scale_from_neutral,
     check_convention,
     check_frame,
     check_standing_neutral,
@@ -60,33 +61,36 @@ def test_h_row_to_dict_maps_bones_correctly():
 
 
 def test_check_frame_passes_when_js_matches_computed():
-    """check_frame returns no errors when js_frame == _frame_to_servo(row).
-    The expected servo values come from _frame_to_servo itself — the test
-    exercises check_frame's identity branch, not a snapshot of values."""
+    """check_frame returns no errors when js_frame == _scale_from_neutral(row).
+    Both sides are math-space floats now (post-CALIB-decouple); the expected
+    values come from _scale_from_neutral itself so the test exercises the
+    identity branch and survives any convention tweak."""
     row = h_row_to_dict(H_ROW_F0)
-    js = _frame_to_servo(row, CONVENTION)
+    js = _scale_from_neutral(row, CONVENTION)
     errors = check_frame(row, js, CONVENTION, frame_idx=0)
     assert errors == [], f"Unexpected errors: {errors}"
 
 
 def test_check_frame_detects_mismatch():
-    """check_frame surfaces a single error when one servo value disagrees."""
+    """check_frame surfaces a single error when one math-space value disagrees
+    by more than the float tolerance."""
     row = h_row_to_dict(H_ROW_F0)
-    js = _frame_to_servo(row, CONVENTION)
-    js["fr"] = [(js["fr"][0] + 7) % 181, js["fr"][1], js["fr"][2]]  # corrupt one value
+    js = _scale_from_neutral(row, CONVENTION)
+    js["fr"] = [js["fr"][0] + 5.0, js["fr"][1], js["fr"][2]]  # corrupt one joint
     errors = check_frame(row, js, CONVENTION, frame_idx=0)
     assert len(errors) == 1
     assert "fr" in errors[0] and "hip" in errors[0]
 
 
-def test_parse_js_frame_with_negative_servo():
-    """Ensure parse_js_file handles negative servo values (e.g. fl:[-1,52,147])."""
+def test_parse_js_frame_with_negative_floats():
+    """parse_js_file accepts math-space negative floats (post-T:12 format)."""
     from check_export_consistency import parse_js_file
     import tempfile
     import os
 
-    js_content = """const CLIP = [
-  { t: 0, fr:[59,131,33], fl:[-1,49,148], br:[61,52,151], bl:[179,131,34] },
+    js_content = """// Wire shape: T:12 CMD_STREAM_FRAME
+const CLIP = [
+  { t: 0, fr:[44.2948,-41.4850,-57.1125], fl:[134.2948,-41.4850,-58.1124], br:[-45.7052,-38.1520,-61.4454], bl:[-135.7052,-41.4850,-56.4459] },
 ];"""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".js", delete=False) as f:
         f.write(js_content)
@@ -94,9 +98,37 @@ def test_parse_js_frame_with_negative_servo():
     try:
         frames = parse_js_file(Path(path))
         assert len(frames) == 1, f"Expected 1 frame, got {len(frames)}"
-        assert frames[0]["fl"] == [-1, 49, 148], (
-            f"Expected fl=[-1,49,148], got {frames[0]['fl']}"
-        )
+        for j, want in enumerate([44.2948, -41.4850, -57.1125]):
+            assert abs(frames[0]["fr"][j] - want) < 1e-6, (
+                f"fr[{j}]: got {frames[0]['fr'][j]} want {want}"
+            )
+        assert abs(frames[0]["br"][0] - -45.7052) < 1e-6
+    finally:
+        os.unlink(path)
+
+
+def test_parse_js_file_skips_stale_t4_files():
+    """A legacy T:4 servo-space integer .js (no T:12 marker) raises
+    StaleClipFormatError with a clear re-export hint, so check_clip can
+    SKIP rather than fail noisily."""
+    from check_export_consistency import StaleClipFormatError, parse_js_file
+    import tempfile
+    import os
+    import pytest
+
+    js_content = """// FaceHugger clip: fallingRobot
+// Generated 2026-05-25 from Blender animation
+const CLIP = [
+  { t: 0, fr:[91,131,33], fl:[89,49,148], br:[89,52,151], bl:[91,131,34] },
+];"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".js", delete=False) as f:
+        f.write(js_content)
+        path = f.name
+    try:
+        with pytest.raises(StaleClipFormatError) as exc:
+            parse_js_file(Path(path))
+        msg = str(exc.value)
+        assert "Re-export" in msg or "re-export" in msg
     finally:
         os.unlink(path)
 
