@@ -203,27 +203,27 @@ def test_clamp_clip_servos_hip_uniform(leg_id):
 
 
 def test_clamp_clip_servos_thigh_FL_neutral_27():
-    """The motivating case: FL NEUTRAL (servo thigh = 27 = CALIB_FL_THIGH - 60)
-    must sit on the lower edge, not be clipped to 30 by an old uniform window."""
+    """FL NEUTRAL (servo thigh = 27) sits comfortably inside the ±75° window
+    around CALIB_FL_THIGH=87 (= [12, 162]), not clipped to a uniform 30."""
     s = ServoTriple(hip=90.0, thigh=27.0, knee=90.0)
     assert clamp_clip_servos(LEG_FL, s).thigh == 27.0
-    # And anything below CALIB-60 IS clipped to CALIB-60.
-    s_low = ServoTriple(hip=90.0, thigh=26.0, knee=90.0)
-    assert clamp_clip_servos(LEG_FL, s_low).thigh == 27.0
+    # Anything below CALIB-75 IS clipped to CALIB-75.
+    s_low = ServoTriple(hip=90.0, thigh=11.0, knee=90.0)
+    assert clamp_clip_servos(LEG_FL, s_low).thigh == 12.0
 
 
-def test_clamp_clip_servos_thigh_BR_upper_163():
-    """CALIB_BR_THIGH = 103 → window [43, 163]. Upper edge is 163, not 150."""
-    assert clamp_clip_servos(LEG_RR, ServoTriple(90.0, 163.0, 90.0)).thigh == 163.0
-    assert clamp_clip_servos(LEG_RR, ServoTriple(90.0, 164.0, 90.0)).thigh == 163.0
-    assert clamp_clip_servos(LEG_RR, ServoTriple(90.0, 43.0, 90.0)).thigh == 43.0
-    assert clamp_clip_servos(LEG_RR, ServoTriple(90.0, 42.0, 90.0)).thigh == 43.0
+def test_clamp_clip_servos_thigh_BR_upper_178():
+    """CALIB_BR_THIGH = 103 → window [28, 178] after the ±75° widening."""
+    assert clamp_clip_servos(LEG_RR, ServoTriple(90.0, 178.0, 90.0)).thigh == 178.0
+    assert clamp_clip_servos(LEG_RR, ServoTriple(90.0, 179.0, 90.0)).thigh == 178.0
+    assert clamp_clip_servos(LEG_RR, ServoTriple(90.0, 28.0, 90.0)).thigh == 28.0
+    assert clamp_clip_servos(LEG_RR, ServoTriple(90.0, 27.0, 90.0)).thigh == 28.0
 
 
-def test_clamp_clip_servos_thigh_FR_lower_24():
-    """CALIB_FR_THIGH = 84 → window [24, 144]. 24 unchanged; 23 clamped to 24."""
-    assert clamp_clip_servos(LEG_FR, ServoTriple(90.0, 24.0, 90.0)).thigh == 24.0
-    assert clamp_clip_servos(LEG_FR, ServoTriple(90.0, 23.0, 90.0)).thigh == 24.0
+def test_clamp_clip_servos_thigh_FR_lower_9():
+    """CALIB_FR_THIGH = 84 → window [9, 159] after the ±75° widening."""
+    assert clamp_clip_servos(LEG_FR, ServoTriple(90.0, 9.0, 90.0)).thigh == 9.0
+    assert clamp_clip_servos(LEG_FR, ServoTriple(90.0, 8.0, 90.0)).thigh == 9.0
 
 
 def test_clamp_clip_servos_knee_per_leg():

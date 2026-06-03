@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install pytest
+      - run: pip install pytest pyyaml
       - name: Animation lib tests (CALIB cross-repo consistency)
         run: pytest animation/lib/tests/ -v
       - name: Foot-tip geometry parity
