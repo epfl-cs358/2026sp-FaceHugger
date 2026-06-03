@@ -23,6 +23,10 @@
         {
           "occurrence": "FlexibleSkeleton:1/LipoCage:1",
           "body": "LipoCage"
+        },
+        {
+          "occurrence": "FlexibleSkeleton:1/Shell:1",
+          "body": "*"
         }
       ],
       "origin_landmark": null,
@@ -171,6 +175,8 @@
     "LegMountPointBR",
     "LegMountPointBL",
     "BodyBottomPoint",
+    "BodyAlignToShellPoint",
+    "ShellAlignToBodyPoint",
     "BodyToLink1Point",
     "Link1ToLink2Point",
     "Link2ToLink3Point",
@@ -261,9 +267,9 @@
       "limits_rad": {
         "rest": 0.0,
         "min_enabled": true,
-        "min": -1.0471975511965976,
+        "min": -1.3089969389957472,
         "max_enabled": true,
-        "max": 1.0471975511965976
+        "max": 1.3089969389957472
       },
       "parent_occurrence_path": "Link1L:1",
       "parent_body": "Link1L",
@@ -417,6 +423,20 @@
             0.0,
             -17.0
           ]
+        },
+        {
+          "name": "BodyAlignToShellPoint",
+          "visible": true,
+          "pos_mm": [
+            -22.25,
+            56.0,
+            29.0
+          ],
+          "pos_world_mm": [
+            -22.25,
+            56.0,
+            29.0
+          ]
         }
       ],
       "children": [
@@ -493,31 +513,31 @@
           "points": [],
           "children": [],
           "physics": {
-            "mass_kg": 0.374566,
+            "mass_kg": 0.37262,
             "com_mm": [
-              0.935,
-              2.302,
-              12.297
+              0.834,
+              2.515,
+              12.181
             ],
             "com_world_mm": [
-              0.935,
-              2.302,
-              12.297
+              0.834,
+              2.515,
+              12.181
             ],
             "inertia_kg_m2": {
-              "ixx": 0.000591284,
-              "iyy": 0.000347176,
-              "izz": 0.000714486,
-              "ixy": 1.6424e-05,
-              "iyz": -7.024e-06,
-              "ixz": -2.295e-06
+              "ixx": 0.000584975,
+              "iyy": 0.000343436,
+              "izz": 0.000709055,
+              "ixy": 1.4501e-05,
+              "iyz": -9.607e-06,
+              "ixz": -9.36e-07
             }
           }
         },
         {
           "name": "PCB_ESP32-38Pines:1",
           "xref": false,
-          "visible": false,
+          "visible": true,
           "parent_origin_mm": [
             -16.75,
             -24.34,
@@ -8495,7 +8515,7 @@
         {
           "name": "PCA9685 v18:1",
           "xref": false,
-          "visible": false,
+          "visible": true,
           "parent_origin_mm": [
             30.522,
             2.719,
@@ -10956,7 +10976,7 @@
         {
           "name": "BuckConverter:1",
           "xref": false,
-          "visible": false,
+          "visible": true,
           "parent_origin_mm": [
             -11.568,
             28.104,
@@ -11284,7 +11304,7 @@
         {
           "name": "OLED 128 x 64 Display 0.96 Inch:1",
           "xref": false,
-          "visible": false,
+          "visible": true,
           "parent_origin_mm": [
             -0.114,
             63.0,
@@ -17876,7 +17896,7 @@
         {
           "name": "vl53l0x:1",
           "xref": false,
-          "visible": false,
+          "visible": true,
           "parent_origin_mm": [
             2.882,
             57.2,
@@ -17952,7 +17972,7 @@
         {
           "name": "Lipo_Protector:1",
           "xref": false,
-          "visible": false,
+          "visible": true,
           "parent_origin_mm": [
             -5.0,
             -1.202,
@@ -18028,7 +18048,7 @@
         {
           "name": "MPU6050 v2:1",
           "xref": false,
-          "visible": false,
+          "visible": true,
           "parent_origin_mm": [
             -9.996,
             7.146,
@@ -18563,7 +18583,7 @@
         {
           "name": "vl53l0x:2",
           "xref": false,
-          "visible": false,
+          "visible": true,
           "parent_origin_mm": [
             2.882,
             -4.929,
@@ -18711,27 +18731,118 @@
               "ixz": 0.0
             }
           }
+        },
+        {
+          "name": "Shell:1",
+          "xref": true,
+          "visible": true,
+          "parent_origin_mm": [
+            -0.25,
+            -0.0,
+            42.0
+          ],
+          "world_origin_mm": [
+            -0.25,
+            -0.0,
+            42.0
+          ],
+          "world_transform_rm_cm": [
+            [
+              -0.9999999999999992,
+              -6.750242725894751e-16,
+              -1.9887615922696767e-18,
+              -0.024999962746218855
+            ],
+            [
+              7.678319785542339e-16,
+              -0.9999999999999993,
+              1.303153165750373e-18,
+              -8.955336472382668e-13
+            ],
+            [
+              8.673617380085978e-18,
+              2.77555756156289e-17,
+              0.9999999999999997,
+              4.199999999999999
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "bodies": [
+            {
+              "name": "Shell",
+              "visible": true,
+              "bbox_center_mm": [
+                0.0,
+                0.5,
+                2.5
+              ]
+            }
+          ],
+          "axes": [],
+          "points": [
+            {
+              "name": "ShellAlignToBodyPoint",
+              "visible": true,
+              "pos_mm": [
+                22.0,
+                -56.0,
+                -13.0
+              ],
+              "pos_world_mm": [
+                -22.25,
+                56.0,
+                29.0
+              ]
+            }
+          ],
+          "children": [],
+          "physics": {
+            "mass_kg": 0.127963,
+            "com_mm": [
+              -0.247,
+              0.184,
+              52.499
+            ],
+            "com_world_mm": [
+              -0.247,
+              0.184,
+              52.499
+            ],
+            "inertia_kg_m2": {
+              "ixx": 0.000549072,
+              "iyy": 0.000417198,
+              "izz": 0.000240237,
+              "ixy": 9.3e-08,
+              "iyz": 5.19e-07,
+              "ixz": 1.658e-06
+            }
+          }
         }
       ],
       "physics": {
-        "mass_kg": 0.565732,
+        "mass_kg": 0.691749,
         "com_mm": [
-          0.516,
-          2.896,
-          9.502
+          0.319,
+          2.511,
+          17.386
         ],
         "com_world_mm": [
-          0.516,
-          2.896,
-          9.502
+          0.319,
+          2.511,
+          17.386
         ],
         "inertia_kg_m2": {
-          "ixx": 0.000840047,
-          "iyy": 0.000447112,
-          "izz": 0.000993824,
-          "ixy": 2.2178e-05,
-          "iyz": -2.3545e-05,
-          "ixz": -6.029e-06
+          "ixx": 0.001382809,
+          "iyy": 0.000860571,
+          "izz": 0.00122863,
+          "ixy": 2.0348e-05,
+          "iyz": -2.5609e-05,
+          "ixz": -3.012e-06
         }
       }
     },
@@ -20007,7 +20118,7 @@
         {
           "name": "LegBaseServoEnclosure:3",
           "xref": true,
-          "visible": false,
+          "visible": true,
           "parent_origin_mm": [
             -7.48,
             131.74,
@@ -22322,22 +22433,22 @@
       "physics": {
         "mass_kg": 2.820813,
         "com_mm": [
-          -69.044,
-          59.77,
+          -76.846,
+          46.985,
           29.74
         ],
         "com_world_mm": [
-          -69.044,
-          59.77,
+          -76.846,
+          46.985,
           29.74
         ],
         "inertia_kg_m2": {
-          "ixx": 0.01822641,
-          "iyy": 0.021222657,
-          "izz": 0.028901521,
-          "ixy": 0.013609345,
-          "iyz": -0.006839947,
-          "ixz": 0.007441017
+          "ixx": 0.012583516,
+          "iyy": 0.025966612,
+          "izz": 0.028002583,
+          "ixy": 0.011431096,
+          "iyz": -0.004745775,
+          "ixz": 0.008689449
         }
       }
     }

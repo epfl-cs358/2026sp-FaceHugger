@@ -35,6 +35,11 @@ class SpinalCord{
         // dispatch (spinalCord.rest()) handles the actual ease.
         void stopClipPlayback();
         void setClipSmoothing(float alpha);   // T:11 runtime smoothing knob
+        // T:12: receive one math-space frame (FR,FL,BR,BL × sh,th,kn), apply
+        // translateToServo + applyInvert, then write only joints that moved by
+        // more than SERVO_DEADBAND_DEG. CALIB-agnostic: re-calibrating the robot
+        // never requires re-exporting clip files.
+        void streamMathFrame(const float a[LEG_COUNT][3]);
         void setInverted(bool flag);
         // Auto-invert toggle: gates whether main.cpp is allowed to forward the
         // IMU-derived `isInverted` boolean to setInverted(). Defaults ON so the
@@ -73,10 +78,7 @@ class SpinalCord{
         volatile RobotState robotState;
         Adafruit_PWMServoDriver driver;
         Face face;
-        Leg leg1;
-        Leg leg2;
-        Leg leg3;
-        Leg leg4;
+        Leg legs_[LEG_COUNT];  // indexed 0=FR, 1=FL, 2=RR/BR, 3=RL/BL
 
         GaitType currentGait_;
         uint32_t gaitPhaseStartMs_;
@@ -90,6 +92,8 @@ class SpinalCord{
                                             // its end instead of easing back to neutral
         float clipEmaAlpha_ = 0.75f;        // clip-playback EMA smoothing; boot default,
                                             // runtime-tunable via setClipSmoothing (T:11)
+        float lastStreamAngles_[LEG_COUNT][3];  // sentinel-init to 999.0f; forces first
+                                                // write through the deadband guard (T:12)
 
         // Vector timing and state
         float targetX;

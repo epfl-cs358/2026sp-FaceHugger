@@ -14,9 +14,12 @@ void setup() {
     initNetwork();
     // Boot-time orientation: initSensors() reads ONE accel sample and uses a
     // hardcoded UPRIGHT reference to decide whether to start in upright or
-    // inverted mode. Needs SpinalCord so it can call setInverted(true) before
-    // the first servo writes if the robot was powered on upside-down.
-    initSensors(spinalCord);
+    // inverted mode. Returns a result struct; main.cpp acts on it to keep the
+    // brain layer decoupled from nervous_system/spinal_cord.h.
+    {
+        SensorBootResult boot = initSensors();
+        if (boot.inverted) spinalCord.setInverted(true);
+    }
     diagnostics::begin(spinalCord);
 
     Serial.println("FaceHugger OS Online.");

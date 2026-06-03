@@ -120,4 +120,9 @@ constexpr bool isValidServoIndex(int leg_id, int servo_id) {
 }
 #endif
 
+// Minimum servo angle change (degrees) to trigger a PWM update.
+// Filters floating-point noise without perceptible motion loss.
+// Mechanical joint slop typically exceeds 1°, so 0.5° is safe.
+static constexpr float SERVO_DEADBAND_DEG = 0.5f;
+
 #endif

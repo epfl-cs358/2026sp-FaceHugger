@@ -840,8 +840,9 @@ $RECYCLE.BIN/
 # Re-include cad/scripts/ (overrides the VirtualEnv [Ss]cripts rule above)
 !cad/scripts/
 !cad/scripts/**
-# But keep .DS_Store ignored even inside cad/scripts/
+# But keep .DS_Store and __pycache__ ignored even inside cad/scripts/
 cad/scripts/**/.DS_Store
+cad/scripts/**/__pycache__/
 
 # Same exception for animation/scripts/ (Blender debug tools live here)
 !animation/scripts/

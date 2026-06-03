@@ -10,7 +10,6 @@
 class Leg {
   public:
     Leg(Adafruit_PWMServoDriver& pwm, int legID, Servo hipServo, Servo thighServo, Servo kneeServo); // Constructor
-    void setPose(float x, float y, float z);
     void setJointAngles(double hip, double thigh, double knee);
     void setJointAnglesTimed(double hip, double thigh, double knee, uint32_t ms);
     void returnToDefaultAngles();
@@ -18,6 +17,7 @@ class Leg {
     void tickEase();
     bool easing() const;
     void identifyAndMove(uint8_t channel, double angle);
+    void setServo(uint8_t servoId, double angle);  // 0=hip, 1=thigh, 2=knee
     void getJointAngles(float& hip, float& thigh, float& knee) const;
     uint8_t legId() const { return (uint8_t)id; }  // 0=FR, 1=FL, 2=RR/BR, 3=RL/BL
   private:
