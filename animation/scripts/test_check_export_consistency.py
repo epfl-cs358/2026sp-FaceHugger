@@ -133,6 +133,60 @@ const CLIP = [
         os.unlink(path)
 
 
+def test_check_inter_leg_gaps_clean_at_rest():
+    """At rest (all four shoulders at firmware NEUTRAL[]) the same-side gaps
+    are 90°, well above the 5° buffer. No violations."""
+    from check_export_consistency import check_inter_leg_gaps
+
+    rest = [
+        {
+            "fr": [45.0, -60.0, -37.0],  # FR
+            "fl": [135.0, -60.0, -40.0],  # FL
+            "br": [-45.0, -50.0, -50.0],  # BR
+            "bl": [-135.0, -60.0, -35.0],  # BL
+        }
+    ]
+    assert check_inter_leg_gaps(rest, CONVENTION) == []
+
+
+def test_check_inter_leg_gaps_flags_collapsed_gap():
+    """If FR swings all the way to BR's home and BR stays at rest, the
+    right-side gap collapses to 0° — flagged."""
+    from check_export_consistency import check_inter_leg_gaps
+
+    bad = [
+        {
+            "fr": [-45.0, -60.0, -37.0],  # FR at math -45 = BR's rest direction
+            "fl": [135.0, -60.0, -40.0],
+            "br": [-45.0, -50.0, -50.0],  # BR at rest
+            "bl": [-135.0, -60.0, -35.0],
+        }
+    ]
+    violations = check_inter_leg_gaps(bad, CONVENTION)
+    assert len(violations) == 1
+    assert "RIGHT" in violations[0]["side"]
+    assert violations[0]["gap"] < 0.01  # ~0°
+
+
+def test_check_inter_leg_gaps_uses_shorter_arc():
+    """LEFT pair is FL=+135, BL=-135. The shorter arc is 90° (going via ±180°),
+    NOT 270°. The check must use the shorter arc so rest comes out as 90°,
+    not as a violation."""
+    from check_export_consistency import check_inter_leg_gaps
+
+    rest = [
+        {
+            "fr": [45.0, -60.0, -37.0],
+            "fl": [135.0, -60.0, -40.0],
+            "br": [-45.0, -50.0, -50.0],
+            "bl": [-135.0, -60.0, -35.0],
+        }
+    ]
+    # If the implementation were using signed (long) arc, LEFT gap would be
+    # 270° (not below buffer) but for the wrong reason. Pin: no violations.
+    assert check_inter_leg_gaps(rest, CONVENTION) == []
+
+
 def test_check_convention_passes_with_current_neutral():
     """convention.json's NEUTRAL must put every shoulder at servo 90 and
     every hip/knee off 90 (the 'servo 90 = outward' guarantee)."""

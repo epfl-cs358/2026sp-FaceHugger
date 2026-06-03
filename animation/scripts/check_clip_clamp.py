@@ -41,6 +41,41 @@ _JOINT_NAMES = {0: "shoulder", 1: "thigh", 2: "knee"}
 # convention.json scale baked into the current clips_all.h
 _BAKED_SCALE = 0.6667
 
+# Same-side inter-leg shoulder buffer. Must match
+# code/firmware/src/shared/config.h INTER_LEG_BUFFER_DEG so the lint and the
+# (eventual) firmware safety net agree on what's a violation.
+INTER_LEG_BUFFER_DEG = 5.0
+
+
+def _shorter_arc_deg(a: float, b: float) -> float:
+    """Shorter arc between two angles in degrees, normalised to [0, 180]."""
+    d = (b - a) % 360.0
+    if d > 180.0:
+        d = 360.0 - d
+    return d
+
+
+def check_inter_leg_gap(
+    shoulders_math: list[float], buffer_deg: float = INTER_LEG_BUFFER_DEG
+) -> dict[str, float]:
+    """Math-space shorter-arc gap between same-side front/back shoulders.
+
+    Input is the 4 shoulder math angles in firmware LegId order
+    [FR, FL, BR, BL]. Returns {side: gap_deg} for sides where the gap is
+    below `buffer_deg`. Empty dict = no violations. At rest each gap is
+    90° so the check passes trivially; it only fires when a front leg
+    swings most of the way back into its back neighbour's quadrant.
+    """
+    fr, fl, br, bl = shoulders_math
+    violations: dict[str, float] = {}
+    right_gap = _shorter_arc_deg(fr, br)
+    if right_gap < buffer_deg:
+        violations["RIGHT (FR-BR)"] = right_gap
+    left_gap = _shorter_arc_deg(fl, bl)
+    if left_gap < buffer_deg:
+        violations["LEFT (FL-BL)"] = left_gap
+    return violations
+
 
 def _unscale(scaled_val: float, neutral: float, baked_scale: float) -> float:
     """Reverse the N+(raw-N)*scale compression to recover Blender raw angle."""
@@ -104,8 +139,15 @@ def run(clip_filter: str | None, show_scale_one: bool) -> int:
 
     for clip in clips:
         clip_hits = {s: [] for s in scales_to_check}
+        clip_gap_violations: dict[float, list] = {s: [] for s in scales_to_check}
 
         for frame in clip.frames:
+            # Collect per-scale shoulder math angles for the inter-leg gap
+            # check after all 4 legs are processed.
+            shoulders_per_scale: dict[float, list[float]] = {
+                s: [0.0, 0.0, 0.0, 0.0] for s in scales_to_check
+            }
+
             for leg_id in range(4):
                 base_sh = frame.a[leg_id * 3]
                 base_th = frame.a[leg_id * 3 + 1]
@@ -127,6 +169,8 @@ def run(clip_filter: str | None, show_scale_one: bool) -> int:
                             _unscale(base_kn, n.kn, _BAKED_SCALE), n.kn, scale
                         )
 
+                    shoulders_per_scale[scale][leg_id] = sh
+
                     hits = check_frame(leg_id, sh, th, kn)
                     for h in hits:
                         clip_hits[scale].append(
@@ -137,45 +181,70 @@ def run(clip_filter: str | None, show_scale_one: bool) -> int:
                             }
                         )
 
+            # Inter-leg gap check, after all 4 legs are known for this frame.
+            for scale in scales_to_check:
+                gaps = check_inter_leg_gap(shoulders_per_scale[scale])
+                for side, gap in gaps.items():
+                    clip_gap_violations[scale].append(
+                        {"t_ms": frame.t_ms, "side": side, "gap": gap}
+                    )
+
         any_hits = any(clip_hits[s] for s in scales_to_check)
-        if not any_hits:
-            print(f"[OK]  {clip.name!r}  — no clamp hits")
+        any_gap = any(clip_gap_violations[s] for s in scales_to_check)
+        if not any_hits and not any_gap:
+            print(f"[OK]  {clip.name!r}  — no clamp hits, no inter-leg violations")
             continue
 
         print(f"\n[CLIP]  {clip.name!r}  ({clip.frame_count} frames)")
         for scale in scales_to_check:
             hits = clip_hits[scale]
-            if not hits:
-                label = (
-                    f"scale={scale:.4f}"
-                    if scale != 1.0
-                    else "scale=1.0 (Blender=hardware)"
-                )
-                print(f"  {label}:  no clamp hits")
-                continue
-
+            gap_v = clip_gap_violations[scale]
             label = (
                 f"scale={scale:.4f} (current baked)"
                 if abs(scale - _BAKED_SCALE) < 1e-4
                 else "scale=1.0  (Blender=hardware)"
             )
-            print(f"  {label}:  {len(hits)} hit(s)")
 
-            # Group by leg+joint, show worst overshoot and affected frame count
-            summary: dict[str, list] = {}
-            for h in hits:
-                key = f"{h['leg']} {h['joint']}"
-                summary.setdefault(key, []).append(h)
+            if not hits and not gap_v:
+                print(f"  {label}:  no clamp hits, no inter-leg violations")
+                continue
+            print(f"  {label}:")
 
-            for key, group in sorted(summary.items()):
-                worst = max(group, key=lambda x: abs(x["overshoot"]))
-                lo, hi = worst["envelope"]
+            # --- per-servo clamp hits ---
+            if hits:
+                print(f"    [clamp] {len(hits)} hit(s)")
+                summary: dict[str, list] = {}
+                for h in hits:
+                    key = f"{h['leg']} {h['joint']}"
+                    summary.setdefault(key, []).append(h)
+                for key, group in sorted(summary.items()):
+                    worst = max(group, key=lambda x: abs(x["overshoot"]))
+                    lo, hi = worst["envelope"]
+                    print(
+                        f"      {key:18s}  {len(group):3d} frame(s)  "
+                        f"worst={worst['requested']:7.1f}° "
+                        f"(envelope [{lo:.0f}, {hi:.0f}])  "
+                        f"overshoot={worst['overshoot']:+.1f}°  "
+                        f"at t={worst['t_ms']}ms"
+                    )
+                total_hits += len(hits)
+
+            # --- inter-leg gap violations ---
+            if gap_v:
                 print(
-                    f"    {key:18s}  {len(group):3d} frame(s)  "
-                    f"worst={worst['requested']:7.1f}° (envelope [{lo:.0f}, {hi:.0f}])  "
-                    f"overshoot={worst['overshoot']:+.1f}°  at t={worst['t_ms']}ms"
+                    f"    [inter-leg] {len(gap_v)} frame(s) below "
+                    f"{INTER_LEG_BUFFER_DEG:.1f}° buffer"
                 )
-            total_hits += len(hits)
+                by_side: dict[str, list] = {}
+                for v in gap_v:
+                    by_side.setdefault(v["side"], []).append(v)
+                for side, group in sorted(by_side.items()):
+                    worst = min(group, key=lambda x: x["gap"])
+                    print(
+                        f"      {side:18s}  {len(group):3d} frame(s)  "
+                        f"worst gap={worst['gap']:.2f}°  at t={worst['t_ms']}ms"
+                    )
+                total_hits += len(gap_v)
 
     print()
     if total_hits == 0:

@@ -166,6 +166,45 @@ def check_frame(
     return errors
 
 
+# Same-side inter-leg shoulder buffer. Keep in sync with
+# code/firmware/src/shared/config.h INTER_LEG_BUFFER_DEG so the lint and the
+# firmware safety net flag the same frames.
+INTER_LEG_BUFFER_DEG = 5.0
+
+
+def _shorter_arc_deg(a: float, b: float) -> float:
+    """Shorter arc between two angles in degrees, in [0, 180]."""
+    d = (b - a) % 360.0
+    if d > 180.0:
+        d = 360.0 - d
+    return d
+
+
+def check_inter_leg_gaps(
+    js_frames: list, convention: dict, buffer_deg: float = INTER_LEG_BUFFER_DEG
+) -> list[dict]:
+    """Math-space shorter-arc gap between same-side front/back shoulders per
+    frame. .js frames are already math-space floats (T:12 export). Returns
+    a list of violations {t_idx, side, gap}; empty list = clean.
+
+    "Same side" pairs are FR↔BR (right) and FL↔BL (left). Diagonal pairs
+    can't physically collide so they're skipped.
+    """
+    violations = []
+    for i, frame in enumerate(js_frames):
+        fr_sh = frame["fr"][0]
+        fl_sh = frame["fl"][0]
+        br_sh = frame["br"][0]
+        bl_sh = frame["bl"][0]
+        rg = _shorter_arc_deg(fr_sh, br_sh)
+        if rg < buffer_deg:
+            violations.append({"frame": i, "side": "RIGHT (FR-BR)", "gap": rg})
+        lg = _shorter_arc_deg(fl_sh, bl_sh)
+        if lg < buffer_deg:
+            violations.append({"frame": i, "side": "LEFT (FL-BL)", "gap": lg})
+    return violations
+
+
 def check_clip(clip_dir: Path, convention: dict) -> bool:
     """Check one clip directory. Prints PASS/FAIL. Returns True if all pass."""
     clip_name = clip_dir.name
@@ -196,6 +235,23 @@ def check_clip(clip_dir: Path, convention: dict) -> bool:
         for err in errs:
             print(f"  FAIL {clip_name}: {err}")
             all_pass = False
+
+    # Inter-leg gap is a WARNING (not a failure) — the rig doesn't enforce it
+    # yet and authors may choose to live with the overlap. Surface it loudly
+    # so the animator sees it after every export.
+    gap_violations = check_inter_leg_gaps(js_frames, convention)
+    if gap_violations:
+        # Summarise per side to keep output short.
+        by_side: dict[str, list] = {}
+        for v in gap_violations:
+            by_side.setdefault(v["side"], []).append(v)
+        for side, group in sorted(by_side.items()):
+            worst = min(group, key=lambda x: x["gap"])
+            print(
+                f"  WARN {clip_name}: inter-leg {side} gap below "
+                f"{INTER_LEG_BUFFER_DEG:.1f}° on {len(group)} frame(s); "
+                f"worst gap={worst['gap']:.2f}° at frame {worst['frame']}"
+            )
 
     if all_pass:
         print(f"  PASS {clip_name} ({len(h_frames)} frames)")
