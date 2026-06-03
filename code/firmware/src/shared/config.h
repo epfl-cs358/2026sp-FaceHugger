@@ -30,15 +30,18 @@
 //   hip   = [90 - HIP_CLAMP_FROM_NINETY, 90 + HIP_CLAMP_FROM_NINETY]
 //           Uniform across legs. The URDF shoulder window is asymmetric per leg
 //           (one side 90°, the tight side 52°); 52 is safe on every leg.
+//           (Superseded by enforceShoulderLimits for the per-side asymmetric
+//            envelope + inter-leg buffer; this symmetric clamp stays as a
+//            defensive backup on the clip-playback path.)
 //   thigh = [CALIB_THIGH_BY_LEG[leg] ± THIGH_CLAMP_FROM_CALIB]
-//           URDF thigh range is symmetric ±60° on every leg.
+//           URDF thigh range is symmetric ±75° on every leg.
 //   knee  = [CALIB_KNEE_BY_LEG[leg]  ± KNEE_CLAMP_FROM_CALIB]
 //           URDF knee range is symmetric ±90° on every leg.
 // Per-leg + CALIB-relative so post-calibration NEUTRALs (e.g. FL thigh at 27,
 // which is CALIB_FL_THIGH - 60) sit exactly on the lower edge instead of
 // being clipped by a uniform [30, 150] window.
 #define HIP_CLAMP_FROM_NINETY  52
-#define THIGH_CLAMP_FROM_CALIB 60
+#define THIGH_CLAMP_FROM_CALIB 75
 #define KNEE_CLAMP_FROM_CALIB  90
 
 // Math-space shoulder safety net — applied by enforceShoulderLimits() before

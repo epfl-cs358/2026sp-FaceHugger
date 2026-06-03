@@ -141,7 +141,7 @@ def translate_to_servo(leg_id: int, sh: float, th: float, kn: float) -> ServoTri
 # Mirror of HIP_CLAMP_FROM_NINETY / THIGH_CLAMP_FROM_CALIB / KNEE_CLAMP_FROM_CALIB
 # in code/firmware/src/shared/config.h — keep in sync.
 HIP_CLAMP_FROM_NINETY = 52
-THIGH_CLAMP_FROM_CALIB = 60
+THIGH_CLAMP_FROM_CALIB = 75
 KNEE_CLAMP_FROM_CALIB = 90
 
 
@@ -153,7 +153,7 @@ def clamp_clip_servos(leg_id: int, s: ServoTriple) -> ServoTriple:
 
     Envelope (derived from URDF joint limits):
       hip   uniform 90 ± HIP_CLAMP_FROM_NINETY  (every leg's tight shoulder side)
-      thigh CALIB_THIGH[leg_id] ± THIGH_CLAMP_FROM_CALIB  (URDF ±60° symmetric)
+      thigh CALIB_THIGH[leg_id] ± THIGH_CLAMP_FROM_CALIB  (URDF ±75° symmetric)
       knee  CALIB_KNEE[leg_id]  ± KNEE_CLAMP_FROM_CALIB   (URDF ±90° symmetric)
 
     Raises ValueError for unknown leg_id.

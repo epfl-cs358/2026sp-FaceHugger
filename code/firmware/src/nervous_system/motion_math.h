@@ -31,7 +31,7 @@ void enforceShoulderLimits(double sh[4]);
  * on each joint's per-leg CALIB (post-calibration servo zero):
  *   hip   uniform 90 ± HIP_CLAMP_FROM_NINETY  (tight side of every URDF
  *         shoulder; safe on every leg regardless of asymmetry).
- *   thigh CALIB_THIGH_BY_LEG[legId] ± THIGH_CLAMP_FROM_CALIB  (URDF ±60°).
+ *   thigh CALIB_THIGH_BY_LEG[legId] ± THIGH_CLAMP_FROM_CALIB  (URDF ±75°).
  *   knee  CALIB_KNEE_BY_LEG[legId]  ± KNEE_CLAMP_FROM_CALIB   (URDF ±90°).
  * Per-leg + CALIB-relative so post-CALIB NEUTRALs (e.g. FL thigh = 27 = CALIB_FL_THIGH - 60)
  * sit on the window edge instead of being clipped by a uniform [30, 150].
