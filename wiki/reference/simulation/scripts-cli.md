@@ -109,11 +109,3 @@ These run inside Blender, not the Python env. The pattern is the same for all of
   --python animation/addons/export_all_clips.py
 ```
 
-**One-shot action rename** (migrates a legacy `.blend` from the old `*Action` names to the `base_anim__<target>` clip convention; idempotent):
-
-```bash
-"$BLENDER_BIN" --background --python animation/scripts/fh_rename_actions.py -- \
-  [--blend PATH]
-```
-
-`--blend` defaults to `animation/fh_rigged_latest.blend`.

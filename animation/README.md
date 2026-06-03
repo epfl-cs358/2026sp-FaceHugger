@@ -1,15 +1,15 @@
 # animation/
 
-Blender tooling for the FaceHugger animation pipeline, organized into three kinds:
+Blender tooling for the FaceHugger animation pipeline:
 
 | Subfolder | Kind | Contents |
 |---|---|---|
-| [`pipeline/`](pipeline/) | Scene builders — run via `blender --python` | `urdf_to_blender_rigged.py`, `visualize_urdf.py`, `visualize_fusion_export.py` |
+| [`scripts/`](scripts/) | Scene builders (Blender) + plain-Python CLI tools | `urdf_to_blender_rigged.py`, `visualize_urdf.py`, `visualize_fusion_export.py`, `check_export_consistency.py`, `test_servo_parity.py` |
 | [`addons/`](addons/) | Blender add-on — install or run in Text Editor | `fh_clip_panel.py` (clip manager, pose library, export) |
-| [`migrations/`](migrations/) | One-shot CLI — run once per old rig | `fh_rename_actions.py` (legacy Action name migration) |
+| [`lib/`](lib/) | Shared Python modules used by scripts and the add-on | `urdf_parser.py`, `servo_math.py`, `bpy_stub.py` |
 
-The scene builders are invoked by `code/simulation/facehugger.py blender [--rigged]`.
-The add-on and migration scripts are stand-alone; see each subfolder's README.
+The scene builders are invoked by `code/facehugger.py blender [--rigged]`.
+The add-on is stand-alone; see its subfolder README.
 
 ## Key files at this level
 
