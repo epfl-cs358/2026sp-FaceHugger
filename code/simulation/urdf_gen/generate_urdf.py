@@ -385,23 +385,13 @@ def _emit_leg(urdf: URDF, leg: dict, state: _GenState) -> None:
     shoulder_rest_rad = _shoulder_rest_for(leg_id, state.fl_rest_rad)
     shoulder_rest_deg = math.degrees(shoulder_rest_rad)
 
-    # R-side three-flip on the shoulder (matches hip/knee logic below). The
-    # bracket+Link1 are CAD-mirrored about the body's YZ plane for FR/BL,
-    # which reverses the servo-shaft direction in body frame. Keeping the
-    # same axis vector on every leg would make positive θ rotate FR/BL
-    # the wrong physical way and apply asymmetric limits on the wrong
-    # half of the sweep. Negating the axis and negate-swapping the limits
-    # restores "same θ → same physical motion" across all four legs and
-    # lets the FL Fusion limits be set arbitrarily-asymmetric without
-    # breaking the right side. The shoulder rpy_z (rest) does NOT change
-    # with the axis flip — it is a static rotation in body frame,
-    # independent of axis sign.
+    # Shoulder axis is uniform across all four legs: the servo shaft points
+    # in the same direction (+Z in body frame) regardless of which corner.
+    # The link1 bracket STL is mirrored for FR/BL, but the servo itself is
+    # not — the shaft direction does not flip. Hip/knee DO get the R-side
+    # flip because those servos are physically rotated 180° for FR/BL.
     shoulder_axis = list(sj.axis_dir)
     sh_lo, sh_hi = state.shoulder_lower_deg, state.shoulder_upper_deg
-    if side == "R":
-        shoulder_axis, sh_lo, sh_hi, _ = flip_joint_for_r_side(
-            shoulder_axis, sh_lo, sh_hi
-        )
 
     urdf.comment(
         f"LEG: {leg_id.upper()}  (side={side}, "

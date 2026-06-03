@@ -60,7 +60,9 @@ def servo_angles_to_joint_targets(angles12):
         knee = angles12[leg_id * 3 + 2]
         name = LEG_ID_TO_SIM_NAME[leg_id]
         axis = LEG_ID_TO_URDF_AXIS_SIGN[leg_id]
-        targets[f"{name}_link1_joint"] = axis * servo_to_radians(hip)
+        targets[f"{name}_link1_joint"] = servo_to_radians(
+            hip
+        )  # shoulder axis +Z uniform
         targets[f"{name}_link2_joint"] = axis * servo_to_radians(thigh)
         targets[f"{name}_link3_joint"] = -axis * servo_to_radians(knee)
     return targets

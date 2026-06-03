@@ -44,11 +44,10 @@ def frame_to_joint_targets(a: list[float]) -> dict[str, float]:
     Does NOT apply EMA smoothing (firmware CLIP_EMA_ALPHA). Pure geometry.
     Does apply clamp_clip_servos to match firmware clip-path clamping.
 
-    All three joints are multiplied by the per-leg URDF axis sign (±1 from the
-    joint's <axis> direction in facehugger.urdf): link1 (yaw) and link2 (hip)
-    by +axis, link3 (knee) by -axis. link1 needs the factor too — its <axis z>
-    follows the same {fl,br}=+ / {fr,bl}=− diagonal pattern as link2, and
-    without it fr/bl shoulder yaw renders backwards in the sim.
+    link2 (hip) and link3 (knee) are multiplied by the per-leg URDF axis sign
+    (±1 from <axis> in facehugger.urdf): link2 by +axis, link3 by -axis.
+    link1 (shoulder) uses +1 for all legs — all four shoulder servo shafts
+    point in the same direction (+Z body frame); no axis flip needed.
 
     Mirrors the inner loop of tickClip() in spinal_cord.cpp:427-437.
     """
@@ -59,8 +58,8 @@ def frame_to_joint_targets(a: list[float]) -> dict[str, float]:
         kn = a[leg_id * 3 + 2]
         servo = clamp_clip_servos(leg_id, translate_to_servo(leg_id, sh, th, kn))
         urdf_name = LEG_ID_TO_SIM_NAME[leg_id]
-        axis = LEG_ID_TO_URDF_AXIS_SIGN[leg_id]  # see docstring: link1 needs it too
-        targets[f"{urdf_name}_link1_joint"] = axis * servo_to_radians(servo.hip)
+        axis = LEG_ID_TO_URDF_AXIS_SIGN[leg_id]
+        targets[f"{urdf_name}_link1_joint"] = servo_to_radians(servo.hip)
         targets[f"{urdf_name}_link2_joint"] = axis * servo_to_radians(servo.thigh)
         targets[f"{urdf_name}_link3_joint"] = -axis * servo_to_radians(servo.knee)
     return targets

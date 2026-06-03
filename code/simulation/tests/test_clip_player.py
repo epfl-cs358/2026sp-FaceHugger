@@ -81,9 +81,9 @@ def test_frame_to_joint_targets_clamping_applied():
     """
     a = [-200.0, 0.0, 0.0] + [0.0] * 9
     targets = frame_to_joint_targets(a)
-    # FR hip: 90 + (-200 - 45) = -155 → clamped to 38. The sim applies the
-    # URDF link1 axis sign (FR = -1) to the commanded joint angle.
-    expected = -servo_to_radians(38.0)
+    # FR hip: 90 + (-200 - 45) = -155 → clamped to 38. Shoulder axis is +Z
+    # for all legs — no axis sign applied to link1.
+    expected = servo_to_radians(38.0)
     assert abs(targets["fr_link1_joint"] - expected) < 1e-9
 
 
