@@ -12,6 +12,26 @@
 # here).
 
 robot_name: facehugger
+
+printing:
+  material: PETG
+  density_solid_g_cm3: 1.27        # Prusa PETG profile
+  infill_scale_factors:
+    leg_links: 0.151               # 11.9% infill, corrected for PETG
+    body_bridges: 0.158            # 12.4%
+    lipo_cage: 0.255               # 20.1%
+    shell: null                    # not in Fusion export
+  gcode_masses_g:
+    leg_links_total: 198.51        # all 12 links, 3 print beds
+    body_bridges: 46.66
+    hip_mounts_total: 23.91        # 4× brackets
+    lipo_cage: 12.99
+    shell: 49.83
+  notes: >
+    Fusion computes mass at solid PETG density (1.27 g/cm3).
+    Real printed masses are ~6-8x lower due to infill.
+    Use gcode_masses_g as ground truth for URDF link mass overrides.
+
 mesh_dir: exported_meshes/
 
 # ---------------------------------------------------------------------------
@@ -24,13 +44,13 @@ base_link:
   name: base_link
   mesh: QuadrupedBody.stl
   # Mass not modelled in Fusion (treated as visuals there):
-  #   - electronics 0.239 kg (ESP32, PCA9685, I2C mux, IMU, ToF×5, OLED,
+  #   - electronics ~0.077 kg (ESP32, PCA9685, I2C mux, IMU, ToF×5, OLED,
   #     LiPo 2S 1000mAh, buck, BMS, XT60×4, switch, wiring)
   #   - 4 shoulder servos × 0.060 kg = 0.240 kg (placed symmetrically at the
   #     4 leg corners, COM ≈ chassis centroid → no COM shift needed)
-  # Total +0.479 kg on top of the Fusion base_link mass. The 8 leg servos
-  # are NOT included here; Fusion may already account for them inside each
-  # leg's link masses — separate audit if it turns out it doesn't.
+  # Ground-truth estimate: ~0.317 kg. Value left at 0.479 pending a full
+  # weigh-in; the original 0.239 kg electronics figure was a placeholder.
+  # Reduce once electronics are weighed.
   extra_mass_kg: 0.479
 
 # ---------------------------------------------------------------------------
@@ -103,7 +123,7 @@ legs:
 # visual.
 # ---------------------------------------------------------------------------
 servo:
-  mass_kg: 0.300        # QYRC DSS-230MG — heavy metal-gear servo; placeholder, not yet weighed
+  mass_kg: 0.060        # DSS-230MG datasheet — 60 g metal-gear servo
   effort_nm: 2.94       # QYRC DSS-230MG — 30 kg·cm stall torque to N·m
   velocity_rad_s: 5.0
 
@@ -113,3 +133,16 @@ servo:
   # rotation, so a 180° X flip inverts the servo around its own shaft-
   # axis direction. Leave at [0, 0, 0] to trust the CAD verbatim.
   visual_flip_rpy_deg: [180, 0, 0]
+
+# ---------------------------------------------------------------------------
+# Reference clip traces for SIL regression testing.
+# Clips in this list are required to match their committed reference exactly
+# (test_sil_clip_suite.py). Clips with a trace but NOT in this list only warn
+# on mismatch — useful while actively authoring clips whose output is still
+# in flux. Regenerate: python code/facehugger.py update-reference-clips
+# ---------------------------------------------------------------------------
+reference_clips:
+  - wiggle
+  - dog walk
+  - wave
+  - lie down and stand up

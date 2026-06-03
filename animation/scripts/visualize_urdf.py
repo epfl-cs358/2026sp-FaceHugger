@@ -1,3 +1,5 @@
+# === Blender-only ===
+# Invoked via: blender --python <this file>
 """
 visualize_urdf.py — Blender debug scene builder driven by the URDF (no rigging)
 
@@ -54,156 +56,46 @@ Targets Blender 5.x.
 
 import argparse
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import bpy
-from mathutils import Matrix, Vector
+
+_LIB = str(Path(__file__).resolve().parents[1] / "lib")
+if _LIB not in sys.path:
+    sys.path.insert(0, _LIB)
+
+from urdf_parser import (  # noqa: E402
+    M_TO_MM,
+    compute_link_world,
+    matrix_m_to_mm,
+    parse_urdf,
+)
 
 
 # ---------------------------------------------------------------------------
 # Constants — match visualize_fusion_export.py so the two scenes overlay
 # ---------------------------------------------------------------------------
 
-# URDF is in METRES, our scene is in MILLIMETRES (1 BU = 1 mm). Apply this
-# scale to every translation that comes out of the chain walk before handing
-# it to Blender. Rotations are unitless and pass through unchanged.
-M_TO_MM = 1000.0
-
 SPHERE_RADIUS_MM = 3.0
-AXIS_LENGTH_MM = 20.0   # how far past the joint pivot to draw the axis tip
+AXIS_LENGTH_MM = 20.0  # how far past the joint pivot to draw the axis tip
 
 ROOT_COLLECTION = "URDFViz"
 MESHES_COLLECTION = "Meshes"
 JOINTS_COLLECTION = "Joint Origins"
 AXES_COLLECTION = "Joint Axes"
 
-COLOR_JOINT = (1.0, 0.0, 0.0, 1.0)   # red — same as fusion_export's points
-COLOR_AXIS = (1.0, 0.4, 0.0, 1.0)    # orange — same as fusion_export's axes
+COLOR_JOINT = (1.0, 0.0, 0.0, 1.0)  # red — same as fusion_export's points
+COLOR_AXIS = (1.0, 0.4, 0.0, 1.0)  # orange — same as fusion_export's axes
 
 
-# ---------------------------------------------------------------------------
-# URDF parsing (stdlib XML only — no rospkg / urdfpy dependency)
-# ---------------------------------------------------------------------------
-
-def _parse_origin(elem):
-    """Return a 4×4 mathutils.Matrix from an <origin xyz=... rpy=.../> child
-    of `elem`. Identity if absent. URDF rpy is the extrinsic XYZ convention,
-    which composes as R = Rz(yaw) @ Ry(pitch) @ Rx(roll). Translation is in
-    metres."""
-    o = elem.find("origin")
-    if o is None:
-        return Matrix.Identity(4)
-    xyz = [float(v) for v in (o.get("xyz") or "0 0 0").split()]
-    rpy = [float(v) for v in (o.get("rpy") or "0 0 0").split()]
-    rx = Matrix.Rotation(rpy[0], 3, "X")
-    ry = Matrix.Rotation(rpy[1], 3, "Y")
-    rz = Matrix.Rotation(rpy[2], 3, "Z")
-    M = (rz @ ry @ rx).to_4x4()
-    M.translation = Vector(xyz)
-    return M
-
-
-def _parse_axis(elem):
-    """Return the joint axis as a normalized 3-vector. Default (1,0,0)."""
-    a = elem.find("axis")
-    if a is None:
-        return Vector((1.0, 0.0, 0.0))
-    xyz = [float(v) for v in a.get("xyz").split()]
-    v = Vector(xyz)
-    return v.normalized() if v.length > 0 else Vector((1.0, 0.0, 0.0))
-
-
-def _parse_visual(v):
-    """(origin_matrix, mesh_filename, scale_xyz) or None if no <mesh>."""
-    g = v.find("geometry/mesh")
-    if g is None:
-        return None
-    fname = g.get("filename")
-    scale = [float(s) for s in (g.get("scale") or "1 1 1").split()]
-    return (_parse_origin(v), fname, scale)
-
-
-def parse_urdf(path):
-    """Parse the URDF into {root, links, joints}.
-
-    links[name]              -> [(visual_origin_4x4, mesh_filename, scale_xyz), ...]
-    joints[child_link_name]  -> {parent, origin, axis, name}
-    root                     -> the unique link with no parent in joints
-    """
-    tree = ET.parse(path)
-    root_elem = tree.getroot()
-    if root_elem.tag != "robot":
-        sys.exit(f"{path}: root tag is <{root_elem.tag}>, expected <robot>")
-
-    links = {}
-    for link_elem in root_elem.findall("link"):
-        name = link_elem.get("name")
-        visuals = []
-        for v in link_elem.findall("visual"):
-            parsed = _parse_visual(v)
-            if parsed is not None:
-                visuals.append(parsed)
-        links[name] = visuals
-
-    joints = {}
-    for j in root_elem.findall("joint"):
-        parent = j.find("parent").get("link")
-        child = j.find("child").get("link")
-        joints[child] = {
-            "parent": parent,
-            "origin": _parse_origin(j),
-            "axis":   _parse_axis(j),
-            "name":   j.get("name"),
-        }
-
-    children = set(joints.keys())
-    roots = [n for n in links if n not in children]
-    if len(roots) != 1:
-        sys.exit(f"{path}: expected exactly one root link, got {roots}")
-    return {"root": roots[0], "links": links, "joints": joints}
-
-
-# ---------------------------------------------------------------------------
-# Forward kinematics (rest pose — joint angles all zero, like loadURDF)
-# ---------------------------------------------------------------------------
-
-def compute_link_world(robot):
-    """Walk the joint tree from root and return {link_name: 4x4 matrix in m}.
-
-    Joints aren't necessarily in topological order in the URDF, so we
-    iterate-until-stable: each pass places every link whose parent is
-    already known. Bails out loud if the URDF has a dangling chain."""
-    link_world = {robot["root"]: Matrix.Identity(4)}
-    remaining = dict(robot["joints"])
-    while remaining:
-        placed = []
-        for child, j in remaining.items():
-            if j["parent"] in link_world:
-                # Rest pose: child = parent @ joint_origin (no R(axis, theta)
-                # because all joint angles are 0). Add joint angle support
-                # here later if you ever want a stance-pose snapshot.
-                link_world[child] = link_world[j["parent"]] @ j["origin"]
-                placed.append(child)
-        if not placed:
-            sys.exit(f"Dangling joint chain — could not place: "
-                     f"{list(remaining.keys())}")
-        for c in placed:
-            del remaining[c]
-    return link_world
-
-
-def matrix_m_to_mm(M):
-    """Return a copy of 4x4 matrix M with its translation scaled m → mm.
-    Rotation passes through (rotations are unitless)."""
-    out = M.copy()
-    out.translation = out.translation * M_TO_MM
-    return out
+# parse_urdf, compute_link_world, matrix_m_to_mm, M_TO_MM are imported from
+# animation/lib/urdf_parser.py (see top of file).
 
 
 # ---------------------------------------------------------------------------
 # Scene bootstrap (same idiom as visualize_fusion_export.py)
 # ---------------------------------------------------------------------------
+
 
 def clear_scene():
     """Wipe objects/collections/orphans so re-runs produce identical output.
@@ -222,7 +114,7 @@ def clear_scene():
 def _configure_units():
     scene = bpy.context.scene
     scene.unit_settings.system = "METRIC"
-    scene.unit_settings.scale_length = 0.001   # 1 BU = 1 mm
+    scene.unit_settings.scale_length = 0.001  # 1 BU = 1 mm
     scene.unit_settings.length_unit = "MILLIMETERS"
     for area in bpy.context.screen.areas if bpy.context.screen else []:
         if area.type == "VIEW_3D":
@@ -260,6 +152,7 @@ def make_material(name, rgba):
 # Placement primitives (mm-scale; identical signature to the JSON sibling)
 # ---------------------------------------------------------------------------
 
+
 def import_stl(stl_path, name, matrix_world_mm, target_collection):
     before = set(bpy.data.objects)
     try:
@@ -281,13 +174,15 @@ def import_stl(stl_path, name, matrix_world_mm, target_collection):
     return obj
 
 
-def add_marker(world_pos_mm, name, material, target_collection,
-               radius_mm=SPHERE_RADIUS_MM):
+def add_marker(
+    world_pos_mm, name, material, target_collection, radius_mm=SPHERE_RADIUS_MM
+):
     before = set(bpy.data.objects)
     bpy.ops.mesh.primitive_uv_sphere_add(
         radius=radius_mm,
         location=(world_pos_mm[0], world_pos_mm[1], world_pos_mm[2]),
-        segments=16, ring_count=8,
+        segments=16,
+        ring_count=8,
     )
     new_objs = [o for o in bpy.data.objects if o not in before]
     if not new_objs:
@@ -308,6 +203,7 @@ def add_marker(world_pos_mm, name, material, target_collection,
 # Mesh + marker placement from URDF
 # ---------------------------------------------------------------------------
 
+
 def place_visuals(robot, link_world, meshes_dir, collections):
     """For each <visual>: import the STL and set obj.matrix_world =
     matrix_m_to_mm(link_world[link] @ visual_origin). Object name is
@@ -327,8 +223,9 @@ def place_visuals(robot, link_world, meshes_dir, collections):
                     continue
             mesh_world_mm = matrix_m_to_mm(link_W @ visual_origin)
             obj_name = f"{link_name}__{Path(mesh_rel).stem}"
-            if import_stl(mesh_path, obj_name, mesh_world_mm,
-                          collections[MESHES_COLLECTION]):
+            if import_stl(
+                mesh_path, obj_name, mesh_world_mm, collections[MESHES_COLLECTION]
+            ):
                 placed += 1
     return placed
 
@@ -345,16 +242,22 @@ def place_joint_markers(robot, link_world, mat_joint, mat_axis, collections):
     for child, j in robot["joints"].items():
         child_W = link_world[child]
         pivot_mm = child_W.translation * M_TO_MM
-        add_marker(pivot_mm, f"{j['name']}__pivot", mat_joint,
-                   collections[JOINTS_COLLECTION])
+        add_marker(
+            pivot_mm, f"{j['name']}__pivot", mat_joint, collections[JOINTS_COLLECTION]
+        )
         n_joints += 1
 
         # Axis tip in world: rotate the joint-axis unit vector into world via
         # the child link's rotation, scale by AXIS_LENGTH_MM, add to pivot.
         axis_world = child_W.to_3x3() @ j["axis"]
         tip_mm = pivot_mm + axis_world * AXIS_LENGTH_MM
-        add_marker(tip_mm, f"{j['name']}__axis_tip", mat_axis,
-                   collections[AXES_COLLECTION], radius_mm=2.0)
+        add_marker(
+            tip_mm,
+            f"{j['name']}__axis_tip",
+            mat_axis,
+            collections[AXES_COLLECTION],
+            radius_mm=2.0,
+        )
         n_axes += 1
     return n_joints, n_axes
 
@@ -362,6 +265,7 @@ def place_joint_markers(robot, link_world, mat_joint, mat_axis, collections):
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def _script_dir():
     try:
@@ -371,10 +275,24 @@ def _script_dir():
 
 
 def parse_args():
-    default_urdf = (_script_dir() / ".." / ".."
-                    / "code" / "simulation" / "generated" / "facehugger.urdf")
-    default_meshes = (_script_dir() / ".." / ".."
-                      / "code" / "simulation" / "generated" / "exported_meshes")
+    default_urdf = (
+        _script_dir()
+        / ".."
+        / ".."
+        / "code"
+        / "simulation"
+        / "generated"
+        / "facehugger.urdf"
+    )
+    default_meshes = (
+        _script_dir()
+        / ".."
+        / ".."
+        / "code"
+        / "simulation"
+        / "generated"
+        / "exported_meshes"
+    )
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--urdf", type=Path, default=default_urdf.resolve())
@@ -382,7 +300,7 @@ def parse_args():
     parser.add_argument("--save", type=Path, default=None)
 
     argv = sys.argv
-    argv = argv[argv.index("--") + 1:] if "--" in argv else []
+    argv = argv[argv.index("--") + 1 :] if "--" in argv else []
     return parser.parse_args(argv)
 
 
@@ -395,8 +313,10 @@ def main():
         raise SystemExit(f"URDF not found: {args.urdf}")
 
     robot = parse_urdf(args.urdf)
-    print(f"[visualize_urdf] parsed — {len(robot['links'])} links, "
-          f"{len(robot['joints'])} joints, root={robot['root']}")
+    print(
+        f"[visualize_urdf] parsed — {len(robot['links'])} links, "
+        f"{len(robot['joints'])} joints, root={robot['root']}"
+    )
 
     link_world = compute_link_world(robot)
 
@@ -406,11 +326,14 @@ def main():
     mat_axis = make_material("JointAxisOrange", COLOR_AXIS)
 
     n_meshes = place_visuals(robot, link_world, args.meshes, collections)
-    n_joints, n_axes = place_joint_markers(robot, link_world,
-                                            mat_joint, mat_axis, collections)
+    n_joints, n_axes = place_joint_markers(
+        robot, link_world, mat_joint, mat_axis, collections
+    )
 
-    print(f"[visualize_urdf] placed {n_meshes} visuals, "
-          f"{n_joints} joint pivots, {n_axes} axis tips")
+    print(
+        f"[visualize_urdf] placed {n_meshes} visuals, "
+        f"{n_joints} joint pivots, {n_axes} axis tips"
+    )
 
     if args.save:
         args.save.parent.mkdir(parents=True, exist_ok=True)

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# === Blender-only ===
+# Invoked via: blender --background --python <this file>  (imports real bpy).
 """Headless-Blender regression: baking a clip must be independent of the
 currently-active clip. Guards the bake_clip() mislabel bug (export-review
 findings 2026-05-21 §2). Run via:
@@ -16,7 +18,10 @@ import os
 import sys
 import importlib.util
 
-import bpy
+import pytest
+
+pytest.importorskip("bpy")  # runs only under `blender --background --python`
+import bpy  # noqa: E402
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SCRIPT = os.path.join(REPO_ROOT, "animation/addons/fh_clip_panel.py")

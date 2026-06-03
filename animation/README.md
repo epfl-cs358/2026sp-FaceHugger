@@ -1,15 +1,33 @@
 # animation/
 
-Blender tooling for the FaceHugger animation pipeline:
+Blender tooling for the FaceHugger animation pipeline. Each `.py` file declares
+its runtime requirement in a two-line header so the reader doesn't have to
+scan imports:
 
-| Subfolder | Kind | Contents |
-|---|---|---|
-| [`scripts/`](scripts/) | Scene builders (Blender) + plain-Python CLI tools | `urdf_to_blender_rigged.py`, `visualize_urdf.py`, `visualize_fusion_export.py`, `check_export_consistency.py`, `test_servo_parity.py` |
-| [`addons/`](addons/) | Blender add-on — install or run in Text Editor | `fh_clip_panel.py` (clip manager, pose library, export) |
-| [`lib/`](lib/) | Shared Python modules used by scripts and the add-on | `urdf_parser.py`, `servo_math.py`, `bpy_stub.py` |
+    # === Blender-only ===                        (needs the bpy runtime)
+    # === Plain Python — no Blender required ===  (pure helpers / stubs bpy)
 
-The scene builders are invoked by `code/facehugger.py blender [--rigged]`.
-The add-on is stand-alone; see its subfolder README.
+`scripts/` holds the Blender-driven scene builders — `visualize_urdf.py`,
+`urdf_to_blender_rigged.py`, `visualize_fusion_export.py` — entered through
+`code/facehugger.py blender [--rigged]`. The folder also carries the
+plain-Python helpers `check_export_consistency.py` and `test_servo_parity.py`
+that run directly under pytest or `python`; they live here because they
+verify the exporter contract.
+
+`addons/` is the Blender add-on (`fh_clip_panel.py`) and its headless
+companion (`export_all_clips.py`). The add-on is installed via
+Edit > Preferences > Add-ons or reloaded in place by the panel's
+"Reload Add-on" button. It is stand-alone — `facehugger.py` does not invoke it.
+
+`lib/` is the shared library both worlds import from: `urdf_parser.py`
+(Blender-only — needs `mathutils`), `servo_math.py` (plain Python — kept
+byte-identical to the firmware `translateToServo` math, see the parity test),
+and `bpy_stub.py` (plain-Python stub of bpy for import-time tests).
+
+Tests live next to the code they test (`scripts/test_*.py`, `addons/test_*.py`,
+`lib/tests/test_*.py`), plus repo-level layout and contract checks under
+`tests/`. Run them all with `pytest animation/` — Blender-only tests auto-skip
+under plain Python via `pytest.importorskip("bpy")`.
 
 ## Key files at this level
 

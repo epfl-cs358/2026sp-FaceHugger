@@ -1,6 +1,31 @@
 """firmware_sil — drive the PyBullet sim with the EXACT firmware control code.
 
-The `fh_sim` pybind11 module (built from code/firmware/src by CMakeLists.txt) runs
-the real firmware SpinalCord on the host; `sil_bridge` converts the servo angles it
-produces into URDF joint targets and drives PyBullet. See EXACT-FIRMWARE-SIL-PLAN.md.
+The `fh_sim` pybind11 module (built from code/firmware/src by CMakeLists.txt)
+runs the real firmware SpinalCord on the host; `sil_bridge` converts the servo
+angles it produces into URDF joint targets and drives PyBullet. See
+EXACT-FIRMWARE-SIL-PLAN.md.
+
+CLI entrypoints (invoked by `code/facehugger.py`):
+- `python -m firmware_sil.ws_sim`         — WebSocket robot API server
+- `python -m firmware_sil.build`          — auto-build the fh_sim pybind module
+- `python -m firmware_sil.gen_references` — regenerate reference clip traces
+
+`run_clip_sil` / `run_gait_sil` are the SIL counterparts of
+`pybullet_sim.run_clip` / `run_gait`; they live here so that
+`pybullet_sim` no longer needs to import `firmware_sil` (one-way edge:
+firmware_sil → pybullet_sim).
 """
+
+from .sil_bridge import (
+    FirmwareSILDriver,
+    run_clip_sil,
+    run_gait_sil,
+    servo_angles_to_joint_targets,
+)
+
+__all__ = [
+    "FirmwareSILDriver",
+    "run_clip_sil",
+    "run_gait_sil",
+    "servo_angles_to_joint_targets",
+]

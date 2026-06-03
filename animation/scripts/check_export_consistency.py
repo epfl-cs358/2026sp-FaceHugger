@@ -1,5 +1,7 @@
+# === Plain Python — no Blender required ===
+# Run as: python <this file>  (or via pytest).
 """Export consistency checker: verifies .h bone angles round-trip to .js
-servo values via _frame_to_servo from fh_clip_panel.py.
+servo values via _frame_to_servo from animation/lib/servo_math.py.
 
 Usage:
     python check_export_consistency.py [--export-dir PATH]
@@ -8,14 +10,16 @@ Exit codes: 0 = all pass, 1 = one or more failures, 2 = file error.
 """
 
 import argparse
-import importlib.util
 import json
 import re
 import sys
-import types
 from pathlib import Path
 
-ADDONS_DIR = Path(__file__).parent.parent / "addons"
+_LIB = str(Path(__file__).resolve().parents[1] / "lib")
+if _LIB not in sys.path:
+    sys.path.insert(0, _LIB)
+
+from servo_math import _frame_to_servo  # noqa: E402
 
 BONE_ORDER = [
     "fl_link1",
@@ -32,53 +36,6 @@ BONE_ORDER = [
     "br_link3",
 ]
 JOINT_NAMES = ["hip", "thigh", "knee"]
-
-
-def _stub_bpy() -> None:
-    """Minimal bpy shim so fh_clip_panel.py imports under plain Python.
-    Mirrors the stub in test_servo_parity.py."""
-    if "bpy" in sys.modules:
-        return
-    bpy = types.ModuleType("bpy")
-    bpy.types = types.SimpleNamespace(
-        Operator=type("Operator", (), {}),
-        Panel=type("Panel", (), {}),
-        Scene=type("Scene", (), {}),
-    )
-    bpy.props = types.SimpleNamespace(
-        StringProperty=lambda **kw: None,
-        IntProperty=lambda **kw: None,
-        BoolProperty=lambda **kw: None,
-        EnumProperty=lambda **kw: None,
-    )
-    bpy.app = types.SimpleNamespace(
-        handlers=types.SimpleNamespace(
-            frame_change_post=[],
-            save_pre=[],
-            load_post=[],
-            persistent=lambda fn: fn,
-        )
-    )
-    bpy.data = types.SimpleNamespace(
-        objects=types.SimpleNamespace(get=lambda *a, **kw: None),
-        actions=[],
-        filepath="",
-    )
-    bpy.context = types.SimpleNamespace(scene=None, view_layer=None)
-    bpy.utils = types.SimpleNamespace(
-        register_class=lambda x: None, unregister_class=lambda x: None
-    )
-    bpy.path = types.SimpleNamespace(abspath=lambda p: p)
-    sys.modules["bpy"] = bpy
-
-
-_stub_bpy()
-
-_panel_script = ADDONS_DIR / "fh_clip_panel.py"
-_spec = importlib.util.spec_from_file_location("fh_clip_panel", str(_panel_script))
-_mod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_mod)
-_frame_to_servo = _mod._frame_to_servo
 
 
 def h_row_to_dict(values: list) -> dict:
@@ -221,46 +178,19 @@ def check_standing_neutral(convention: dict) -> list:
     return errors
 
 
-def check_flat_pose(convention: dict) -> list:
-    """Assert translateToServo at the FLAT / calibration pose (T:2 s:4 =
-    legs spread horizontally): ALL 12 servos -> 90. Flat math-space is
-    shoulder = NEUTRAL splay (outward -> servo 90), hip = 0, knee = 0
-    (straight/horizontal -> servo 90 mechanical mid-point).
-
-    Flat is NOT a scaled clip frame, so scale-from-NEUTRAL must be bypassed
-    (passing the real 2/3 scale would pull hip/knee off 90). We bypass it by
-    evaluating _frame_to_servo with scale = 1.0, which makes scale-from-NEUTRAL
-    identity and leaves pure translateToServo — the same locked firmware math.
-
-    Do NOT conflate with standing: flat and standing share shoulder = 90 but
-    differ on hip/knee (flat = 90, standing = NEUTRAL[] values). Returns
-    error strings.
-    """
-    neutral = convention["neutral_joint_deg"]
-    flat_conv = {"neutral_joint_deg": neutral, "scale": 1.0}
-    row = {}
-    for leg in ("fr", "fl", "br", "bl"):
-        row[f"{leg}_link1"] = neutral[leg][0]  # shoulder outward (neutral splay)
-        row[f"{leg}_link2"] = 0.0  # hip straight
-        row[f"{leg}_link3"] = 0.0  # knee straight
-    servo = _frame_to_servo(row, flat_conv)
-
-    errors = []
-    for leg in ("fr", "fl", "br", "bl"):
-        for j, joint in enumerate(JOINT_NAMES):
-            if servo[leg][j] != 90:
-                errors.append(
-                    f"flat: {leg} {joint} = {servo[leg][j]}, expected 90 "
-                    f"(all 12 servos must be 90 at the flat/calibration pose)"
-                )
-    return errors
-
-
 def check_convention(convention: dict) -> list:
-    """Run both pose convention checks — standing NEUTRAL and flat — and
-    return the combined error list (empty = PASS). The machine-checkable
-    form of the CONVENTIONS.md guarantees."""
-    return check_standing_neutral(convention) + check_flat_pose(convention)
+    """Check the standing NEUTRAL pose convention: shoulders → servo 90, hip/knee
+    off 90. Returns the error list (empty = PASS). The machine-checkable form
+    of the CONVENTIONS.md guarantees.
+
+    The "flat / calibration pose = all 12 servos at 90" check has been removed:
+    after CALIB constants were introduced (commit 706bf9b), thigh/knee at
+    math = 0 produces servo = CALIB_<leg>_<joint>, not 90. The physical flat
+    pose still corresponds to all servos at 90, but the math-space pre-image is
+    no longer "thigh=0, knee=0" — it's leg-specific. There is no useful
+    convention assertion at flat pose any more; calibration is verified
+    independently by lib/tests/test_calib_consistency.py."""
+    return check_standing_neutral(convention)
 
 
 def check_all_clips(export_dir: Path, convention: dict = None) -> bool:

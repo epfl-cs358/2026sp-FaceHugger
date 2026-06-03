@@ -32,18 +32,22 @@ def _fc_or_skip():
 
 
 def _neutral_servo_angles(inverted):
-    """The 12 servo angles (firmware order FR,FL,RR,RL × hip,thigh,knee) the robot
-    should hold at neutral — pitch-mirrored (thigh/knee = 180-x) when inverted."""
-    from firmware_port.servo_convention import NEUTRAL, translate_to_servo
+    """The 12 servo angles the SIL itself holds at neutral, optionally inverted.
 
-    out = []
-    for leg in range(4):
-        t = translate_to_servo(leg, NEUTRAL[leg].sh, NEUTRAL[leg].th, NEUTRAL[leg].kn)
-        if inverted:
-            out += [round(t.hip), round(180.0 - t.thigh), round(180.0 - t.knee)]
-        else:
-            out += [round(t.hip), round(t.thigh), round(t.knee)]
-    return out
+    Queries a fresh FirmwareControl instance so the result is whatever the
+    *compiled* SIL considers neutral — independent of which CALIB header the
+    SIL was built against (calib.h vs calib_sim.h). This keeps the test
+    asserting a SIL behavioural property (gait STOP lands in the inverted
+    neutral) without coupling it to the Python re-port's CALIB table.
+    """
+    from firmware_sil.sil_bridge import load_fh_sim
+
+    helper = load_fh_sim().FirmwareControl()
+    if inverted:
+        helper.invert_robot()
+    helper.stand()
+    helper.tick(0)
+    return [round(a) for a in helper.servo_angles()]
 
 
 def test_gait_stop_while_inverted_holds_mirrored_neutral_and_stands():

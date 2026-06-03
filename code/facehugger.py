@@ -66,6 +66,7 @@ def _darwin_app_candidates(version):
         f"/Applications/Blender {version}.app/Contents/MacOS/Blender",
         f"/Applications/Blender-{version}.app/Contents/MacOS/Blender",
         f"/Applications/Blender{version}.app/Contents/MacOS/Blender",
+        "/Applications/Blender.app/Contents/MacOS/Blender",
     ]
 
 
@@ -144,21 +145,18 @@ def cmd_urdf(args):
 def _list_clips():
     """Print the clip names + ids the sim/robot will run, parsed from the
     firmware clips_all.h FH_CLIPS[] table (no C++ toolchain needed)."""
-    import re
+    sys.path.insert(0, str(SIM_DIR))
+    from firmware_port.clip_loader import load_clips_all_h
 
     header = REPO_ROOT / "code" / "firmware" / "src" / "nervous_system" / "clips_all.h"
     if not header.is_file():
         sys.exit(f"clips_all.h not found: {header}")
-    text = header.read_text()
-    m = re.search(r"FH_CLIPS\[[^\]]*\]\s*=\s*\{(.*?)\};", text, re.S)
-    entries = (
-        re.findall(r'\{\s*"([^"]+)"\s*,\s*\w+\s*,\s*(\d+)\s*,\s*(\d+)\s*\}', m.group(1))
-        if m
-        else []
-    )
-    print(f"{len(entries)} clip(s) in {header.relative_to(REPO_ROOT)}:")
-    for i, (name, frames, dur) in enumerate(entries):
-        print(f"  {i:2d}  {name}  ({frames} frames, {dur} ms)")
+    clips = load_clips_all_h(header)
+    print(f"{len(clips)} clip(s) in {header.relative_to(REPO_ROOT)}:")
+    for i, clip in enumerate(clips):
+        print(
+            f"  {i:2d}  {clip.name}  ({clip.frame_count} frames, {clip.duration_ms} ms)"
+        )
 
 
 # Where to point people when a dependency is missing. Descriptive, not a URL:
@@ -199,7 +197,7 @@ def _require_sim_deps(need_build):
         return
     extra = None
     if "pybind11" in missing and "pybullet" not in missing:
-        extra = "Or skip the C++ toolchain: rerun with --python"
+        extra = "Or skip the C++ toolchain: rerun with --python-port"
     _die_missing(
         ", ".join(missing), "Install the sim dependencies:", SIM_INSTALL, extra
     )
@@ -214,7 +212,7 @@ def cmd_sim(args):
         or getattr(args, "app", False)
         or getattr(args, "panel", False)
     )
-    # Default path (non --python) and any serve build the firmware SIL.
+    # Default path (non --python-port) and any serve build the firmware SIL.
     _require_sim_deps(need_build=serving or not getattr(args, "python_port", False))
     if serving:
         # Drive the sim from an external client (app / panel) over the T: WebSocket
@@ -239,7 +237,7 @@ def cmd_sim(args):
     if args.log:
         cli.append("--log")
     if args.python_port:
-        cli.append("--python")
+        cli.append("--python-port")
     if args.walk:
         cli.append("--walk")
     if args.trot:
@@ -489,6 +487,11 @@ def cmd_flash(args):
     return _run(["pio", "device", "monitor", "-e", args.env], cwd=fw_dir)
 
 
+def cmd_update_reference_clips(args):
+    """Regenerate all SIL reference clip traces via the compiled firmware (fh_sim)."""
+    return _run([sys.executable, "-m", "firmware_sil.gen_references"])
+
+
 def cmd_app(args):
     app_dir = REPO_ROOT / "code" / "remote-control-app" / "MyApp"
     if not app_dir.is_dir():
@@ -528,7 +531,9 @@ def main():
     )
     # metavar omits the deprecated `serve` alias from the listing (it still works).
     sub = p.add_subparsers(
-        dest="cmd", required=True, metavar="{urdf,sim,blender,flash,app}"
+        dest="cmd",
+        required=True,
+        metavar="{urdf,sim,blender,flash,app,update-reference-clips}",
     )
 
     pu = sub.add_parser("urdf", help="regenerate the URDF")
@@ -563,7 +568,7 @@ def main():
         help="record per-step torque/current → summary + sim_log.csv + sim_log.png",
     )
     ps.add_argument(
-        "--python",
+        "--python-port",
         dest="python_port",
         action="store_true",
         help="drive clips AND gaits with the Python re-port instead of the default "
@@ -720,6 +725,12 @@ def main():
         help="web host port (default 8080; the sim's --serve uses 8081)",
     )
     papp.set_defaults(func=cmd_app)
+
+    pgr = sub.add_parser(
+        "update-reference-clips",
+        help="regenerate SIL reference clip traces (run after re-exporting clips or changing firmware math)",
+    )
+    pgr.set_defaults(func=cmd_update_reference_clips)
 
     args = p.parse_args()
     sys.exit(args.func(args))

@@ -35,9 +35,8 @@ from typing import Callable, Dict, Tuple
 import yaml
 
 from .constants import CONFIG_YAML, FUSION_JSON, MESH_DIR, STANCE_DEG, URDF_PATH
-from .helpers import (
-    _clamp,
-    _wrap_pi,
+from .math_utils import _clamp, _wrap_pi
+from .urdf_io import (
     _foot_tip_from_fusion,
     _load_urdf_joints,
     _parse_leg_points_from_urdf,

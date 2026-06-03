@@ -2,42 +2,60 @@
   "clips": [
     {
       "id": 0,
+      "name": "Twerk",
+      "frame_count": 61,
+      "duration_ms": 2500
+    },
+    {
+      "id": 1,
+      "name": "body wave",
+      "frame_count": 60,
+      "duration_ms": 2458
+    },
+    {
+      "id": 2,
       "name": "dancing",
       "frame_count": 120,
       "duration_ms": 4958
     },
     {
-      "id": 1,
+      "id": 3,
       "name": "dancing up and down",
       "frame_count": 97,
       "duration_ms": 4000
     },
     {
-      "id": 2,
+      "id": 4,
       "name": "dog walk",
-      "frame_count": 49,
-      "duration_ms": 2000
+      "frame_count": 73,
+      "duration_ms": 3000
     },
     {
-      "id": 3,
+      "id": 5,
       "name": "lie down and stand up",
       "frame_count": 97,
       "duration_ms": 4000
     },
     {
-      "id": 4,
+      "id": 6,
       "name": "one leg lift",
       "frame_count": 50,
       "duration_ms": 2042
     },
     {
-      "id": 5,
+      "id": 7,
+      "name": "roll-ish",
+      "frame_count": 43,
+      "duration_ms": 1750
+    },
+    {
+      "id": 8,
       "name": "wave",
       "frame_count": 93,
       "duration_ms": 3833
     },
     {
-      "id": 6,
+      "id": 9,
       "name": "wiggle",
       "frame_count": 73,
       "duration_ms": 3000

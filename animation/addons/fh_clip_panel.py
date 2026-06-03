@@ -1,3 +1,6 @@
+# === Blender-only ===
+# Installed via Edit > Preferences > Add-ons (or reloaded in place by
+# the FH_OT_reload_panel operator).
 """
 fh_clip_panel.py — FaceHugger clip manager (Blender 5.1.1)
 
@@ -56,6 +59,17 @@ import sys
 from pathlib import Path
 
 import bpy
+
+_LIB = str(Path(__file__).resolve().parents[1] / "lib")
+if _LIB not in sys.path:
+    sys.path.insert(0, _LIB)
+
+from servo_math import (  # noqa: E402
+    _LEGS,
+    _frame_to_servo,
+    _link1_delta_to_absolute,
+    _scale_from_neutral,
+)
 
 CATEGORY = "FaceHugger"
 CLIP_TARGETS = [
@@ -320,7 +334,7 @@ def _toggle_heatmap(self, context):
 
 
 # ---------------------------------------------------------------------------
-# Existing clip helpers (unchanged)
+# Clip model
 # ---------------------------------------------------------------------------
 
 
@@ -536,7 +550,7 @@ def _redraw_view3d(context):
 
 
 # ---------------------------------------------------------------------------
-# Per-clip export-include state (Option A: inline checkbox in the Clips list)
+# Export-selection state
 # ---------------------------------------------------------------------------
 #
 # The set of clips ticked for "Export Selected Clips" is stored as a
@@ -682,7 +696,7 @@ def _copy_extra_to_app():
 
 
 # ---------------------------------------------------------------------------
-# Pose Library — animation/poses.json (committed, like convention.json)
+# Pose library (animation/poses.json)
 # ---------------------------------------------------------------------------
 #
 # A "pose" is a snapshot of the 5 control objects' LOCAL transforms:
@@ -839,7 +853,7 @@ def _seeded_pose(name):
 
 
 # ---------------------------------------------------------------------------
-# N-pose: foot targets from the RIG's own kinematics (not a hand model)
+# N-pose helpers
 # ---------------------------------------------------------------------------
 #
 # An earlier version used a hand-rolled planar FK with guessed mount/yaw
@@ -1394,6 +1408,63 @@ class FH_OT_rename_clip(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class FH_OT_delete_clip(bpy.types.Operator):
+    """Delete all 5 Actions of the named clip from the .blend file.
+    The fake-user flag is cleared first so deletion is immediate rather
+    than deferred to the next save. Removes the clip from the
+    export-selection set so no stale name is left behind."""
+
+    bl_idname = "fh.delete_clip"
+    bl_label = "Delete Clip"
+    bl_options = {"REGISTER", "UNDO"}
+
+    clip_name: bpy.props.StringProperty(name="Clip Name")
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        try:
+            return wm.invoke_confirm(
+                self,
+                event,
+                title=f"Delete '{self.clip_name}'?",
+                message=(
+                    "Permanently remove this clip's 5 Actions from the .blend. "
+                    "This cannot be undone via these tools."
+                ),
+                confirm_text="Delete",
+            )
+        except TypeError:
+            return wm.invoke_confirm(self, event)
+
+    def execute(self, context):
+        clip = self.clip_name.strip()
+        if not clip:
+            self.report({"ERROR"}, "No clip name supplied")
+            return {"CANCELLED"}
+        if clip not in list_clips():
+            self.report({"ERROR"}, f"Clip '{clip}' not found")
+            return {"CANCELLED"}
+
+        removed = 0
+        for target in CLIP_TARGETS:
+            action = bpy.data.actions.get(f"{clip}__{target}")
+            if action is None:
+                continue
+            action.use_fake_user = False
+            bpy.data.actions.remove(action)
+            removed += 1
+
+        raw = context.scene.fh_export_selected_clips
+        names = {n for n in raw.split("\n") if n} if raw else set()
+        if clip in names:
+            names.discard(clip)
+            _write_export_selected(names)
+
+        self.report({"INFO"}, f"Deleted clip '{clip}' ({removed} Actions removed)")
+        _redraw_view3d(context)
+        return {"FINISHED"}
+
+
 class FH_OT_new_clip(bpy.types.Operator):
     """Create a brand-new clip from scratch: 5 fresh Actions (one per
     control object) keyed at the current pose, then apply them. The only
@@ -1578,7 +1649,7 @@ class FH_OT_set_rest_pose(bpy.types.Operator):
 
 
 # ---------------------------------------------------------------------------
-# Operators — Pose Library (position-based, clip-independent)
+# Operators — pose library
 # ---------------------------------------------------------------------------
 
 
@@ -1800,7 +1871,7 @@ class FH_OT_key_pose_into_clip(bpy.types.Operator):
 
 
 # ---------------------------------------------------------------------------
-# Operator — selection sets (pick control objects; touches no data)
+# Operators — control-object selection
 # ---------------------------------------------------------------------------
 #
 # Convenience for animators: select a meaningful group of the rig's
@@ -1945,50 +2016,8 @@ class FH_OT_select_controls(bpy.types.Operator):
 # ---------------------------------------------------------------------------
 
 
-# Per-leg sign applied to the link1 (shoulder/yaw) delta on export.
-#
-# Canon (convention PNG, DRAFT-delta-conventions.md §2): math-space +sh = CCW
-# yaw, UNIFORM across all four legs ("absolute rotation values like a unit
-# circle, same rotation"). The rig's link1 yaw driver writes the bone-local Z
-# rotation, i.e. it multiplies the true CCW foot-yaw delta by the bone axis
-# sign (URDF link1 <axis z>: fr -1, fl +1, br +1, bl -1). To recover the
-# uniform CCW math-space the export must CANCEL that bone-axis sign — so this
-# table IS the axis sign. translateToServo then maps uniform math-space to
-# servos, where BR's documented hardware mirror (slope -1) makes BR's servo
-# move opposite the other three for a body yaw. That is correct, not a bug;
-# whether BR should be un-mirrored is a separate hardware question. See
-# docs/CLIP_SHOULDER_CONVENTION.md.
-_LINK1_DELTA_SIGN = {"fr": -1, "fl": +1, "br": +1, "bl": -1}
-
-
-def _link1_delta_to_absolute(angles, convention):
-    """Convert each `*_link1` (shoulder/yaw) angle from delta-to-absolute.
-
-    The rig drives link1 with an analytic yaw driver that outputs a DELTA
-    from the flat/rest pose — 0 deg at rest, deviating only as the foot
-    yaws — NOT an absolute joint angle. (The IK-driven link2/link3 are
-    already absolute: `_read_bone_angles` recovers the constraint-solved
-    angle for those.) But the export pipeline downstream
-    (`_scale_from_neutral`, `_frame_to_servo`) and the firmware
-    `translateToServo` both assume raw == NEUTRAL at the standing pose,
-    so that servo 90 = shoulder outward for every leg. Reading link1 as
-    delta therefore mis-anchored every shoulder (servo ~60 on fr/br,
-    clamped past [38,142] on the +/-135 legs fl/bl) — collapsing the
-    robot on playback in BOTH sim and firmware.
-
-    Fix: absolute = NEUTRAL + sign*delta, where NEUTRAL anchors the rest pose
-    (servo 90) and the per-leg sign (_LINK1_DELTA_SIGN) flips fl so all four
-    shoulders yaw the same servo direction. Shoulders only — link2/link3 are
-    already absolute. See docs/CLIP_SHOULDER_CONVENTION.md.
-
-    Mutates and returns `angles` ({bone_name: deg}). Degrees throughout
-    (`_read_bone_angles` and `neutral_joint_deg` are both degrees)."""
-    neutral = convention["neutral_joint_deg"]
-    for leg in _LEGS:
-        key = f"{leg}_link1"
-        if key in angles:
-            angles[key] = neutral[leg][0] + _LINK1_DELTA_SIGN[leg] * angles[key]
-    return angles
+# _LINK1_DELTA_SIGN and _link1_delta_to_absolute are imported from
+# animation/lib/servo_math.py (see top of file).
 
 
 def bake_clip(clip_name, context):
@@ -2068,7 +2097,8 @@ def bake_clip(clip_name, context):
 # LAYER 2 — converters: baked rows -> animation/exported_clips/<clip>/
 # ---------------------------------------------------------------------------
 
-_LEGS = ("fr", "fl", "br", "bl")  # firmware LegId order: FR=0, FL=1, BR=2, BL=3
+# _LEGS, _CALIB_THIGH, _CALIB_KNEE, _frame_to_servo, _scale_from_neutral
+# are imported from animation/lib/servo_math.py (see top of file).
 
 # Blender leg name -> firmware LegId (matches `enum LegId` in
 # code/firmware/src/nervous_system/movements.h on origin/main). Used as
@@ -2131,70 +2161,6 @@ def to_c_header(frames, clip_name, convention):
     with open(path, "w") as fh:
         fh.write("\n".join(h_lines))
     return path
-
-
-# Per-servo zero-point calibration: servo angle when the joint is at math 0°
-# (thigh/knee flat). Mirror of CALIB_* in code/firmware/src/shared/config.h.
-# Hip is uncalibrated (stays 90). Keep in sync with firmware whenever CALIB
-# values change (and re-export every clip so the bake-time servo angles match
-# the runtime). Pre-calibration these were all 90.
-_CALIB_THIGH = {"fr": 84, "fl": 87, "br": 103, "bl": 84}
-_CALIB_KNEE = {"fr": 95, "fl": 82, "br": 80, "bl": 87}
-
-
-def _frame_to_servo(row, convention, warn=True):
-    """One baked row -> {leg: [hip, thigh, knee] ints} where the per-leg
-    list index IS the firmware `servo_id` (0=hip, 1=thigh, 2=knee —
-    matching LEG_SERVO_CHANNEL[leg_id][servo_id] in
-    code/firmware/src/shared/config.h on origin/main).
-
-    Applies (1) scale-from-NEUTRAL, (2) per-leg translateToServo with
-    per-joint CALIB zero-points — byte-identical to the firmware
-    translateToServo, locked by test_clip_parity — and (3) rounds to int.
-
-    Wire shape consumed by to_js: {T:4, id:_LEG_ID[leg], servo_id:j,
-    a:result[leg][j]}. The firmware does the PCA-channel mapping;
-    convention.json's `channels` field is kept for reference but is
-    NOT used on the wire."""
-    neutral = convention["neutral_joint_deg"]
-    scale = convention["scale"]
-    out = {}
-    for leg in _LEGS:
-        n = neutral[leg]  # [shoulder, hip, knee] deg at hardware neutral
-        raw = [row[f"{leg}_link1"], row[f"{leg}_link2"], row[f"{leg}_link3"]]
-        # 1. compress movement toward N
-        sh, th, kn = (n[j] + (raw[j] - n[j]) * scale for j in range(3))
-        # 2. translateToServo: shoulder uses literal 90 (uncalibrated), thigh/knee
-        #    use per-leg CALIB (the servo angle at math 0 / flat).
-        ct, ck = _CALIB_THIGH[leg], _CALIB_KNEE[leg]
-        if leg == "fl":
-            # Change B: FL shoulder regularized to 90 + (sh - 135) so servo 90 = outward,
-            # matching fr/bl/br. Byte-identical to firmware motion_math.cpp FL branch.
-            servo = [90 + (sh - 135), ct + th, ck - kn]
-        elif leg == "fr":
-            servo = [90 + (sh - 45), ct - th, ck + kn]
-        elif leg == "bl":
-            servo = [90 + (sh + 135), ct - th, ck + kn]
-        else:  # br
-            # BR shoulder un-mirrored (2026-05-25): +sh = +servo like fr/fl/bl
-            # (identical motor, yaw shaft on the same vertical axis). Kept
-            # byte-identical to firmware translateToServo by test_clip_parity.
-            servo = [90 + (sh + 45), ct + th, ck - kn]
-        # 3. clamp to the servo range, surfacing authoring errors at export
-        # time rather than relying on the JS / firmware clamp as the only
-        # backstop (the FRAME_DELTA_WARN_DEG warning's range companion).
-        for i, v in enumerate(servo):
-            if v < 0 or v > 180:
-                if warn:
-                    bone_name = ["shoulder", "hip", "knee"][i]
-                    print(
-                        f"WARNING: {leg} {bone_name} servo {v:.1f} out of range "
-                        f"[0-180] at frame {row.get('frame', '?')} — clamped"
-                    )
-                servo[i] = max(0, min(180, v))
-        # 4. integer servo degrees
-        out[leg] = [round(v) for v in servo]
-    return out
 
 
 def _current_servo_angles(context):
@@ -2291,9 +2257,9 @@ def to_js(
 
     clip_lines = []
     for row in frames:
-        s = _frame_to_servo(row, convention)
+        m = _scale_from_neutral(row, convention)
         legs = ", ".join(
-            f"{leg}:[{s[leg][0]},{s[leg][1]},{s[leg][2]}]" for leg in _LEGS
+            f"{leg}:[{m[leg][0]:.4f},{m[leg][1]:.4f},{m[leg][2]:.4f}]" for leg in _LEGS
         )
         clip_lines.append(f"  {{ t: {row['time_ms']}, {legs} }},")
 
@@ -2303,14 +2269,14 @@ def to_js(
     loop_js = "true" if loop else "false"
     if dry_run:
         header_block = (
-            '// DRY RUN — prints each {"T":4,...} message to the console\n'
+            '// DRY RUN — prints each {"T":12,...} message to the console\n'
             "// instead of sending it. No WebSocket is opened; no robot\n"
-            "// needed. Paste into any JS console to validate the servo\n"
-            "// stream before connecting to hardware.\n"
+            "// needed. Paste into any JS console to validate the math-space\n"
+            "// frame stream before connecting to hardware.\n"
             "//\n"
-            "// Wire shape matches origin/main CMD_CALIBRATE (T:4):\n"
-            "//   {T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}\n"
-            "// Firmware maps to PCA channel via LEG_SERVO_CHANNEL."
+            "// Wire shape: T:12 CMD_STREAM_FRAME — one message per frame,\n"
+            "// math-space joint angles (firmware applies CALIB at runtime).\n"
+            "//   {T:12, fr:[sh,th,kn], fl:[sh,th,kn], br:[sh,th,kn], bl:[sh,th,kn]}"
         )
         transport_decl = "// (dry run — no WebSocket opened)"
         open_guard = ""
@@ -2331,9 +2297,9 @@ def to_js(
             '//      — the #1 reason "nothing happens".\n'
             "//   3. Paste this whole file. Call  fhStop()  to stop at any time.\n"
             "//\n"
-            "// Wire shape matches origin/main CMD_CALIBRATE (T:4):\n"
-            "//   {T:4, id:<leg_id 0-3>, servo_id:<0-2>, a:<0-180>}\n"
-            "// Firmware does PCA-channel mapping via LEG_SERVO_CHANNEL."
+            "// Wire shape: T:12 CMD_STREAM_FRAME — one message per frame,\n"
+            "// math-space joint angles (firmware applies CALIB at runtime).\n"
+            "//   {T:12, fr:[sh,th,kn], fl:[sh,th,kn], br:[sh,th,kn], bl:[sh,th,kn]}"
         )
         transport_decl = f'const ws = new WebSocket("ws://{esp_ip}:81");'
         open_guard = "if (ws.readyState !== WebSocket.OPEN) return;"
@@ -2354,19 +2320,18 @@ def to_js(
         )
 
     js = f"""// FaceHugger clip: {clip_name}
-// Generated {today} from Blender animation
+// Generated {today} from Blender animation (math-space; firmware applies CALIB)
 //
 {header_block}
 //
 // PLAYBACK SEMANTICS (Phase-1 parity with firmware tickClip, see spec
 // doc/animation-pipeline/onboard-clip-player-design.md §3.1):
 //   - DEFAULT: play the clip ONCE, then HOLD the final pose by
-//     re-sending the last frame's servo angles every FRAME_MS — the
-//     same as the firmware's hold-at-end behaviour.
+//     re-sending the last frame every FRAME_MS — firmware deadband
+//     suppresses redundant PWM writes on held frames.
 //   - LOOP=true: replay from frame 0 instead of holding (diagnostic).
 //   - fhStop(): explicit safe stop — clears the interval and closes
-//     the socket. The robot keeps the last commanded servo positions
-//     (servos hold their last commanded angle in hardware).
+//     the socket. The robot keeps the last commanded servo positions.
 
 const LOOP = {loop_js};
 // Playback wall-clock period — derived from the Blender scene FPS at
@@ -2376,24 +2341,11 @@ const LOOP = {loop_js};
 const FRAME_MS = {frame_ms};
 const CLIP_NAME = {json.dumps(clip_name)};
 
-// Blender leg name -> firmware LegId (see movements.h enum LegId on
-// origin/main). The wire `id` field is this leg_id; the firmware maps
-// to a PCA channel via LEG_SERVO_CHANNEL[id][servo_id].
-const LEG_IDS = {{ fr: 0, fl: 1, br: 2, bl: 3 }};
-
+// Math-space clip data: [shoulder, thigh, knee] per leg in degrees.
+// Firmware applies translateToServo + CALIB at runtime (T:12).
 const CLIP = [
 {chr(10).join(clip_lines)}
 ];
-
-// Servos accept 0..180; clamp defensively (extreme poses / a drifted
-// convention can push the converted angle out of range).
-const clamp = (v) => Math.max(0, Math.min(180, v | 0));
-
-// Delta-encode: only emit a channel when its value changed since the last
-// frame. Cuts redundant traffic and ends the hold-at-end resend flood
-// (a held pose = unchanged angles = nothing sent). Reset to {{}} on restart
-// so the first frame after a (re)start always sends all 12 channels.
-let _last = {{}};
 
 let _i = 0;
 let _timer = null;
@@ -2412,24 +2364,14 @@ function playFrame() {{
   if (_i >= CLIP.length) {{
     if (LOOP) {{
       _i = 0;
-      _last = {{}};  // reset delta cache so loop restart re-sends all channels
     }} else {{
       _i = CLIP.length - 1;
     }}
   }}
   const frame = CLIP[_i++];
   {open_guard}
-  for (const leg of ["fr", "fl", "br", "bl"]) {{
-    const angles = frame[leg];
-    for (let j = 0; j < 3; j++) {{
-      const a = clamp(angles[j]);
-      const key = leg + ":" + j;
-      if (_last[key] === a) continue;
-      _last[key] = a;
-      const msg = {{ "T": 4, "id": LEG_IDS[leg], "servo_id": j, "a": a }};
-      {send_call}
-    }}
-  }}
+  const msg = {{ T: 12, fr: frame.fr, fl: frame.fl, br: frame.br, bl: frame.bl }};
+  {send_call}
 }}
 
 {starter}
@@ -2439,22 +2381,6 @@ function playFrame() {{
     with open(path, "w") as fh:
         fh.write(js)
     return path
-
-
-def _scale_from_neutral(row, convention):
-    """One baked row -> {leg: [sh, th, kn]} math-space degrees with the
-    2/3 scale-from-NEUTRAL applied (the SAME step-1 math as
-    _frame_to_servo, but WITHOUT translateToServo / round). The clip
-    header is math-space; the firmware applies translateToServo at
-    runtime, so this must NOT pre-apply it (plan §0)."""
-    neutral = convention["neutral_joint_deg"]
-    scale = convention["scale"]
-    out = {}
-    for leg in _LEGS:
-        n = neutral[leg]
-        raw = [row[f"{leg}_link1"], row[f"{leg}_link2"], row[f"{leg}_link3"]]
-        out[leg] = [n[j] + (raw[j] - n[j]) * scale for j in range(3)]
-    return out
 
 
 def _c_sym(clip_name):
@@ -3182,6 +3108,9 @@ class FH_PT_clips(_FH_PT_child, bpy.types.Panel):
                     icon=chk_icon,
                     depress=in_export,
                 ).clip_name = clip
+                row.operator(
+                    FH_OT_delete_clip.bl_idname, text="", icon="X"
+                ).clip_name = clip
 
         layout.separator()
         layout.label(text="New clip name:")
@@ -3433,6 +3362,7 @@ CLASSES = (
     FH_OT_overwrite_clip,
     FH_OT_toggle_export_clip,
     FH_OT_rename_clip,
+    FH_OT_delete_clip,
     FH_OT_export_clip,
     FH_OT_export_selected,
     FH_OT_open_export_dir,

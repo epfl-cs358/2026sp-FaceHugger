@@ -364,7 +364,7 @@ def trace_clip(fc, clip_name, record_every=24, step_hz=240, preroll_ms=200):
     (t_ms = step*1000/hz) and records the 12 servo angles (whole degrees, as the
     robot receives them) every `record_every` steps. The window includes the clip
     pre-roll (the eased glide from the live pose into frame 0 that playClip starts
-    with), so the full motion is captured. Used by both the golden generator and
+    with), so the full motion is captured. Used by both the reference generator and
     the clip suite, so they tick the *identical* sequence — the trace is a pure
     function of the firmware code + the clip data, making any servo-angle change
     detectable. `preroll_ms` must match the firmware CLIP_PREROLL_MS.

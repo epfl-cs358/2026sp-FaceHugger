@@ -120,7 +120,7 @@ class ClipPlayer:
         """Set up clip player.
 
         robot_id:  PyBullet body ID from pybullet.loadURDF().
-        joint_map: {joint_name: pybullet_joint_index} from helpers.build_joint_map().
+        joint_map: {joint_name: pybullet_joint_index} from motor.build_joint_map().
         clip:      ClipData from clip_loader.load_clips_all_h().
         force:     max joint force (N·m), passed to setJointMotorControl2.
         velocity:  max joint velocity (rad/s), passed to setJointMotorControl2.

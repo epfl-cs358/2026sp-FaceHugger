@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# === Plain Python — no Blender required ===
+# Run as: python <this file>  (or via pytest). Stubs `bpy` at import time.
 """Pure-Python parity test — the lockstep contract between the Blender
 exporter's `_frame_to_servo` and the firmware's `tickGait` →
 `translateToServo` switch at origin/feat/hardware-integration-milestone-2
@@ -20,7 +22,6 @@ import importlib.util
 import json
 import os
 import sys
-import types
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SCRIPT = os.path.join(
@@ -28,44 +29,9 @@ SCRIPT = os.path.join(
 )  # moved scripts/->addons/ (2f627a1)
 CONV_PATH = os.path.join(REPO_ROOT, "animation/convention.json")
 
-
-def _stub_bpy() -> None:
-    """Minimal `bpy` shim so `import fh_clip_panel` works under plain
-    Python. Only the import-time surface matters: class-body subclassing
-    of `bpy.types.Operator`/`Panel` and the `bpy.props.*` calls used as
-    annotation values. Bodies of operator methods are not executed."""
-    bpy = types.ModuleType("bpy")
-    bpy.types = types.SimpleNamespace(
-        Operator=type("Operator", (), {}),
-        Panel=type("Panel", (), {}),
-        Scene=type("Scene", (), {}),
-    )
-    bpy.props = types.SimpleNamespace(
-        StringProperty=lambda **kw: None,
-        IntProperty=lambda **kw: None,
-        BoolProperty=lambda **kw: None,
-        EnumProperty=lambda **kw: None,
-    )
-    bpy.app = types.SimpleNamespace(
-        handlers=types.SimpleNamespace(
-            frame_change_post=[],
-            save_pre=[],
-            load_post=[],
-            # @persistent decorator — pass through unchanged in the stub.
-            persistent=lambda fn: fn,
-        )
-    )
-    bpy.data = types.SimpleNamespace(
-        objects=types.SimpleNamespace(get=lambda *a, **kw: None),
-        actions=[],
-        filepath="",
-    )
-    bpy.context = types.SimpleNamespace(scene=None, view_layer=None)
-    bpy.utils = types.SimpleNamespace(
-        register_class=lambda x: None, unregister_class=lambda x: None
-    )
-    bpy.path = types.SimpleNamespace(abspath=lambda p: p)
-    sys.modules["bpy"] = bpy
+_LIB = os.path.join(REPO_ROOT, "animation/lib")
+if _LIB not in sys.path:
+    sys.path.insert(0, _LIB)
 
 
 def _firmware_translate(leg: str, sh: float, th: float, kn: float) -> list[float]:
@@ -89,7 +55,7 @@ def _firmware_translate(leg: str, sh: float, th: float, kn: float) -> list[float
 
 
 def main() -> int:
-    _stub_bpy()
+    bpy_stub.install()
     spec = importlib.util.spec_from_file_location("fh_clip_panel", SCRIPT)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
