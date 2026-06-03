@@ -18,8 +18,13 @@ from pathlib import Path
 _LIB = str(Path(__file__).resolve().parents[1] / "lib")
 if _LIB not in sys.path:
     sys.path.insert(0, _LIB)
+# _frame_to_servo moved to firmware-parity helpers (Phase 3 of the CALIB-
+# decoupling plan — animation/lib/servo_math.py is math-space only now).
+_FW_PORT_PARENT = str(Path(__file__).resolve().parents[2] / "code" / "simulation")
+if _FW_PORT_PARENT not in sys.path:
+    sys.path.insert(0, _FW_PORT_PARENT)
 
-from servo_math import _frame_to_servo  # noqa: E402
+from firmware_port.exporter_parity import _frame_to_servo  # noqa: E402
 
 BONE_ORDER = [
     "fl_link1",

@@ -63,13 +63,19 @@ import bpy
 _LIB = str(Path(__file__).resolve().parents[1] / "lib")
 if _LIB not in sys.path:
     sys.path.insert(0, _LIB)
+# Firmware-parity Python re-port (CALIB + _frame_to_servo live here now,
+# not in servo_math; the Blender panel imports them for its servo-space
+# "current angles" preview, but the on-wire exporter paths stay math-space).
+_FW_PORT_PARENT = str(Path(__file__).resolve().parents[2] / "code" / "simulation")
+if _FW_PORT_PARENT not in sys.path:
+    sys.path.insert(0, _FW_PORT_PARENT)
 
 from servo_math import (  # noqa: E402
     _LEGS,
-    _frame_to_servo,
     _link1_delta_to_absolute,
     _scale_from_neutral,
 )
+from firmware_port.exporter_parity import _frame_to_servo  # noqa: E402
 
 CATEGORY = "FaceHugger"
 CLIP_TARGETS = [

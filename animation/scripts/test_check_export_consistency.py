@@ -166,10 +166,14 @@ def test_body_rotation_uniform_mathspace_yaw():
     if _lib not in sys.path:
         sys.path.insert(0, _lib)
     from servo_math import (
-        _frame_to_servo,
         _link1_delta_to_absolute,
         _scale_from_neutral,
     )
+
+    _fw = str(_Path(__file__).resolve().parents[2] / "code" / "simulation")
+    if _fw not in sys.path:
+        sys.path.insert(0, _fw)
+    from firmware_port.exporter_parity import _frame_to_servo
 
     axis_sign = {"fr": -1, "fl": +1, "br": +1, "bl": -1}
     n = CONVENTION["neutral_joint_deg"]
