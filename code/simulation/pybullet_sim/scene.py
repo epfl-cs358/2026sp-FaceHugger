@@ -16,6 +16,14 @@ from .motor import apply_leg_pose, build_joint_map, reset_to_stance
 FOOT_LATERAL_FRICTION = 2.5  # high grip — models the rubber/elastic bands on the
 # real feet (PyBullet multiplies foot × plane, so this is the grippy end)
 FOOT_SPINNING_FRICTION = 0.3  # rubber tips resist the foot pivoting in place
+# Soft contact for the feet — PyBullet's default infinitely-stiff resolution
+# makes the body bounce on every footfall and prevents a planted stance.
+# Tuned so each footfall absorbs over a few timesteps instead of one. Stiffness
+# scales the spring force per unit penetration; damping scales the velocity at
+# contact. Values below are conservative; raise stiffness if the feet visibly
+# sink, lower damping if the body still oscillates after impact.
+FOOT_CONTACT_STIFFNESS = 30000.0
+FOOT_CONTACT_DAMPING = 100.0
 SOLVER_ITERATIONS = 150  # stiffer, less-jittery contact resolution
 
 
@@ -71,6 +79,8 @@ def connect_and_setup(cfg, gui, float_mode=False):
                 lateralFriction=FOOT_LATERAL_FRICTION,
                 spinningFriction=FOOT_SPINNING_FRICTION,
                 restitution=0.0,
+                contactStiffness=FOOT_CONTACT_STIFFNESS,
+                contactDamping=FOOT_CONTACT_DAMPING,
             )
 
     if gui:
