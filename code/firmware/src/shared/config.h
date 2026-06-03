@@ -41,6 +41,32 @@
 #define THIGH_CLAMP_FROM_CALIB 60
 #define KNEE_CLAMP_FROM_CALIB  90
 
+// Math-space shoulder safety net — applied by enforceShoulderLimits() before
+// translateToServo() on every gait / clip / T:12-stream tick. Two layers:
+//   1. Per-side asymmetric hard clamp in URDF θ (signed displacement from rest):
+//        LEFT  (FL, BL):  θ ∈ [-NARROW, +WIDE]   (URDF lower side, URDF upper side)
+//        RIGHT (FR, BR):  θ ∈ [-WIDE,   +NARROW] (mirror — same physical shape,
+//                                                 opposite sign because right
+//                                                 legs sit on the other side
+//                                                 of the body)
+//   2. Back-leg inter-leg coupling — back always sits ≥ INTER_LEG_BUFFER_DEG
+//      from the front leg on the same side (front-leads-back-follows), so a
+//      front leg swung deep toward the rear doesn't crash the back leg into
+//      the same arc:
+//        LEFT:  BL_θ ≥ FL_θ + INTER_LEG_BUFFER_DEG
+//        RIGHT: BR_θ ≤ FR_θ - INTER_LEG_BUFFER_DEG
+//
+// Hard limits dominate the buffer at extremes — when the front leg is at its
+// own hard max, the back leg ends up at the same hard max (buffer collapses
+// to 0°). Bench-test the buffer value (5° default) once before relying on it.
+//
+// Per-side Fusion-angle equivalents (animator reference):
+//   FL: [-97°, +45°]   BL: [-97°, +45°]   (left rest = -45° per-side)
+//   FR: [-45°, +97°]   BR: [-45°, +97°]   (right rest = +45° per-side)
+#define SHOULDER_THETA_NARROW_DEG 52
+#define SHOULDER_THETA_WIDE_DEG   90
+#define INTER_LEG_BUFFER_DEG       5
+
 // define PCA addresses for servos as well as default angles (IDLE_STAND pose)
 
 // Front right leg (Leg 0 in spinal_cord.cpp)
