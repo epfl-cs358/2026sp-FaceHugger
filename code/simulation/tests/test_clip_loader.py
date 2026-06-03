@@ -78,8 +78,10 @@ def test_first_frame_lie_down_fr_shoulder(all_clips):
     historical regression value (~45.71 = FR neutral 45 plus the rest-yaw
     residual under the uniform-math-space yaw convention). If that clip
     has been retired from the catalog, this regression-guard skips rather
-    than failing, since the value is meaningless without that specific clip.
-    See docs/CLIP_SHOULDER_CONVENTION.md."""
+    than failing, since the value is meaningless without that specific
+    clip. Background on the link1 delta-to-absolute fix that produced
+    this number lives in `animation/addons/fh_clip_panel.py`
+    `_link1_delta_to_absolute`."""
     try:
         clip = get_clip_by_name(all_clips, "lie down and stand up")
     except KeyError:
