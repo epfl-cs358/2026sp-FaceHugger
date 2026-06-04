@@ -21,7 +21,7 @@ Geometry sourcing (no duplication of constants in Python):
 import argparse
 
 from .kinematics import build_config
-from .runner import run_clip, run_gait, run_stand
+from .runner import run_clip, run_stand
 
 
 def main():
@@ -87,7 +87,14 @@ def main():
     # Importing firmware_sil only when the SIL path is taken keeps the Python
     # re-port runnable on machines without a C++ toolchain.
     if args.python_port:
-        clip_fn, gait_fn = run_clip, run_gait
+        clip_fn = run_clip
+
+        def gait_fn(*_a, **_kw):
+            raise SystemExit(
+                "Python-port gaits were removed (no parity contract with firmware).\n"
+                "Build the SIL: `cd code/simulation/firmware_sil && cmake -S . -B build && cmake --build build`.\n"
+                "Then re-run without --python-port."
+            )
     else:
         from firmware_sil import run_clip_sil as clip_fn  # noqa: N813
         from firmware_sil import run_gait_sil as gait_fn  # noqa: N813

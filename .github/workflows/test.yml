@@ -14,8 +14,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install pytest pyyaml
-      - name: Animation lib tests (CALIB cross-repo consistency)
-        run: pytest animation/lib/tests/ -v
+      - name: Animation tests (all under animation/tests/)
+        run: pytest animation/tests/ -v
       - name: Foot-tip geometry parity
         run: pytest code/simulation/tests/test_foot_tip_parity.py -v
 

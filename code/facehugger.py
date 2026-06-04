@@ -212,6 +212,16 @@ def cmd_sim(args):
         or getattr(args, "app", False)
         or getattr(args, "panel", False)
     )
+    # Guard: --python-port is only for clips, not gaits.
+    if getattr(args, "python_port", False) and (args.walk or args.trot):
+        from argparse import ArgumentParser
+
+        p = ArgumentParser()
+        p.error(
+            "Python-port gaits were removed (no parity contract with firmware).\n"
+            "Build the SIL: `cd code/simulation/firmware_sil && cmake -S . -B build && cmake --build build`.\n"
+            "Then re-run without --python-port."
+        )
     # Default path (non --python-port) and any serve build the firmware SIL.
     _require_sim_deps(need_build=serving or not getattr(args, "python_port", False))
     if serving:
