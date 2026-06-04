@@ -873,3 +873,9 @@ animation/blend-iterations/
 # Regenerated on demand; not source control material.
 .work/
 .claude/settings.json
+
+# Local agent config
+.pi/
+.claude/skills/
+.claude/worktrees/
+cad/scripts/FaceHuggerExport/.vscode/launch.json
