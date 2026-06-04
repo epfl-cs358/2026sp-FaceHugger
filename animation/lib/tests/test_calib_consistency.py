@@ -2,27 +2,26 @@
 # Run via pytest.
 """Cross-repo CALIB consistency check.
 
-Asserts that servo_math._CALIB_THIGH / _CALIB_KNEE match the #define values
-in code/firmware/src/shared/calib.h so a calibration update that touches one
-side without the other is caught immediately.
+Asserts that exporter_parity._CALIB_THIGH / _CALIB_KNEE — the string-keyed
+mirror imported by the Blender panel + parity tests — match the #define values
+in code/firmware/src/shared/calib.h. CALIB lives on the firmware side; this
+test guards against drift across the two surfaces.
+
+Test moved here from animation/lib/tests/ when _CALIB_* was relocated to
+code/simulation/firmware_port/exporter_parity.py (Phase 3 of the CALIB-
+decoupling plan); the import path is the only thing that changed.
 """
 
 import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(_REPO_ROOT / "code" / "simulation"))
 
-from servo_math import _CALIB_KNEE, _CALIB_THIGH
+from firmware_port.exporter_parity import _CALIB_KNEE, _CALIB_THIGH  # noqa: E402
 
-_CALIB_H = (
-    Path(__file__).resolve().parents[3]
-    / "code"
-    / "firmware"
-    / "src"
-    / "shared"
-    / "calib.h"
-)
+_CALIB_H = _REPO_ROOT / "code" / "firmware" / "src" / "shared" / "calib.h"
 
 _DEFINE_RE = re.compile(r"#define\s+(CALIB_\w+)\s+(\d+)")
 
@@ -34,7 +33,7 @@ def _parse_calib_h():
 
 _FW = _parse_calib_h()
 
-# Firmware leg name prefix → servo_math dict key
+# Firmware leg name prefix → exporter-parity dict key.
 _LEG_MAP = {"FR": "fr", "FL": "fl", "BR": "br", "BL": "bl"}
 
 
@@ -43,8 +42,9 @@ def test_calib_thigh_matches_firmware():
         fw_val = _FW[f"CALIB_{fw_prefix}_THIGH"]
         py_val = _CALIB_THIGH[py_leg]
         assert py_val == fw_val, (
-            f"_CALIB_THIGH['{py_leg}']={py_val} != firmware CALIB_{fw_prefix}_THIGH={fw_val}; "
-            f"update servo_math.py or calib.h to match"
+            f"_CALIB_THIGH['{py_leg}']={py_val} != "
+            f"firmware CALIB_{fw_prefix}_THIGH={fw_val}; "
+            f"update servo_convention.py or calib.h to match"
         )
 
 
@@ -53,8 +53,9 @@ def test_calib_knee_matches_firmware():
         fw_val = _FW[f"CALIB_{fw_prefix}_KNEE"]
         py_val = _CALIB_KNEE[py_leg]
         assert py_val == fw_val, (
-            f"_CALIB_KNEE['{py_leg}']={py_val} != firmware CALIB_{fw_prefix}_KNEE={fw_val}; "
-            f"update servo_math.py or calib.h to match"
+            f"_CALIB_KNEE['{py_leg}']={py_val} != "
+            f"firmware CALIB_{fw_prefix}_KNEE={fw_val}; "
+            f"update servo_convention.py or calib.h to match"
         )
 
 

@@ -40,34 +40,35 @@ void test_hip_clamped_to_38_142_every_leg(void) {
 // ─── Thigh clamp (per-leg, CALIB ± THIGH_CLAMP_FROM_CALIB) ──────────────────
 
 void test_thigh_FR_window(void) {
-    // CALIB_FR_THIGH = 84 → window [24, 144]. 24 is the lower edge.
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 24.0, clampClipServos(0, {90, 24.0, 90}).thigh);
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 24.0, clampClipServos(0, {90, 23.0, 90}).thigh);
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 144.0, clampClipServos(0, {90, 144.0, 90}).thigh);
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 144.0, clampClipServos(0, {90, 145.0, 90}).thigh);
+    // CALIB_FR_THIGH = 84 → window [9, 159] (THIGH_CLAMP_FROM_CALIB = 75,
+    // tracking URDF thigh ±75°).
+    TEST_ASSERT_DOUBLE_WITHIN(TOL,  9.0, clampClipServos(0, {90,  9.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL,  9.0, clampClipServos(0, {90,  8.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 159.0, clampClipServos(0, {90, 159.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 159.0, clampClipServos(0, {90, 160.0, 90}).thigh);
 }
 
 void test_thigh_FL_neutral_27_no_longer_clipped(void) {
-    // This is the case that motivated the change. CALIB_FL_THIGH = 87 →
-    // window [27, 147]. FL NEUTRAL = 27 (servo) is exactly the lower edge:
-    // under the old uniform [30, 150] this was clipped to 30; the clip-path
-    // FL thigh now sits on its true rest pose.
+    // This is the case that motivated the per-leg CALIB-relative clamp.
+    // CALIB_FL_THIGH = 87 → window [12, 162] under ±75°. FL NEUTRAL = 27
+    // (servo) sits comfortably inside the window; under the old uniform
+    // [30, 150] this was clipped to 30.
     TEST_ASSERT_DOUBLE_WITHIN(TOL, 27.0, clampClipServos(1, {90, 27.0, 90}).thigh);
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 27.0, clampClipServos(1, {90, 26.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 12.0, clampClipServos(1, {90, 11.0, 90}).thigh);
 }
 
 void test_thigh_BR_window(void) {
-    // CALIB_BR_THIGH = 103 → window [43, 163]. 163 is the upper edge.
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 163.0, clampClipServos(2, {90, 163.0, 90}).thigh);
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 163.0, clampClipServos(2, {90, 164.0, 90}).thigh);
-    TEST_ASSERT_DOUBLE_WITHIN(TOL,  43.0, clampClipServos(2, {90,  43.0, 90}).thigh);
-    TEST_ASSERT_DOUBLE_WITHIN(TOL,  43.0, clampClipServos(2, {90,  42.0, 90}).thigh);
+    // CALIB_BR_THIGH = 103 → window [28, 178].
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 178.0, clampClipServos(2, {90, 178.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 178.0, clampClipServos(2, {90, 179.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL,  28.0, clampClipServos(2, {90,  28.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL,  28.0, clampClipServos(2, {90,  27.0, 90}).thigh);
 }
 
 void test_thigh_BL_window(void) {
-    // CALIB_BL_THIGH = 84 → window [24, 144].
-    TEST_ASSERT_DOUBLE_WITHIN(TOL,  24.0, clampClipServos(3, {90,  24.0, 90}).thigh);
-    TEST_ASSERT_DOUBLE_WITHIN(TOL, 144.0, clampClipServos(3, {90, 144.0, 90}).thigh);
+    // CALIB_BL_THIGH = 84 → window [9, 159].
+    TEST_ASSERT_DOUBLE_WITHIN(TOL,   9.0, clampClipServos(3, {90,   9.0, 90}).thigh);
+    TEST_ASSERT_DOUBLE_WITHIN(TOL, 159.0, clampClipServos(3, {90, 159.0, 90}).thigh);
 }
 
 // ─── Knee clamp (per-leg, CALIB ± KNEE_CLAMP_FROM_CALIB) ────────────────────

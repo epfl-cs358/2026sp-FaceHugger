@@ -36,7 +36,7 @@ The Pager swaps screens by unmount, so the screen's `useEffect` cleanup is the n
 
 ## App-streamed clips (disabled)
 
-Clips are now triggered firmware-side via `T:7` (CMD_PLAY_CLIP): the ESP32 owns the timing and only one packet crosses the wire. The app used to alternatively *stream* bundled clips frame-by-frame as `T:4` calibration packets, but that path saturated the ESP32 WebSocket on real hardware and the connection would drop mid-clip. Flashed clips were unaffected, so the streamer was switched off rather than removed.
+Clips are now triggered firmware-side via `T:7` (CMD_PLAY_CLIP): the ESP32 owns the timing and only one packet crosses the wire. The app can alternatively *stream* a bundled clip frame-by-frame, but it does so via `T:12` (`CMD_STREAM_FRAME`) — one math-space packet per authored frame, with the firmware applying `translateToServo` + CALIB on receipt — not via the per-channel `T:4` burst the original prototype used (which saturated the ESP32 WebSocket and dropped mid-clip). The streamer was retained while throughput is sorted, and the migration from T:4 to T:12 brings the app in line with the rest of the export pipeline so the bundle no longer depends on firmware CALIB.
 
 The flag lives in `config/config.ts` as `JS_STREAMED_CLIPS_ENABLED = false`. The streamer source (`services/clipStreamer.ts`, `api/streamClips.ts`) is intentionally left intact; `ClipList.tsx` hides the "App" segment and the per-row "App" button when the flag is off, and the streamer cleanup is a no-op when never started. Flipping the constant back to `true` re-enables the path once firmware throughput is fixed.
 

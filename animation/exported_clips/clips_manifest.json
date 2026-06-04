@@ -32,30 +32,36 @@
     },
     {
       "id": 5,
+      "name": "imbalance flip",
+      "frame_count": 61,
+      "duration_ms": 2500
+    },
+    {
+      "id": 6,
       "name": "lie down and stand up",
       "frame_count": 97,
       "duration_ms": 4000
     },
     {
-      "id": 6,
+      "id": 7,
       "name": "one leg lift",
       "frame_count": 50,
       "duration_ms": 2042
     },
     {
-      "id": 7,
+      "id": 8,
       "name": "roll-ish",
       "frame_count": 43,
       "duration_ms": 1750
     },
     {
-      "id": 8,
+      "id": 9,
       "name": "wave",
       "frame_count": 93,
       "duration_ms": 3833
     },
     {
-      "id": 9,
+      "id": 10,
       "name": "wiggle",
       "frame_count": 73,
       "duration_ms": 3000

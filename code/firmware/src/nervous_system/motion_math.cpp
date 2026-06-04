@@ -1,6 +1,77 @@
 #include "motion_math.h"
-#include "../shared/config.h"  // CALIB_* per-servo zero-point calibration
+#include <math.h>
+#include "../shared/config.h"  // CALIB_*, SHOULDER_THETA_*, INTER_LEG_BUFFER_DEG
+#include "neutral_pose.h"      // NEUTRAL[] math-space rest
 #include "clips_all.h"
+
+// Per-side asymmetric URDF-θ envelope. LEFT/RIGHT mirror each other through
+// the body-X axis: the URDF tight (narrow) bound is on the same physical
+// "inward" side for both, but its signed value flips with side.
+//   LEFT  (FL, BL):  θ ∈ [-NARROW, +WIDE]   (URDF + sweeps outward)
+//   RIGHT (FR, BR):  θ ∈ [-WIDE,   +NARROW] (mirror)
+static inline void shoulder_hard_clamp_for_side(double& theta, bool is_left) {
+    const double lo = is_left ? -(double)SHOULDER_THETA_NARROW_DEG
+                              : -(double)SHOULDER_THETA_WIDE_DEG;
+    const double hi = is_left ? +(double)SHOULDER_THETA_WIDE_DEG
+                              : +(double)SHOULDER_THETA_NARROW_DEG;
+    if (theta < lo) theta = lo;
+    if (theta > hi) theta = hi;
+}
+
+// Signed CCW arc from a to b, normalised into (-180, +180]. Positive means b
+// is CCW of a; magnitude is the shorter-arc distance.
+static inline double signed_shorter_arc(double a, double b) {
+    double d = fmod(b - a, 360.0);
+    if (d <= -180.0) d += 360.0;
+    if (d >   180.0) d -= 360.0;
+    return d;
+}
+
+// Push `back` away from `front` along the shorter-arc direction so the gap is
+// exactly INTER_LEG_BUFFER_DEG. Direction = sign of the current signed arc
+// (preserves which side back currently sits on). Returns the adjusted back
+// math angle, NOT yet hard-clamped.
+static inline double widen_gap_to_buffer(double front_math, double back_math) {
+    const double buf = (double)INTER_LEG_BUFFER_DEG;
+    double signed_d = signed_shorter_arc(front_math, back_math);
+    double sign = (signed_d >= 0.0) ? 1.0 : -1.0;
+    return front_math + sign * buf;
+}
+
+void enforceShoulderLimits(double sh[4]) {
+    // 1. Hard clamp each leg to its per-side URDF-θ envelope.
+    double theta[4];
+    for (int i = 0; i < 4; ++i) theta[i] = sh[i] - (double)NEUTRAL[i].sh;
+    shoulder_hard_clamp_for_side(theta[0], /*is_left=*/false);  // FR
+    shoulder_hard_clamp_for_side(theta[1], /*is_left=*/true);   // FL
+    shoulder_hard_clamp_for_side(theta[2], /*is_left=*/false);  // BR (RR)
+    shoulder_hard_clamp_for_side(theta[3], /*is_left=*/true);   // BL (RL)
+    double m[4];
+    for (int i = 0; i < 4; ++i) m[i] = (double)NEUTRAL[i].sh + theta[i];
+
+    // 2. Same-side gap: front leads, back follows. If the math-space shorter-
+    //    arc gap is below the buffer, push the back leg along the gap-widening
+    //    direction. Re-apply the back leg's hard clamp in case the push
+    //    crossed its envelope.
+    const double buf = (double)INTER_LEG_BUFFER_DEG;
+
+    // RIGHT: FR=0, BR=2
+    if (fabs(signed_shorter_arc(m[0], m[2])) < buf) {
+        double pushed = widen_gap_to_buffer(m[0], m[2]);
+        double pushed_theta = pushed - (double)NEUTRAL[2].sh;
+        shoulder_hard_clamp_for_side(pushed_theta, /*is_left=*/false);
+        m[2] = (double)NEUTRAL[2].sh + pushed_theta;
+    }
+    // LEFT: FL=1, BL=3
+    if (fabs(signed_shorter_arc(m[1], m[3])) < buf) {
+        double pushed = widen_gap_to_buffer(m[1], m[3]);
+        double pushed_theta = pushed - (double)NEUTRAL[3].sh;
+        shoulder_hard_clamp_for_side(pushed_theta, /*is_left=*/true);
+        m[3] = (double)NEUTRAL[3].sh + pushed_theta;
+    }
+
+    for (int i = 0; i < 4; ++i) sh[i] = m[i];
+}
 
 uint32_t clampPoseEaseMs(uint32_t dur_ms) {
     // 0 ("snap") is preserved; otherwise cap at POSE_EASE_MS_MAX. uint32_t so a

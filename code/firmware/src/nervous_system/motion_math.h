@@ -12,12 +12,26 @@ typedef struct { double hip; double thigh; double knee; } ServoTriple;
  * NOT a clamp and NOT IK. legId is the firmware LegId (0=FR,1=FL,2=RR,3=RL). */
 ServoTriple translateToServo(uint8_t legId, double sh, double th, double kn);
 
+/* Math-space shoulder safety net — applied before translateToServo on every
+ * gait / clip / T:12 frame. Two layers (see config.h for the constants):
+ *   1. Per-side asymmetric hard clamp in URDF θ (signed displacement from rest):
+ *        LEFT  (FL, BL):  θ ∈ [-NARROW, +WIDE]
+ *        RIGHT (FR, BR):  θ ∈ [-WIDE,   +NARROW]
+ *   2. Back-leg inter-leg coupling — back stays ≥ INTER_LEG_BUFFER_DEG from
+ *      the front leg on the same side:
+ *        LEFT:  BL_θ ≥ FL_θ + INTER_LEG_BUFFER_DEG
+ *        RIGHT: BR_θ ≤ FR_θ - INTER_LEG_BUFFER_DEG
+ * Hard limits dominate the buffer at extremes (collapses to 0° gap when the
+ * front leg is at its hard wide bound). Mutates sh[] in place; indices are
+ * the firmware LegId (0=FR, 1=FL, 2=BR/RR, 3=BL/RL). Pure, host-tested. */
+void enforceShoulderLimits(double sh[4]);
+
 /* Per-leg, CALIB-aware servo clamp for the CLIP PLAYBACK path only (see
  * tickClip). The envelope is derived from the URDF joint limits and centered
  * on each joint's per-leg CALIB (post-calibration servo zero):
  *   hip   uniform 90 ± HIP_CLAMP_FROM_NINETY  (tight side of every URDF
  *         shoulder; safe on every leg regardless of asymmetry).
- *   thigh CALIB_THIGH_BY_LEG[legId] ± THIGH_CLAMP_FROM_CALIB  (URDF ±60°).
+ *   thigh CALIB_THIGH_BY_LEG[legId] ± THIGH_CLAMP_FROM_CALIB  (URDF ±75°).
  *   knee  CALIB_KNEE_BY_LEG[legId]  ± KNEE_CLAMP_FROM_CALIB   (URDF ±90°).
  * Per-leg + CALIB-relative so post-CALIB NEUTRALs (e.g. FL thigh = 27 = CALIB_FL_THIGH - 60)
  * sit on the window edge instead of being clipped by a uniform [30, 150].
