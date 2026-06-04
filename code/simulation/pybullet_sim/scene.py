@@ -162,6 +162,22 @@ def connect_and_setup(cfg, gui, float_mode=False, debug=False):
         flags=p.URDF_USE_INERTIA_FROM_FILE,
     )
     joint_map = build_joint_map(robot_id)
+
+    # Damping: PyBullet defaults to linearDamping=0.04 / angularDamping=0.04 on
+    # every link, which creates drag forces whenever joints move. Zero them.
+    damping_cfg = sim_cfg.get("damping", {})
+    linear_damp = float(damping_cfg.get("linear", 0.0))
+    angular_damp = float(damping_cfg.get("angular", 0.0))
+    num_joints = p.getNumJoints(robot_id)
+    for j in range(-1, num_joints):
+        p.changeDynamics(robot_id, j, linearDamping=linear_damp, angularDamping=angular_damp)
+
+    # Default joint motors: loadURDF enables built-in motor friction. Disable
+    # them before applying POSITION_CONTROL so the default force doesn't fight
+    # our target angles.
+    for j in range(num_joints):
+        p.setJointMotorControl2(robot_id, j, p.VELOCITY_CONTROL, targetVelocity=0, force=0)
+
     # stance_rad is already per-leg; reset + motor-command from the same dict.
     reset_to_stance(robot_id, joint_map, cfg.stance_rad)
     apply_leg_pose(
