@@ -19,8 +19,8 @@ from .scene import settle as _settle
 from .sim_monitor import finalize_log, setup_step_hook
 
 
-def run_stand(cfg, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False):
-    robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
+def run_stand(cfg, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False, debug=False):
+    robot_id, joint_map, debug_sliders = _connect_and_setup(cfg, gui, float_mode=float_mode, debug=debug)
     _print_banner(cfg)
     if float_mode:
         print("[float] no gravity/floor, body pinned — showing the stance pose")
@@ -55,6 +55,7 @@ def run_clip(
     float_mode=False,
     monitor=False,
     log=False,
+    debug=False,
 ):
     """Load and play an animation clip in PyBullet via the Python re-port
     (firmware_port.ClipPlayer). No C++ toolchain required.
@@ -75,7 +76,7 @@ def run_clip(
     clips = load_clips_all_h(DEFAULT_CLIPS_H)
     clip = get_clip_by_name(clips, clip_name)
 
-    robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
+    robot_id, joint_map, debug_sliders = _connect_and_setup(cfg, gui, float_mode=float_mode, debug=debug)
     _print_banner(cfg)
     if float_mode:
         print("[float] no gravity/floor, body pinned — showing joint geometry")
@@ -89,19 +90,30 @@ def run_clip(
         f"\n[clip] playing '{clip.name}' ({clip.duration_ms} ms){loop_note}{mon_note}"
     )
     on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
+
+    # Wrap on_step to apply debug sliders before each sim step.
+    _base_on_step = on_step
+    def _wrapped_on_step(step):
+        if debug_sliders is not None:
+            debug_sliders.apply()
+        if _base_on_step is not None:
+            _base_on_step(step)
+
     player = ClipPlayer(robot_id, joint_map, clip, cfg.servo_force, cfg.servo_velocity)
     try:
-        player.play_blocking(gui=gui, loop=loop, on_step=on_step)
+        player.play_blocking(gui=gui, loop=loop, on_step=_wrapped_on_step)
     except (KeyboardInterrupt, p.error):
         pass
     finally:
+        if debug_sliders is not None:
+            debug_sliders.finalize()
         if p.isConnected():
             p.disconnect()
         finalize_log(logger)
 
 
 def run_gait(
-    cfg, gait_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
+    cfg, gait_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False, debug=False
 ):
     """Run a gait via the Python IK gait (also the body-height reference).
     For the EXACT compiled firmware instead, dispatch to
@@ -130,7 +142,7 @@ def run_gait(
         )
         cfg.body_height = gait_depth_m
 
-    robot_id, joint_map = _connect_and_setup(cfg, gui, float_mode=float_mode)
+    robot_id, joint_map, debug_sliders = _connect_and_setup(cfg, gui, float_mode=float_mode, debug=debug)
     _print_banner(cfg)
     if float_mode:
         print("[float] no gravity/floor, body pinned")
@@ -152,6 +164,8 @@ def run_gait(
     step = 0
     try:
         while p.isConnected():
+            if debug_sliders is not None:
+                debug_sliders.apply()
             targets = gait_joint_targets(cfg, gait, t)
             apply_joint_targets(
                 robot_id, joint_map, targets, cfg.servo_force, cfg.servo_velocity
@@ -184,6 +198,8 @@ def run_gait(
     except (KeyboardInterrupt, p.error):
         pass
     finally:
+        if debug_sliders is not None:
+            debug_sliders.finalize()
         if p.isConnected():
             p.disconnect()
         finalize_log(logger)

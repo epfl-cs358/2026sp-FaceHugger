@@ -29,6 +29,8 @@ def main():
     parser.add_argument("--walk", action="store_true")
     parser.add_argument("--trot", action="store_true")
     parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--debug", action="store_true",
+        help="add PyBullet debug sliders for live physics tuning (GUI only)")
     parser.add_argument(
         "--settle",
         type=float,
@@ -100,7 +102,7 @@ def main():
         )
         if args.python_port:
             kwargs["loop"] = args.loop  # Python-port-only
-        clip_fn(cfg, args.clip, **kwargs)
+        clip_fn(cfg, args.clip, debug=args.debug, **kwargs)
     elif args.walk:
         gait_fn(
             cfg,
@@ -110,6 +112,7 @@ def main():
             float_mode=args.float_mode,
             monitor=args.monitor,
             log=args.log,
+            debug=args.debug,
         )
     elif args.trot:
         gait_fn(
@@ -120,6 +123,7 @@ def main():
             float_mode=args.float_mode,
             monitor=args.monitor,
             log=args.log,
+            debug=args.debug,
         )
     else:
         run_stand(
@@ -129,6 +133,7 @@ def main():
             float_mode=args.float_mode,
             monitor=args.monitor,
             log=args.log,
+            debug=args.debug,
         )
 
 
