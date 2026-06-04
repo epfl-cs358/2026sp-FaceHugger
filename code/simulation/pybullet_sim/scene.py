@@ -5,29 +5,119 @@ import os
 
 import pybullet as p
 import pybullet_data
+import yaml
 
-from .paths import TIMESTEP
+from .paths import SIM_CONFIG_YAML, TIMESTEP
 from .math_utils import _wrap_pi
 from .motor import apply_leg_pose, build_joint_map, reset_to_stance
 
 # --------------------------------------------------------------------------- #
-# Physics realism constants
+# Physics config (loaded from sim_config.yaml at connect time)
 # --------------------------------------------------------------------------- #
-FOOT_LATERAL_FRICTION = 2.5  # high grip — models the rubber/elastic bands on the
-# real feet (PyBullet multiplies foot × plane, so this is the grippy end)
-FOOT_SPINNING_FRICTION = 0.3  # rubber tips resist the foot pivoting in place
-# Soft contact for the feet — PyBullet's default infinitely-stiff resolution
-# makes the body bounce on every footfall and prevents a planted stance.
-# Tuned so each footfall absorbs over a few timesteps instead of one. Stiffness
-# scales the spring force per unit penetration; damping scales the velocity at
-# contact. Values below are conservative; raise stiffness if the feet visibly
-# sink, lower damping if the body still oscillates after impact.
-FOOT_CONTACT_STIFFNESS = 30000.0
-FOOT_CONTACT_DAMPING = 100.0
-SOLVER_ITERATIONS = 150  # stiffer, less-jittery contact resolution
+_g_sim_cfg = None  # cached copy; module-level singleton lazy-loaded
 
 
-def connect_and_setup(cfg, gui, float_mode=False):
+def _load_sim_config():
+    global _g_sim_cfg
+    if _g_sim_cfg is not None:
+        return _g_sim_cfg
+    with open(SIM_CONFIG_YAML) as f:
+        _g_sim_cfg = yaml.safe_load(f)
+    return _g_sim_cfg
+
+
+# --------------------------------------------------------------------------- #
+# Debug slider state
+# --------------------------------------------------------------------------- #
+
+
+class DebugSliders:
+    """PyBullet debug sliders for live physics tuning.
+
+    Created by connect_and_setup when debug=True and gui=True.  Call
+    .apply(robot_id, joint_map) each sim step to push current slider
+    values into the four foot links.  On exit, .finalize() prints the
+    final values as YAML for copy-paste back into sim_config.yaml.
+    """
+
+    def __init__(self, robot_id, joint_map, sim_cfg):
+        self._robot_id = robot_id
+        self._joint_map = joint_map
+
+        defaults = {
+            "lateralFriction": float(sim_cfg["friction"]["foot_lateral"]),
+            "spinningFriction": float(sim_cfg["friction"]["foot_spinning"]),
+            "massCorrection": float(sim_cfg["mass"]["mass_correction_factor"]),
+            "contactStiffness": float(sim_cfg["contact"]["stiffness"]),
+            "contactDamping": float(sim_cfg["contact"]["damping"]),
+        }
+        self._slider_ids = {
+            key: p.addUserDebugParameter(
+                key, low[key], high[key], defaults[key]
+            )
+            for key, low, high in [
+                ("lateralFriction", 0.0, 5.0),
+                ("spinningFriction", 0.0, 1.0),
+                ("massCorrection", 0.5, 2.0),
+                ("contactStiffness", 0.0, 100000.0),
+                ("contactDamping", 0.0, 500.0),
+            ]
+        }
+        self._foot_joint_indices = [idx for name, idx in joint_map.items() if "link3" in name]
+
+    def apply(self):
+        """Read current slider values and push to the four foot links."""
+        lat = p.readUserDebugParameter(self._slider_ids["lateralFriction"])
+        spin = p.readUserDebugParameter(self._slider_ids["spinningFriction"])
+        stiff = p.readUserDebugParameter(self._slider_ids["contactStiffness"])
+        damp = p.readUserDebugParameter(self._slider_ids["contactDamping"])
+        mc = p.readUserDebugParameter(self._slider_ids["massCorrection"])
+        for idx in self._foot_joint_indices:
+            p.changeDynamics(
+                self._robot_id,
+                idx,
+                lateralFriction=lat,
+                spinningFriction=spin,
+                restitution=0.0,
+                contactStiffness=stiff,
+                contactDamping=damp,
+            )
+
+    def finalize(self):
+        """Print final slider values in YAML format."""
+        vals = {
+            key: p.readUserDebugParameter(sid)
+            for key, sid in self._slider_ids.items()
+        }
+        lines = [
+            "",
+            "=== Debug slider final values (copy-paste into sim_config.yaml) ===",
+            "contact:",
+            f"  stiffness: {vals['contactStiffness']:.0f}",
+            f"  damping: {vals['contactDamping']:.0f}",
+            "  restitution: 0.0",
+            "friction:",
+            f"  foot_lateral: {vals['lateralFriction']:.3f}",
+            f"  foot_spinning: {vals['spinningFriction']:.3f}",
+            "mass:",
+            f"  mass_correction_factor: {vals['massCorrection']:.3f}",
+        ]
+        # Print them one at a time so they're flush-left (PyBullet indents
+        # stdout when printing alongside pybullet prints).
+        for line in lines:
+            print(line, flush=True)
+
+    @property
+    def sliders_active(self):
+        return True
+
+
+# --------------------------------------------------------------------------- #
+# Public API
+# --------------------------------------------------------------------------- #
+
+
+def connect_and_setup(cfg, gui, float_mode=False, debug=False):
     """Connect PyBullet and load the plane + robot.
 
     float_mode=True: no gravity, no floor, and the body is pinned in the air
@@ -35,7 +125,14 @@ def connect_and_setup(cfg, gui, float_mode=False):
     articulates exactly as authored, with no falling/slipping/collapse from
     physics. (Normal mode loads the ground plane, real gravity, and a free
     floating base so you see dynamic balance.)
+
+    Returns (robot_id, joint_map, debug_sliders_or_None).
     """
+    sim_cfg = _load_sim_config()
+    contact = sim_cfg["contact"]
+    friction = sim_cfg["friction"]
+    solver = sim_cfg["solver"]
+
     p.connect(p.GUI if gui else p.DIRECT)
     if gui:
         p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
@@ -46,9 +143,7 @@ def connect_and_setup(cfg, gui, float_mode=False):
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
     p.setGravity(0, 0, 0 if float_mode else -9.81)
     p.setTimeStep(TIMESTEP)
-    # More solver iterations -> stiffer, less-jittery contacts (helps planted-feet
-    # moves resolve cleanly). Harmless in float mode (no contacts).
-    p.setPhysicsEngineParameter(numSolverIterations=SOLVER_ITERATIONS)
+    p.setPhysicsEngineParameter(numSolverIterations=int(solver["iterations"]))
     if not float_mode:
         p.loadURDF("plane.urdf")
 
@@ -66,22 +161,38 @@ def connect_and_setup(cfg, gui, float_mode=False):
         robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity
     )
 
-    # Foot contact (link3 = the knee joint's child = lower leg/foot). NB: joint_map
-    # keys are URDF joint names (`*_link3_joint`) — they contain "link3", not
-    # "knee"; the old "knee" match never fired, so feet sat at PyBullet's default
-    # 0.5 friction and slipped during planted-feet moves. Grip + a little spin
-    # resistance so the feet hold; no bounce.
+    # Foot contact (link3 = the knee joint's child = lower leg/foot).
+    lat_fric = float(friction["foot_lateral"])
+    spin_fric = float(friction["foot_spinning"])
+    rest = float(contact["restitution"])
+    stiff = float(contact["stiffness"])
+    damp = float(contact["damping"])
     for name, idx in joint_map.items():
         if "link3" in name:
             p.changeDynamics(
                 robot_id,
                 idx,
-                lateralFriction=FOOT_LATERAL_FRICTION,
-                spinningFriction=FOOT_SPINNING_FRICTION,
-                restitution=0.0,
-                contactStiffness=FOOT_CONTACT_STIFFNESS,
-                contactDamping=FOOT_CONTACT_DAMPING,
+                lateralFriction=lat_fric,
+                spinningFriction=spin_fric,
+                restitution=rest,
+                contactStiffness=stiff,
+                contactDamping=damp,
             )
+
+    # ------------------------------------------------------------------- #
+    # Mass audit: print per-link mass from PyBullet dynamics info.
+    # ------------------------------------------------------------------- #
+    _print_mass_audit(robot_id, joint_map, sim_cfg)
+
+    # ------------------------------------------------------------------- #
+    # Debug sliders (GUI only)
+    # ------------------------------------------------------------------- #
+    debug_sliders = None
+    if debug:
+        if gui:
+            debug_sliders = DebugSliders(robot_id, joint_map, sim_cfg)
+        else:
+            print("[debug] --debug passed with headless mode; sliders skipped.")
 
     if gui:
         p.resetDebugVisualizerCamera(
@@ -90,7 +201,58 @@ def connect_and_setup(cfg, gui, float_mode=False):
             cameraPitch=-25,
             cameraTargetPosition=[0, 0, 0.1],
         )
-    return robot_id, joint_map
+    return robot_id, joint_map, debug_sliders
+
+
+def _print_mass_audit(robot_id, joint_map, sim_cfg):
+    """Iterate all links via getDynamicsInfo and print a mass audit table."""
+    mass = sim_cfg["mass"]
+    mc_factor = float(mass.get("mass_correction_factor", 1.0))
+    use_correction = abs(mc_factor - 1.0) > 1e-9
+
+    total = 0.0
+    total_corrected = 0.0
+    lines = ["", "=== PyBullet mass audit ==="]
+    header = "  {:<14s} {:>10s}".format("link", "mass (kg)")
+    if use_correction:
+        header += " {:>14s}".format("corrected (kg)")
+    lines.append(header)
+
+    # base_link is index -1 in getDynamicsInfo
+    for idx in [-1] + sorted(joint_map.values()):
+        if idx == -1:
+            info = p.getDynamicsInfo(robot_id, -1)
+            name = "base_link"
+        else:
+            info = p.getDynamicsInfo(robot_id, idx)
+            num_joints = p.getNumJoints(robot_id)
+            for jname, jidx in joint_map.items():
+                if jidx == idx:
+                    # Child link of this joint
+                    jinfo = p.getJointInfo(robot_id, idx)
+                    name = jinfo[12].decode() if jinfo[12] else f"link_{idx}"
+                    break
+            else:
+                name = f"link_{idx}"
+
+        m = info[0]
+        total += m
+        row = "  {:<14s} {:>10.3f}".format(name, m)
+        if use_correction:
+            mc = m * mc_factor
+            total_corrected += mc
+            row += " {:>14.3f}".format(mc)
+        lines.append(row)
+
+    row_total = "  {:<14s} {:>10.3f}".format("TOTAL", total)
+    if use_correction:
+        row_total += " {:>14.3f}".format(total_corrected)
+    lines.append(row_total)
+    if use_correction:
+        lines.append("  (mass_correction_factor = {:.3f})".format(mc_factor))
+    lines.append("===========================")
+    for line in lines:
+        print(line, flush=True)
 
 
 def settle(robot_id, joint_map, cfg, duration_s):

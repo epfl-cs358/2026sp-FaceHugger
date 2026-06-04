@@ -238,6 +238,8 @@ def cmd_sim(args):
     cli = [sys.executable, *SIMULATE]
     if args.clip:
         cli += ["--clip", args.clip]
+    if args.debug:
+        cli.append("--debug")
     if args.loop:
         cli.append("--loop")
     if args.float_mode:
@@ -598,6 +600,11 @@ def main():
         "--headless",
         action="store_true",
         help="no PyBullet GUI window (CI smoke check)",
+    )
+    ps.add_argument(
+        "--debug",
+        action="store_true",
+        help="add PyBullet debug sliders for live physics tuning (GUI only)",
     )
     ps.add_argument(
         "--settle",

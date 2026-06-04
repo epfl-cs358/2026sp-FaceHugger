@@ -55,7 +55,7 @@ class RobotSim:
         self.p = p
         self.gui = gui
         self.cfg = build_config()
-        self.robot_id, self.joint_map = connect_and_setup(self.cfg, gui)
+        self.robot_id, self.joint_map, _ = connect_and_setup(self.cfg, gui)
         self.fc = load_fh_sim().FirmwareControl()
         # IMU emulation hysteresis state — flips when body Z crosses ~150°/30°
         # from world up, matching the firmware's imu_hysteresis thresholds. Read

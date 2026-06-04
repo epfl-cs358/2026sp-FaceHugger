@@ -1,4 +1,4 @@
-usage: simulate.py [-h] [--walk] [--trot] [--headless] [--settle SETTLE] [--clip NAME] [--loop] [--float] [--monitor] [--log] [--python-port]
+usage: simulate.py [-h] [--walk] [--trot] [--headless] [--debug] [--settle SETTLE] [--clip NAME] [--loop] [--float] [--monitor] [--log] [--python-port]
 
 FaceHugger Quadruped Simulation
 
@@ -7,6 +7,7 @@ options:
   --walk
   --trot
   --headless
+  --debug          add PyBullet debug sliders for live physics tuning (GUI only)
   --settle SETTLE  Seconds to hold stance before the main loop begins (lets gravity resolve initial overlap). Default 0.5.
   --clip NAME      play a named animation clip from clips_all.h instead of a gait
   --loop           replay the clip continuously (GUI only) to watch cumulative behaviour over time; physics state carries across loops

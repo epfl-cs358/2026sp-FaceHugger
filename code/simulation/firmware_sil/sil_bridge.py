@@ -234,7 +234,7 @@ class FirmwareSILDriver:
 
 
 def run_clip_sil(
-    cfg, clip_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
+    cfg, clip_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False, debug=False
 ):
     """Play a clip through the compiled firmware (software-in-the-loop)."""
     import pybullet as p_
@@ -255,7 +255,7 @@ def run_clip_sil(
             f"clip {clip_name!r} not in firmware clips {driver.clip_names()}"
         )
 
-    robot_id, joint_map = connect_and_setup(cfg, gui, float_mode=float_mode)
+    robot_id, joint_map, debug_sliders = connect_and_setup(cfg, gui, float_mode=float_mode, debug=debug)
     print_banner(cfg)
     if float_mode:
         print("[float] no gravity/floor, body pinned — showing joint geometry")
@@ -266,6 +266,15 @@ def run_clip_sil(
     mon_note = "  [monitor: torque/current]" if monitor else ""
     print(f"\n[clip][SIL] playing '{clip_name}' via exact firmware code{mon_note}")
     on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
+
+    # Wrap on_step to apply debug sliders before each sim step.
+    _base_on_step = on_step
+    def _wrapped_on_step(step):
+        if debug_sliders is not None:
+            debug_sliders.apply()
+        if _base_on_step is not None:
+            _base_on_step(step)
+
     try:
         driver.play_clip_blocking(
             robot_id,
@@ -274,18 +283,20 @@ def run_clip_sil(
             cfg.servo_force,
             cfg.servo_velocity,
             gui=gui,
-            on_step=on_step,
+            on_step=_wrapped_on_step,
         )
     except (KeyboardInterrupt, p_.error):
         pass
     finally:
+        if debug_sliders is not None:
+            debug_sliders.finalize()
         if p_.isConnected():
             p_.disconnect()
         finalize_log(logger)
 
 
 def run_gait_sil(
-    cfg, gait_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False
+    cfg, gait_name, gui=True, settle_s=0.5, float_mode=False, monitor=False, log=False, debug=False
 ):
     """Run a gait through the compiled firmware (software-in-the-loop) — the EXACT
     tickGait/tickTrot. Spawns at the neutral-stance body height (like clips), which
@@ -304,7 +315,7 @@ def run_gait_sil(
             f"  python facehugger.py sim --{gait_name} --python-port"
         ) from e
 
-    robot_id, joint_map = connect_and_setup(cfg, gui, float_mode=float_mode)
+    robot_id, joint_map, debug_sliders = connect_and_setup(cfg, gui, float_mode=float_mode, debug=debug)
     print_banner(cfg)
     if float_mode:
         print("[float] no gravity/floor, body pinned")
@@ -315,6 +326,15 @@ def run_gait_sil(
     mon_note = "  [monitor: torque/current]" if monitor else ""
     print(f"\n[gait][SIL] running '{gait_name}' (FW) via exact firmware code{mon_note}")
     on_step, logger = setup_step_hook(robot_id, joint_map, monitor, log)
+
+    # Wrap on_step to apply debug sliders before each sim step.
+    _base_on_step = on_step
+    def _wrapped_on_step(step):
+        if debug_sliders is not None:
+            debug_sliders.apply()
+        if _base_on_step is not None:
+            _base_on_step(step)
+
     try:
         driver.run_gait_blocking(
             robot_id,
@@ -323,12 +343,14 @@ def run_gait_sil(
             cfg.servo_force,
             cfg.servo_velocity,
             gui=gui,
-            on_step=on_step,
+            on_step=_wrapped_on_step,
             duration_s=None if gui else 3.0,  # headless: finite smoke run
         )
     except (KeyboardInterrupt, p_.error):
         pass
     finally:
+        if debug_sliders is not None:
+            debug_sliders.finalize()
         if p_.isConnected():
             p_.disconnect()
         finalize_log(logger)

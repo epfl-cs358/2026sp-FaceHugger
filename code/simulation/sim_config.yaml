@@ -1,0 +1,21 @@
+# sim_config.yaml — PyBullet physics tuning constants
+# All values in SI units (kg, m, s, N, N·m, …) unless noted.
+
+contact:
+  stiffness: 30000
+  damping: 100
+  restitution: 0.0
+
+friction:
+  foot_lateral: 2.5
+  foot_spinning: 0.3
+
+solver:
+  iterations: 150
+  substeps: 4
+  timestep: 0.004167   # 1/240
+
+mass:
+  servo_mass_g: 60.0
+  use_urdf_inertia: true
+  mass_correction_factor: 1.0
