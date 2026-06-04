@@ -188,12 +188,6 @@ def connect_and_setup(cfg, gui, float_mode=False, debug=False):
             )
 
     # ------------------------------------------------------------------- #
-    # Sphere collision shapes at foot tips — simulates the elastic-band
-    # grip of the real robot with a stable sphere-on-plane contact point.
-    # ------------------------------------------------------------------- #
-    _add_foot_spheres(robot_id, joint_map, cfg, gui)
-
-    # ------------------------------------------------------------------- #
     # Mass audit: print per-link mass from PyBullet dynamics info.
     # ------------------------------------------------------------------- #
     _print_mass_audit(robot_id, joint_map, sim_cfg)
@@ -216,69 +210,6 @@ def connect_and_setup(cfg, gui, float_mode=False, debug=False):
             cameraTargetPosition=[0, 0, 0.1],
         )
     return robot_id, joint_map, debug_sliders
-
-
-def _add_foot_spheres(robot_id, joint_map, cfg, gui):
-    """Add sphere collision shapes at each foot tip to simulate the
-    elastic-band grip of the real robot. Each sphere is a separate zero-mass
-    multibody constrained to the foot link via a fixed joint.
-
-    The foot tip in link3-local frame is (-78.22, -20.51, 0.0) mm for L pair;
-    R pair is (-x, y, -z) via the mirror in kinematics.
-    """
-    import pybullet as p
-
-    sphere_radius = 0.015
-    col_id = p.createCollisionShape(p.GEOM_SPHERE, radius=sphere_radius)
-    viz_id = -1
-    if gui:
-        viz_id = p.createVisualShape(
-            p.GEOM_SPHERE, radius=sphere_radius,
-            rgbaColor=[0.2, 0.6, 0.2, 0.8],
-        )
-
-    for leg_id, geom in cfg.legs.items():
-        # foot_L3 in link3 frame (as used by FK)
-        ft_x, ft_y, ft_z = geom.foot_L3
-
-        # Get the joint index for this leg's link3 (the parent of the foot link)
-        jname = f"{leg_id}_link3_joint"
-        if jname not in joint_map:
-            continue
-        link_idx = joint_map[jname]
-
-        # Create a zero-mass body at the world position of the foot tip
-        # by spawning at origin and using a fixed constraint to the foot link.
-        sphere_body = p.createMultiBody(
-            baseMass=0.0,
-            baseCollisionShapeIndex=col_id,
-            baseVisualShapeIndex=viz_id,
-            basePosition=[0, 0, 0],
-        )
-        # Attach to the foot link at the local offset
-        p.createConstraint(
-            parentBodyUniqueId=robot_id,
-            parentLinkIndex=link_idx,
-            childBodyUniqueId=sphere_body,
-            childLinkIndex=-1,  # base of child
-            jointType=p.JOINT_FIXED,
-            jointAxis=[0, 0, 0],
-            parentFramePosition=[ft_x, ft_y, ft_z],
-            childFramePosition=[0, 0, 0],
-        )
-        # Give the sphere high friction
-        p.changeDynamics(
-            sphere_body,
-            -1,
-            lateralFriction=3.0,
-            spinningFriction=0.5,
-            restitution=0.0,
-        )
-        # Disable the link3 mesh collision so only the sphere touches ground.
-        # (PyBullet doesn't allow changing collision geometry post-load,
-        # but zeroing the collision group mask eliminates mesh-on-plane
-        # contact that would compete with the sphere.)
-        p.setCollisionFilterGroupMask(robot_id, link_idx, 0, 0)
 
 
 def _print_mass_audit(robot_id, joint_map, sim_cfg):
