@@ -15,7 +15,7 @@ friction:
   foot_spinning: 0.3
 
 solver:
-  iterations: 150
+  iterations: 300
   substeps: 4
   timestep: 0.004167   # 1/240
 
