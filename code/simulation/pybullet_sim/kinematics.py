@@ -76,6 +76,8 @@ class RobotConfig:
     ]
     neutral_foot: Dict[str, Tuple[float, float, float]] = field(default_factory=dict)
     body_height: float = 0.12  # spawn height; recomputed from neutral foot
+    kp: float = 0.5  # position gain for joint motor control
+    kd: float = 2.0  # velocity gain for joint motor control
 
 
 # --------------------------------------------------------------------------- #
@@ -303,6 +305,14 @@ def build_config():
         for leg in yaml_cfg["legs"]
     }
 
+    from .paths import SIM_CONFIG_YAML
+
+    with open(SIM_CONFIG_YAML) as f:
+        sim_cfg = yaml.safe_load(f)
+    motor_cfg = sim_cfg.get("motor", {})
+    kp = float(motor_cfg.get("position_gain", 0.5))
+    kd = float(motor_cfg.get("velocity_gain", 2.0))
+
     cfg = RobotConfig(
         urdf_path=URDF_PATH,
         legs={},
@@ -311,6 +321,8 @@ def build_config():
         stance_rad=stance_per_leg,
         leg_ik=ik_v2,
         leg_fk=fk_v2,
+        kp=kp,
+        kd=kd,
     )
 
     for leg in yaml_cfg["legs"]:

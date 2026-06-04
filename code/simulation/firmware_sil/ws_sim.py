@@ -81,6 +81,8 @@ class RobotSim:
                     targetPosition=rad,
                     force=self.cfg.servo_force,
                     maxVelocity=self.cfg.servo_velocity,
+                    positionGain=self.cfg.kp,
+                    velocityGain=self.cfg.kd,
                 )
         self.p.stepSimulation()
 

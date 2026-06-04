@@ -50,6 +50,8 @@ class DebugSliders:
             "massCorrection": float(sim_cfg["mass"]["mass_correction_factor"]),
             "contactStiffness": float(sim_cfg["contact"]["stiffness"]),
             "contactDamping": float(sim_cfg["contact"]["damping"]),
+            "positionGain": float(sim_cfg.get("motor", {}).get("position_gain", 0.5)),
+            "velocityGain": float(sim_cfg.get("motor", {}).get("velocity_gain", 2.0)),
         }
         self._slider_ids = {
             key: p.addUserDebugParameter(
@@ -61,6 +63,8 @@ class DebugSliders:
                 ("massCorrection", 0.5, 2.0),
                 ("contactStiffness", 0.0, 100000.0),
                 ("contactDamping", 0.0, 500.0),
+                ("positionGain", 0.0, 2.0),
+                ("velocityGain", 0.0, 5.0),
             ]
         }
         self._foot_joint_indices = [idx for name, idx in joint_map.items() if "link3" in name]
@@ -96,6 +100,9 @@ class DebugSliders:
             f"  stiffness: {vals['contactStiffness']:.0f}",
             f"  damping: {vals['contactDamping']:.0f}",
             "  restitution: 0.0",
+            "motor:",
+            f"  position_gain: {vals['positionGain']:.3f}",
+            f"  velocity_gain: {vals['velocityGain']:.3f}",
             "friction:",
             f"  foot_lateral: {vals['lateralFriction']:.3f}",
             f"  foot_spinning: {vals['spinningFriction']:.3f}",
@@ -158,7 +165,8 @@ def connect_and_setup(cfg, gui, float_mode=False, debug=False):
     # stance_rad is already per-leg; reset + motor-command from the same dict.
     reset_to_stance(robot_id, joint_map, cfg.stance_rad)
     apply_leg_pose(
-        robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity
+        robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity,
+        kp=cfg.kp, kd=cfg.kd,
     )
 
     # Foot contact (link3 = the knee joint's child = lower leg/foot).
@@ -178,6 +186,12 @@ def connect_and_setup(cfg, gui, float_mode=False, debug=False):
                 contactStiffness=stiff,
                 contactDamping=damp,
             )
+
+    # ------------------------------------------------------------------- #
+    # Sphere collision shapes at foot tips — simulates the elastic-band
+    # grip of the real robot with a stable sphere-on-plane contact point.
+    # ------------------------------------------------------------------- #
+    _add_foot_spheres(robot_id, joint_map, cfg, gui)
 
     # ------------------------------------------------------------------- #
     # Mass audit: print per-link mass from PyBullet dynamics info.
@@ -202,6 +216,64 @@ def connect_and_setup(cfg, gui, float_mode=False, debug=False):
             cameraTargetPosition=[0, 0, 0.1],
         )
     return robot_id, joint_map, debug_sliders
+
+
+def _add_foot_spheres(robot_id, joint_map, cfg, gui):
+    """Add sphere collision shapes at each foot tip to simulate the
+    elastic-band grip of the real robot. Each sphere is a separate zero-mass
+    multibody constrained to the foot link via a fixed joint.
+
+    The foot tip in link3-local frame is (-78.22, -20.51, 0.0) mm for L pair;
+    R pair is (-x, y, -z) via the mirror in kinematics.
+    """
+    import pybullet as p
+
+    sphere_radius = 0.015
+    col_id = p.createCollisionShape(p.GEOM_SPHERE, radius=sphere_radius)
+    viz_id = -1
+    if gui:
+        viz_id = p.createVisualShape(
+            p.GEOM_SPHERE, radius=sphere_radius,
+            rgbaColor=[0.2, 0.6, 0.2, 0.8],
+        )
+
+    for leg_id, geom in cfg.legs.items():
+        # foot_L3 in link3 frame (as used by FK)
+        ft_x, ft_y, ft_z = geom.foot_L3
+
+        # Get the joint index for this leg's link3 (the parent of the foot link)
+        jname = f"{leg_id}_link3_joint"
+        if jname not in joint_map:
+            continue
+        link_idx = joint_map[jname]
+
+        # Create a zero-mass body at the world position of the foot tip
+        # by spawning at origin and using a fixed constraint to the foot link.
+        sphere_body = p.createMultiBody(
+            baseMass=0.0,
+            baseCollisionShapeIndex=col_id,
+            baseVisualShapeIndex=viz_id,
+            basePosition=[0, 0, 0],
+        )
+        # Attach to the foot link at the local offset
+        p.createConstraint(
+            parentBodyUniqueId=robot_id,
+            parentLinkIndex=link_idx,
+            childBodyUniqueId=sphere_body,
+            childLinkIndex=-1,  # base of child
+            jointType=p.JOINT_FIXED,
+            jointAxis=[0, 0, 0],
+            parentFramePosition=[ft_x, ft_y, ft_z],
+            childFramePosition=[0, 0, 0],
+        )
+        # Give the sphere high friction
+        p.changeDynamics(
+            sphere_body,
+            -1,
+            lateralFriction=3.0,
+            spinningFriction=0.5,
+            restitution=0.0,
+        )
 
 
 def _print_mass_audit(robot_id, joint_map, sim_cfg):
@@ -262,7 +334,8 @@ def settle(robot_id, joint_map, cfg, duration_s):
     n_steps = int(duration_s / TIMESTEP)
     for _ in range(n_steps):
         apply_leg_pose(
-            robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity
+            robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity,
+            kp=cfg.kp, kd=cfg.kd,
         )
         p.stepSimulation()
 

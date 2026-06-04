@@ -6,6 +6,10 @@ contact:
   damping: 100
   restitution: 0.0
 
+motor:
+  position_gain: 0.5
+  velocity_gain: 2.0
+
 friction:
   foot_lateral: 2.5
   foot_spinning: 0.3

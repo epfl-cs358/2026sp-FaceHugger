@@ -100,7 +100,8 @@ def run_gait(
                 debug_sliders.apply()
             targets = gait_joint_targets(cfg, gait, t)
             apply_joint_targets(
-                robot_id, joint_map, targets, cfg.servo_force, cfg.servo_velocity
+                robot_id, joint_map, targets, cfg.servo_force, cfg.servo_velocity,
+                kp=cfg.kp, kd=cfg.kd,
             )
             if draw_overlay and step % draw_every == 0:
                 offsets = gait["offsets"]

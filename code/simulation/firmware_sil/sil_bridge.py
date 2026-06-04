@@ -110,6 +110,8 @@ class FirmwareSILDriver:
         clip_name,
         force,
         velocity,
+        kp=None,
+        kd=None,
         gui=True,
         on_step=None,
         timestep=1.0 / 240.0,
@@ -143,14 +145,19 @@ class FirmwareSILDriver:
             ).items():
                 idx = joint_map.get(name)
                 if idx is not None:
-                    p.setJointMotorControl2(
-                        robot_id,
-                        idx,
-                        p.POSITION_CONTROL,
+                    kwargs = dict(
+                        bodyUniqueId=robot_id,
+                        jointIndex=idx,
+                        controlMode=p.POSITION_CONTROL,
                         targetPosition=rad,
                         force=force,
                         maxVelocity=velocity,
                     )
+                    if kp is not None:
+                        kwargs["positionGain"] = kp
+                    if kd is not None:
+                        kwargs["velocityGain"] = kd
+                    p.setJointMotorControl2(**kwargs)
             p.stepSimulation()
             if step % 12 == 0:  # 240 Hz / 12 = 20 Hz visual update
                 apply_torque_colors(p, robot_id, joint_map)
@@ -169,6 +176,8 @@ class FirmwareSILDriver:
         gait_name,
         force,
         velocity,
+        kp=None,
+        kd=None,
         direction="FW",
         gui=True,
         on_step=None,
@@ -207,14 +216,19 @@ class FirmwareSILDriver:
             ).items():
                 idx = joint_map.get(name)
                 if idx is not None:
-                    p.setJointMotorControl2(
-                        robot_id,
-                        idx,
-                        p.POSITION_CONTROL,
+                    kwargs = dict(
+                        bodyUniqueId=robot_id,
+                        jointIndex=idx,
+                        controlMode=p.POSITION_CONTROL,
                         targetPosition=rad,
                         force=force,
                         maxVelocity=velocity,
                     )
+                    if kp is not None:
+                        kwargs["positionGain"] = kp
+                    if kd is not None:
+                        kwargs["velocityGain"] = kd
+                    p.setJointMotorControl2(**kwargs)
             p.stepSimulation()
             if step % 12 == 0:
                 apply_torque_colors(p, robot_id, joint_map)
@@ -282,6 +296,8 @@ def run_clip_sil(
             clip_name,
             cfg.servo_force,
             cfg.servo_velocity,
+            kp=cfg.kp,
+            kd=cfg.kd,
             gui=gui,
             on_step=_wrapped_on_step,
         )
@@ -342,6 +358,8 @@ def run_gait_sil(
             gait_name,
             cfg.servo_force,
             cfg.servo_velocity,
+            kp=cfg.kp,
+            kd=cfg.kd,
             gui=gui,
             on_step=_wrapped_on_step,
             duration_s=None if gui else 3.0,  # headless: finite smoke run
