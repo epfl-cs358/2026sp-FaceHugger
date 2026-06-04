@@ -23,7 +23,7 @@ import json
 import os
 import sys
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 SCRIPT = os.path.join(
     REPO_ROOT, "animation/addons/fh_clip_panel.py"
 )  # moved scripts/->addons/ (2f627a1)
