@@ -13,13 +13,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from firmware_port.clip_loader import (
+from animation_tools.clip_loader import (
     DEFAULT_CLIPS_H,
     get_clip_by_name,
 )
 
 # `all_clips`, `manifest`, and `sample_clip` are provided by conftest.py so
-# test_clip_player.py can share them too.
+# Shared conftest fixture for clip-related tests.
 
 
 def test_clips_all_h_exists():
@@ -74,20 +74,19 @@ def test_frames_in_ascending_order(all_clips):
 
 
 def test_first_frame_lie_down_fr_shoulder(all_clips):
-    """Spot-check FR shoulder first frame of 'lie down and stand up' — the
-    regression value (~44.29 = FR neutral 45 minus the rest-yaw residual
-    under the uniform-math-space yaw convention after the shoulder-axis +Z
-    fix). The sign of the residual flipped relative to the pre-fix value
-    (~45.71) because dc97133 removed the downstream sign flip on link1.
-    If that clip has been retired from the catalog, this regression-guard
-    skips rather than failing, since the value is meaningless without that
-    specific clip. Background on the link1 delta-to-absolute fix lives in
-    `animation/addons/fh_clip_panel.py:_link1_delta_to_absolute`."""
+    """Spot-check FR shoulder first frame of 'lie down and stand up'.
+
+    Regression value ~45.71 = FR neutral 45 plus a small yaw residual.
+    With _LINK1_DELTA_SIGN all +1 (2026-06-04), the raw bone delta passes
+    through unflipped, so the pre-scaled math-space value sits just above
+    the neutral 45. If that clip has been retired from the catalog, this
+    regression-guard skips rather than failing, since the value is
+    meaningless without that specific clip."""
     try:
         clip = get_clip_by_name(all_clips, "lie down and stand up")
     except KeyError:
         pytest.skip("'lie down and stand up' is no longer in the clip catalog")
-    assert abs(clip.frames[0].a[0] - 44.2948) < 0.01
+    assert abs(clip.frames[0].a[0] - 45.7052) < 0.01
 
 
 def test_get_clip_by_name_case_insensitive(all_clips, sample_clip):

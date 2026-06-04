@@ -5,7 +5,7 @@ firmware_sil/CMakeLists.txt) and converts the 12 servo angles it computes into
 URDF joint targets — so the sim moves on the firmware's own output, with no
 Python re-port in the loop.
 
-The servo-deg -> URDF-radian mapping reuses firmware_port.servo_convention (the
+The servo-deg -> URDF-radian mapping reuses animation_tools.servo_convention (the
 same servo_to_radians + per-leg URDF axis sign the clip re-port uses); only the
 servo *degrees* differ in origin — here they come straight from the firmware.
 
@@ -18,7 +18,7 @@ import re
 import sys
 import time
 
-from firmware_port.servo_convention import (  # noqa: E402
+from animation_tools.servo_convention import (  # noqa: E402
     LEG_FL,
     LEG_FR,
     LEG_ID_TO_SIM_NAME,
@@ -49,7 +49,7 @@ _OOR_RE = re.compile(r"\[OOR\] servo (\d+) requested ([-\d.]+)")
 def servo_angles_to_joint_targets(angles12):
     """12 firmware servo degrees -> {urdf_joint_name: radians}.
 
-    Mirrors firmware_port.clip_player.frame_to_joint_targets, but the servo
+    Mirrors animation_tools.clip_player.frame_to_joint_targets, but the servo
     degrees come straight from the firmware (already post-translateToServo), so
     this is only the servo-deg -> radian + URDF-axis-sign half.
     """
@@ -246,9 +246,9 @@ def run_clip_sil(
         driver = FirmwareSILDriver()  # auto-builds fh_sim if stale/missing
     except ImportError as e:
         raise SystemExit(
-            f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
-            "play clips with the Python re-port instead:\n"
-            f"  python facehugger.py sim --clip {clip_name!r} --python-port"
+            f"{e}\n\nThe firmware driver is the default and requires a C++ toolchain.\n"
+            "Build the SIL:\n"
+            "  cd code/simulation/firmware_sil && cmake -S . -B build && cmake --build build"
         ) from e
     if clip_name not in driver.clip_names():
         raise KeyError(
@@ -310,9 +310,9 @@ def run_gait_sil(
         driver = FirmwareSILDriver()  # auto-builds fh_sim if stale/missing
     except ImportError as e:
         raise SystemExit(
-            f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
-            "run the gait with the Python re-port instead:\n"
-            f"  python facehugger.py sim --{gait_name} --python-port"
+            f"{e}\n\nThe firmware driver is the default and requires a C++ toolchain.\n"
+            "Build the SIL:\n"
+            "  cd code/simulation/firmware_sil && cmake -S . -B build && cmake --build build"
         ) from e
 
     robot_id, joint_map, debug_sliders = connect_and_setup(cfg, gui, float_mode=float_mode, debug=debug)

@@ -1,6 +1,6 @@
 """Shared fixtures for code/simulation/tests/.
 
-All sim tests live here now (firmware_port, pybullet_sim, urdf_gen, SIL).
+All sim tests live here now (animation_tools, pybullet_sim, urdf_gen, SIL).
 Sub-package tests folded in during Phase 6 of the sim-reorg.
 
 Fixtures:
@@ -27,12 +27,12 @@ from pathlib import Path
 import pytest
 
 # Put code/simulation/ on sys.path so the test files can import
-# firmware_port, pybullet_sim, firmware_sil, urdf_gen without per-file
+# animation_tools, pybullet_sim, firmware_sil, urdf_gen without per-file
 # sys.path tinkering. (Tests retain their own inserts as defensive
 # fallback for direct-script invocation.)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from firmware_port.clip_loader import DEFAULT_CLIPS_H, load_clips_all_h
+from animation_tools.clip_loader import DEFAULT_CLIPS_H, load_clips_all_h
 
 
 # ── Clip catalog ────────────────────────────────────────────────────────────

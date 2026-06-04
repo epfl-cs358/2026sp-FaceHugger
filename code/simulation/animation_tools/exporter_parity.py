@@ -1,4 +1,4 @@
-# code/simulation/firmware_port/exporter_parity.py
+# code/simulation/animation_tools/exporter_parity.py
 """Firmware-parity helpers for the Blender exporter.
 
 Hosts the helpers that USED to live in animation/lib/servo_math.py

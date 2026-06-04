@@ -21,7 +21,7 @@ Each tick the bridge advances the firmware's clock, runs one `update()`, reads b
 
 | | Default (firmware SIL) | `--python` |
 |--|--|--|
-| Source of motion | the exact compiled firmware (`fh_sim`) | a Python re-port of the firmware (`firmware_port/`) |
+| Source of motion | the exact compiled firmware (`fh_sim`) | a Python re-port of the firmware (`animation_tools/`) |
 | Needs | CMake + C++17 + pybind11 (auto-builds) | nothing beyond PyBullet |
 | Use when | you want true parity with the robot | you have no C++ toolchain, or want the reference re-port |
 
@@ -95,4 +95,4 @@ The continuous reference is ≈ ⅓ of stall (a rule of thumb for hobby metal-ge
 | Firmware SIL bridge (clips, gaits, telemetry) | `firmware_sil/sil_bridge.py` |
 | Compiled-firmware module + build | `firmware_sil/` (`bindings.cpp`, `CMakeLists.txt`, `hal/`) |
 | WebSocket robot API | `firmware_sil/ws_sim.py` |
-| Python re-port (`--python`) | `firmware_port/` |
+| Python re-port (`--python`) | `animation_tools/` |

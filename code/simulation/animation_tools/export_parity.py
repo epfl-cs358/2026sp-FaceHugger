@@ -25,10 +25,10 @@ import re
 import sys
 from pathlib import Path
 
-# firmware_port/ → code/simulation/ (so pybullet_sim is importable when run by path)
+# animation_tools/ → code/simulation/ (so pybullet_sim is importable when run by path)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from firmware_port.clip_loader import (  # noqa: E402
+from animation_tools.clip_loader import (  # noqa: E402
     DEFAULT_CLIPS_H,
     load_clips_all_h,
 )

@@ -12,7 +12,7 @@ _LEGS = ("fr", "fl", "br", "bl")
 # URDF link1 joint axis sign per leg: the rig's link1 driver writes the
 # bone-local Z rotation = true CCW yaw delta * axis_sign. Export must cancel
 # this sign so math-space comes out uniform across all four legs.
-_LINK1_DELTA_SIGN = {"fr": -1, "fl": +1, "br": +1, "bl": -1}
+_LINK1_DELTA_SIGN = {"fr": +1, "fl": +1, "br": +1, "bl": +1}
 
 
 def _link1_delta_to_absolute(angles, convention):
@@ -35,11 +35,11 @@ def _link1_delta_to_absolute(angles, convention):
 
 
 # NOTE: _CALIB_THIGH, _CALIB_KNEE, and _frame_to_servo USED to live here. They
-# were moved to code/simulation/firmware_port/exporter_parity.py so this module
+# were moved to code/simulation/animation_tools/exporter_parity.py so this module
 # stays math-space-only and the exporter no longer depends on hardware CALIB
 # (the firmware applies translateToServo + CALIB on T:12 receipt). Importers
 # that need the servo-space helpers (parity tests, Blender panel preview) pull
-# them from firmware_port.exporter_parity now.
+# them from animation_tools.exporter_parity now.
 
 
 def _scale_from_neutral(row, convention):

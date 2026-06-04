@@ -8,7 +8,7 @@ in code/firmware/src/shared/calib.h. CALIB lives on the firmware side; this
 test guards against drift across the two surfaces.
 
 Test moved here from animation/lib/tests/ when _CALIB_* was relocated to
-code/simulation/firmware_port/exporter_parity.py (Phase 3 of the CALIB-
+code/simulation/animation_tools/exporter_parity.py (Phase 3 of the CALIB-
 decoupling plan); the import path is the only thing that changed.
 """
 
@@ -19,7 +19,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT / "code" / "simulation"))
 
-from firmware_port.exporter_parity import _CALIB_KNEE, _CALIB_THIGH  # noqa: E402
+from animation_tools.exporter_parity import _CALIB_KNEE, _CALIB_THIGH  # noqa: E402
 
 _CALIB_H = _REPO_ROOT / "code" / "firmware" / "src" / "shared" / "calib.h"
 

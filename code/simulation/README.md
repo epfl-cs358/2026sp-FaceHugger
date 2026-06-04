@@ -20,7 +20,7 @@ exported_meshes/*.stl (8 files: chassis + per-side L/R brackets + per-side L/R s
 ```
 
 The code is split into packages: **`pybullet_sim/`** (the runtime — `simulate`,
-`gaits`, `kinematics`, `helpers`, `constants`, `sim_monitor`), **`firmware_port/`**
+`gaits`, `kinematics`, `helpers`, `constants`, `sim_monitor`), **`animation_tools/`**
 (the firmware-faithful clip re-port — `servo_convention`, `clip_loader`,
 `clip_player`; the Python fallback / parity reference), and **`urdf_gen/`**
 (`generate_urdf`, `verify_export_parity`). `facehugger.py` + `facehugger_config.yaml`
@@ -147,7 +147,7 @@ code/simulation/
   pybullet_sim/                 runtime package
     simulate.py                 PyBullet simulator front-end (constants/helpers/kinematics)
     kinematics.py helpers.py constants.py sim_monitor.py
-  firmware_port/                firmware-faithful clip re-port (Python fallback / parity ref)
+  animation_tools/                firmware-faithful clip re-port (Python fallback / parity ref)
     servo_convention.py clip_loader.py clip_player.py gait_interpreter.py (+ tests/)
   urdf_gen/                     build package
     generate_urdf.py            URDF generator

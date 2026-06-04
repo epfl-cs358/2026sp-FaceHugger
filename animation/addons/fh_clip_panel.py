@@ -75,7 +75,7 @@ from servo_math import (  # noqa: E402
     _link1_delta_to_absolute,
     _scale_from_neutral,
 )
-from firmware_port.exporter_parity import _frame_to_servo  # noqa: E402
+from animation_tools.exporter_parity import _frame_to_servo  # noqa: E402
 
 CATEGORY = "FaceHugger"
 CLIP_TARGETS = [
@@ -2107,7 +2107,7 @@ def bake_clip(clip_name, context):
 # _LEGS, _scale_from_neutral, _link1_delta_to_absolute come from
 # animation/lib/servo_math.py (math-space only). _frame_to_servo (the
 # servo-space twin used by the panel's "current angles" preview and
-# the firmware-parity test) comes from firmware_port.exporter_parity —
+# the firmware-parity test) comes from animation_tools.exporter_parity —
 # see top of file. CALIB lives on the firmware side; the exporter does
 # not reference it on any on-wire path.
 

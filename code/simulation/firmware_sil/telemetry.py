@@ -6,7 +6,7 @@ and that same command in URDF-joint degrees, so the delta vs the measured joint
 angle is a true tracking error rather than a constant ~90 offset between spaces.
 """
 
-from firmware_port.servo_convention import LEG_ID_TO_SIM_NAME
+from animation_tools.servo_convention import LEG_ID_TO_SIM_NAME
 
 _BAND_RGBA = {
     "green": (0.2, 0.8, 0.2, 1.0),  # safe continuous hold

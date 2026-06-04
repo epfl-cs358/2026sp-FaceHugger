@@ -30,7 +30,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from firmware_port.servo_convention import (
+from animation_tools.servo_convention import (
     CALIB_KNEE,
     CALIB_THIGH,
     LEG_FL,
