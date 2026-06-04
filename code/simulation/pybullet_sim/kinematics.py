@@ -34,7 +34,7 @@ from typing import Callable, Dict, Tuple
 
 import yaml
 
-from .paths import CONFIG_YAML, FUSION_JSON, MESH_DIR, STANCE_DEG, URDF_PATH
+from .paths import CONFIG_YAML, FUSION_JSON, MESH_DIR, URDF_PATH
 from .math_utils import _clamp, _wrap_pi
 from .urdf_io import (
     _foot_tip_from_fusion,
@@ -233,16 +233,31 @@ def ik_v2(cfg, foot_body, leg_id):
 # --------------------------------------------------------------------------- #
 
 
+# Per-leg hip/knee stance angles (URDF-space, degrees) matching firmware NEUTRAL
+# from neutral_pose.h. Derived by running NEUTRAL math-space values through
+# translateToServo (with SIL CALIB=90) then servo_angles_to_joint_targets.
+# These MUST stay in sync with neutral_pose.h — a mismatch causes the sim to
+# spawn in the wrong pose, then the firmware snaps to NEUTRAL on first tick,
+# creating violent impact forces that make the robot slide.
+_NEUTRAL_HIP_KNEE: dict[str, dict[str, float]] = {
+    "fr": {"hip": -60.0, "knee": -37.0},
+    "fl": {"hip": -60.0, "knee": -40.0},
+    "br": {"hip": -50.0, "knee": -50.0},
+    "bl": {"hip": -60.0, "knee": -35.0},
+}
+
+
 def _stance_for(leg_id, legs_cfg):
     """Resolve the per-leg standing stance {shoulder/hip/knee} dict.
     Shoulder comes from the yaml's `shoulder_neutral_deg`; hip/knee are
-    shared across all legs via STANCE_DEG."""
+    per-leg URDF-space values matching firmware NEUTRAL from neutral_pose.h
+    (through translateToServo with SIL CALIB=90 → servo_angles_to_joint_targets)."""
     entry = next(lg for lg in legs_cfg if lg["id"] == leg_id)
     shoulder_deg = entry.get("shoulder_neutral_deg", 0.0)
     return {
         "shoulder": shoulder_deg,
-        "hip": STANCE_DEG["hip"],
-        "knee": STANCE_DEG["knee"],
+        "hip": _NEUTRAL_HIP_KNEE[leg_id]["hip"],
+        "knee": _NEUTRAL_HIP_KNEE[leg_id]["knee"],
     }
 
 
@@ -295,8 +310,8 @@ def build_config():
     servo_force = float(servo.get("effort_nm", 2.94))
     servo_velocity = float(servo.get("velocity_rad_s", 5.0))
 
-    # Per-leg stance: hip/knee shared via STANCE_DEG; shoulder from yaml's
-    # shoulder_neutral_deg.
+    # Per-leg stance: hip/knee match firmware NEUTRAL from neutral_pose.h;
+    # shoulder from yaml's shoulder_neutral_deg.
     stance_per_leg = {
         leg["id"]: {
             k: math.radians(v)
