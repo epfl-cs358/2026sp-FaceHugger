@@ -10,8 +10,8 @@ the test survives any CALIB / convention tweak without a fixture refresh.
 import sys
 from pathlib import Path
 
-SCRIPTS_DIR = Path(__file__).parent
-ADDONS_DIR = SCRIPTS_DIR.parent / "addons"
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+ADDONS_DIR = Path(__file__).resolve().parents[2] / "addons"
 sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(ADDONS_DIR))
 
@@ -248,7 +248,7 @@ def test_body_rotation_uniform_mathspace_yaw():
     import sys
     from pathlib import Path as _Path
 
-    _lib = str(_Path(__file__).resolve().parents[1] / "lib")
+    _lib = str(_Path(__file__).resolve().parents[2] / "lib")
     if _lib not in sys.path:
         sys.path.insert(0, _lib)
     from servo_math import (
@@ -256,7 +256,7 @@ def test_body_rotation_uniform_mathspace_yaw():
         _scale_from_neutral,
     )
 
-    _fw = str(_Path(__file__).resolve().parents[2] / "code" / "simulation")
+    _fw = str(_Path(__file__).resolve().parents[3] / "code" / "simulation")
     if _fw not in sys.path:
         sys.path.insert(0, _fw)
     from firmware_port.exporter_parity import _frame_to_servo

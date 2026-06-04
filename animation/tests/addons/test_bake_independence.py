@@ -23,7 +23,7 @@ import pytest
 pytest.importorskip("bpy")  # runs only under `blender --background --python`
 import bpy  # noqa: E402
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 SCRIPT = os.path.join(REPO_ROOT, "animation/addons/fh_clip_panel.py")
 
 
