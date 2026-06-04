@@ -1,4 +1,4 @@
-usage: ws_sim.py [-h] [--host HOST] [--port PORT] [--gui] [--sse-port SSE_PORT] [--panel]
+usage: ws_sim.py [-h] [--host HOST] [--port PORT] [--gui] [--debug] [--sse-port SSE_PORT] [--panel]
 
 WebSocket robot-API server backed by the EXACT firmware (SIL).
 
@@ -7,5 +7,6 @@ options:
   --host HOST
   --port PORT          default 8081 (81 is privileged)
   --gui                show the PyBullet window
+  --debug              print contact force diagnostics every 60 frames (1/4 s) + startup check
   --sse-port SSE_PORT  telemetry SSE port (default 8082)
   --panel              also host the browser control panel over HTTP (at the SSE port /panel)
