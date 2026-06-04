@@ -274,6 +274,11 @@ def _add_foot_spheres(robot_id, joint_map, cfg, gui):
             spinningFriction=0.5,
             restitution=0.0,
         )
+        # Disable the link3 mesh collision so only the sphere touches ground.
+        # (PyBullet doesn't allow changing collision geometry post-load,
+        # but zeroing the collision group mask eliminates mesh-on-plane
+        # contact that would compete with the sphere.)
+        p.setCollisionFilterGroupMask(robot_id, link_idx, 0, 0)
 
 
 def _print_mass_audit(robot_id, joint_map, sim_cfg):
