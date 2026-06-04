@@ -125,6 +125,8 @@ legs:
 # ---------------------------------------------------------------------------
 servo:
   mass_kg: 0.060        # DSS-230MG datasheet — 60 g metal-gear servo
+  servo_mass_g: 60.0      # same, in grams (used by mass audit table)
+  include_servo_mass: true  # add servo point-mass to parent link inertial
   effort_nm: 2.94       # QYRC DSS-230MG — 30 kg·cm stall torque to N·m
   velocity_rad_s: 5.0
 

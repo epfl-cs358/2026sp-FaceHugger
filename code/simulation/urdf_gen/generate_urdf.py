@@ -57,6 +57,55 @@ DEFAULT_JSON = GENERATED_DIR / "fusion_export.json"
 DEFAULT_CFG = SIM_ROOT / "facehugger_config.yaml"
 DEFAULT_OUT = GENERATED_DIR / "facehugger.urdf"
 
+# Module-level audit accumulator for the per-link mass table.
+_audit_rows = []
+
+
+# ---------------------------------------------------------------------------
+# Point-mass inertia helpers (parallel axis theorem)
+# ---------------------------------------------------------------------------
+
+
+def _point_mass_inertia(mass_kg, pos_mm, com_mm):
+    """Inertia tensor of a point mass at `pos_mm` about `com_mm`.
+
+    I_ij = m * (|d|² δ_ij - d_i d_j)  where d = pos - com.
+    pos_mm, com_mm in mm; returns {ixx, iyy, izz, ixy, ixz, iyz} in kg·m².
+    """
+    dx = (pos_mm[0] - com_mm[0]) / 1000.0
+    dy = (pos_mm[1] - com_mm[1]) / 1000.0
+    dz = (pos_mm[2] - com_mm[2]) / 1000.0
+    return {
+        "ixx": mass_kg * (dy * dy + dz * dz),
+        "iyy": mass_kg * (dx * dx + dz * dz),
+        "izz": mass_kg * (dx * dx + dy * dy),
+        "ixy": -mass_kg * dx * dy,
+        "ixz": -mass_kg * dx * dz,
+        "iyz": -mass_kg * dy * dz,
+    }
+
+
+def _shift_inertia_to_com(inertia, mass_kg, old_com_mm, new_com_mm):
+    """Shift inertia tensor from old COM to new COM (parallel axis theorem).
+
+    I_new = I_old + m * (|d|² δ - d⊗d)  where d = old_com - new_com.
+    All moments in kg·m²; positions in mm.
+    """
+    d_mm = [old_com_mm[i] - new_com_mm[i] for i in range(3)]
+    d_sq = sum(x * x for x in d_mm) / 1e6  # (mm→m)²
+    dx = d_mm[0] / 1000.0
+    dy = d_mm[1] / 1000.0
+    dz = d_mm[2] / 1000.0
+    m = mass_kg
+    return {
+        "ixx": inertia["ixx"] + m * (d_sq - dx * dx),
+        "iyy": inertia["iyy"] + m * (d_sq - dy * dy),
+        "izz": inertia["izz"] + m * (d_sq - dz * dz),
+        "ixy": inertia.get("ixy", 0) - m * dx * dy,
+        "ixz": inertia.get("ixz", 0) - m * dx * dz,
+        "iyz": inertia.get("iyz", 0) - m * dy * dz,
+    }
+
 
 # ---------------------------------------------------------------------------
 # Generator state
@@ -308,6 +357,19 @@ def _emit_base_link(urdf: URDF, state: _GenState) -> None:
         origin_shift_mm=_mesh_shift(state.export, state.base_cfg["mesh"]),
         extra_visuals=base_extra_visuals,
     )
+    # Audit: base_link — count servo.stl visuals on it (shoulder servos, chassis-fixed)
+    base_servo_count = sum(
+        1 for ev in base_extra_visuals
+        if ev[0] == (state.servo_mesh_name or "servo.stl")
+    )
+    _audit_rows.append((
+        state.base_cfg["name"],
+        mass * 1000.0,  # final URDF mass in g
+        mass * 1000.0,  # CAD mass pre-servo = final for base_link
+        base_servo_count,
+        0.0,            # servo mass gap g
+        mass * 1000.0,  # total expected = final
+    ))
 
 
 def _emit_leg_assembly_metadata(urdf: URDF, state: _GenState) -> None:
@@ -521,11 +583,46 @@ def _emit_leg(urdf: URDF, leg: dict, state: _GenState) -> None:
         mass, com, inertia = get_physics(
             link_occ, fallback_mass=0.05, comp_name=mesh_name
         )
-        # link1 hosts the hip servo; link3 hosts the knee servo. Add the
-        # physical servo mass so dynamics match the real robot. CoM stays
-        # at the structural centroid (good enough for sim fidelity).
-        if link_key in ("link1", "link3"):
-            mass += state.servo_cfg.get("mass_kg", 0.060)
+        cad_mass_g = mass * 1000.0  # before servo addition
+
+        # Servo mass: if include_servo_mass is true, treat each servo on this
+        # link as a point mass and add its contribution to both mass and
+        # inertia via the parallel axis theorem.
+        include_servo = bool(state.servo_cfg.get("include_servo_mass", False))
+        servo_mass_kg = float(state.servo_cfg.get("mass_kg", 0.060))
+        servo_positions = []  # (xyz_mm) positions in link frame
+        if link_key in ("link1", "link3") and include_servo:
+            if link_key == "link1" and state.hip_servo_offset_in_link1 is not None:
+                sp = list(state.hip_servo_offset_in_link1)
+                if side == "R":
+                    sp[0] = -sp[0]
+                servo_positions.append(sp)
+            if link_key == "link3" and state.knee_servo_offset_in_link3 is not None:
+                sp = list(state.knee_servo_offset_in_link3)
+                if side == "R":
+                    sp[0] = -sp[0]
+                servo_positions.append(sp)
+
+            for sp in servo_positions:
+                # New mass
+                new_mass = mass + servo_mass_kg
+                # New COM: weighted average
+                new_com = [
+                    (mass * com[i] + servo_mass_kg * sp[i]) / new_mass
+                    for i in range(3)
+                ]
+                # Shift original inertia to new COM, then add point-mass contribution
+                inertia = _shift_inertia_to_com(inertia, mass, com, new_com)
+                pm = _point_mass_inertia(servo_mass_kg, sp, new_com)
+                for k in inertia:
+                    inertia[k] = inertia[k] + pm.get(k, 0)
+                mass = new_mass
+                com = new_com
+        elif link_key in ("link1", "link3"):
+            # Legacy: add mass without COM/inertia adjustment (kept for backward
+            # compat when include_servo_mass is false).
+            mass += servo_mass_kg
+
         urdf.link(
             link_name,
             mesh_name,
@@ -537,9 +634,16 @@ def _emit_leg(urdf: URDF, leg: dict, state: _GenState) -> None:
             extra_visuals=link_extra_servos.get(link_key, []),
             mesh_rpy=link_mesh_rpy.get(link_key),
         )
+        # Audit tracking
+        sv_count = len(link_extra_servos.get(link_key, []))
+        servo_gap_g = servo_mass_kg * 1000.0 * sv_count
+        total_expected_g = cad_mass_g + servo_gap_g
+        _audit_rows.append((link_name, mass * 1000.0, cad_mass_g, sv_count, servo_gap_g, total_expected_g))
 
 
 def generate(export: dict, cfg: dict, out_path: Path):
+    global _audit_rows
+    _audit_rows = []
     state = _build_state(export, cfg)
     urdf = URDF(cfg["robot_name"])
     _emit_base_link(urdf, state)
@@ -547,7 +651,36 @@ def generate(export: dict, cfg: dict, out_path: Path):
     for leg in cfg["legs"]:
         _emit_leg(urdf, leg, state)
     urdf.save(out_path)
+    _print_mass_audit_table(state)
     _print_invariant_check(state.occs, cfg, state.joint_defs)
+
+
+def _print_mass_audit_table(state: _GenState):
+    """Print the servo mass audit table after URDF generation."""
+    servo_mass_g = float(state.servo_cfg.get("servo_mass_g",
+                                               state.servo_cfg.get("mass_kg", 0.060) * 1000.0))
+    include_servo = bool(state.servo_cfg.get("include_servo_mass", False))
+    print()
+    print("=== URDF mass audit (servo mass per-link) ===")
+    print(f"  servo_mass_g = {servo_mass_g:.1f} g")
+    print(f"  include_servo_mass = {include_servo}")
+    header = ("  {:<14s} {:>14s} {:>14s} {:>18s} {:>14s}"
+              .format("Link", "CAD mass (g)", "Servo visuals", "Servo mass gap (g)", "Total URDF (g)"))
+    print(header)
+    total_cad = 0.0
+    total_gap = 0.0
+    total_urdf = 0.0
+    for row in _audit_rows:
+        link_name, urdf_mass_g, cad_mass_g, sv_count, servo_gap_g, total_expected_g = row
+        total_cad += cad_mass_g
+        total_gap += servo_gap_g
+        total_urdf += urdf_mass_g
+        print("  {:<14s} {:>14.1f} {:>14d} {:>18.1f} {:>14.1f}"
+              .format(link_name, cad_mass_g, int(sv_count), servo_gap_g, urdf_mass_g))
+    print("  " + "-" * 76)
+    print("  {:<14s} {:>14.1f} {:>14s} {:>18.1f} {:>14.1f}"
+          .format("TOTAL", total_cad, "", total_gap, total_urdf))
+    print("=" * 80)
 
 
 def _print_invariant_check(occs: list, cfg: dict, joint_defs: list):
