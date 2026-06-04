@@ -2194,6 +2194,28 @@ def _current_servo_angles(context):
         return None
 
 
+def _current_math_space_angles(context):
+    """Live pre-scaled math-space angles for the CURRENT rig pose, per leg.
+
+    Returns the absolute pre-scaled math-space angles — exactly what gets
+    baked into clips_all.h. The firmware applies translateToServo + CALIB
+    on top of these values at runtime.
+
+    Returns {leg: [shoulder, thigh, knee]} (floats) or None if the
+    rig/convention isn't available."""
+    arm = _find_arm_obj()
+    if arm is None:
+        return None
+    try:
+        convention = _load_convention()
+        dg = context.evaluated_depsgraph_get()
+        raw = _read_bone_angles(arm.evaluated_get(dg))
+        angles = _link1_delta_to_absolute(raw, convention)
+        return _scale_from_neutral(angles, convention)
+    except Exception:
+        return None
+
+
 def _clip_frame_ms(frames):
     """Playback wall-clock period for a baked clip: the median delta between
     consecutive `time_ms` values = the authored scene's frame period (~42 ms at
@@ -3317,6 +3339,59 @@ _SERVO_SAFE_RANGE = {
     "knee": (0, 180),
 }
 
+# Per-leg URDF joint limits in math-space degrees.
+# Derived from code/simulation/generated/facehugger.urdf <limit lower/upper>.
+# Right legs (FR, BR): link1 [-90, +52]; Left legs (FL, BL): link1 [-52, +90].
+# All legs: link2 (thigh) ±75°, link3 (knee) ±90°.
+_MATH_SPACE_LIMITS = {
+    "fr": [(-90, 52), (-75, 75), (-90, 90)],
+    "br": [(-90, 52), (-75, 75), (-90, 90)],
+    "fl": [(-52, 90), (-75, 75), (-90, 90)],
+    "bl": [(-52, 90), (-75, 75), (-90, 90)],
+}
+
+
+class FH_PT_math_space(_FH_PT_child, bpy.types.Panel):
+    """Live read-out of the 12 pre-scaled math-space angles for the current
+    rig pose. These are the values stored in clips_all.h — the firmware
+    applies translateToServo + CALIB on top at runtime."""
+
+    bl_idname = "VIEW3D_PT_fh_math_space"
+    bl_label = "Math-space Angles"
+    bl_order = 6
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
+        d = _current_math_space_angles(context)
+        if d is None:
+            layout.label(text="(rig or convention.json unavailable)", icon="INFO")
+            return
+
+        layout.label(
+            text=f"Frame {context.scene.frame_current} — pre-scaled math-space degrees"
+        )
+        layout.label(
+            text="(firmware applies translateToServo + CALIB on top)",
+            icon="INFO",
+        )
+        # header
+        hdr = layout.row(align=True)
+        hdr.label(text="Leg")
+        for t in ("Shldr", "Thigh", "Knee"):
+            hdr.label(text=t)
+
+        col = layout.column(align=True)
+        for leg in ("fr", "fl", "br", "bl"):
+            row = col.row(align=True)
+            row.label(text=leg.upper())
+            for j, v in enumerate(d[leg]):
+                lo, hi = _MATH_SPACE_LIMITS[leg][j]
+                cell = row.row(align=True)
+                cell.alert = v < lo or v > hi
+                sign = "+" if v >= 0 else ""
+                cell.label(text=f"{sign}{v:.1f}°")
+
 
 class FH_PT_servos(_FH_PT_child, bpy.types.Panel):
     """Live read-out of the 12 servo angles for the current rig pose — the
@@ -3395,6 +3470,7 @@ CLASSES = (
     FH_PT_export,
     FH_PT_display,
     FH_PT_servos,
+    FH_PT_math_space,
 )
 
 
