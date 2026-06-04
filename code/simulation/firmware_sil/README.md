@@ -45,7 +45,7 @@ cmake --build build
 
 Produces `build/fh_sim.<ext>.so`. It is **not committed** (rebuilt locally / in
 CI). Contributors without a C++ toolchain skip this and use the Python re-port
-(`firmware_port/`); `tests/test_sil_poc.py` skips automatically when `fh_sim` is absent.
+(`animation_tools/`); `tests/test_sil_poc.py` skips automatically when `fh_sim` is absent.
 
 ### Auto-rebuild (no stale firmware)
 
@@ -69,7 +69,7 @@ python code/facehugger.py sim --clip "wave" --headless            # DEFAULT: exa
 python code/facehugger.py sim --clip "wave" --headless --python   # force the Python re-port (no toolchain)
 ```
 Clip playback **defaults to the exact firmware**; `--python` forces the re-port
-(`firmware_port/`). Only `--clip` uses this driver — stand/`--walk`/`--trot` are
+(`animation_tools/`). Only `--clip` uses this driver — stand/`--walk`/`--trot` are
 unaffected, so a toolchain-less machine can still run those.
 
 ## Verify (run from code/simulation/, not this dir)
