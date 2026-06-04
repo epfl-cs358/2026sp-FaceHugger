@@ -75,18 +75,19 @@ def test_frames_in_ascending_order(all_clips):
 
 def test_first_frame_lie_down_fr_shoulder(all_clips):
     """Spot-check FR shoulder first frame of 'lie down and stand up' — the
-    historical regression value (~45.71 = FR neutral 45 plus the rest-yaw
-    residual under the uniform-math-space yaw convention). If that clip
-    has been retired from the catalog, this regression-guard skips rather
-    than failing, since the value is meaningless without that specific
-    clip. Background on the link1 delta-to-absolute fix that produced
-    this number lives in `animation/addons/fh_clip_panel.py`
-    `_link1_delta_to_absolute`."""
+    regression value (~44.29 = FR neutral 45 minus the rest-yaw residual
+    under the uniform-math-space yaw convention after the shoulder-axis +Z
+    fix). The sign of the residual flipped relative to the pre-fix value
+    (~45.71) because dc97133 removed the downstream sign flip on link1.
+    If that clip has been retired from the catalog, this regression-guard
+    skips rather than failing, since the value is meaningless without that
+    specific clip. Background on the link1 delta-to-absolute fix lives in
+    `animation/addons/fh_clip_panel.py:_link1_delta_to_absolute`."""
     try:
         clip = get_clip_by_name(all_clips, "lie down and stand up")
     except KeyError:
         pytest.skip("'lie down and stand up' is no longer in the clip catalog")
-    assert abs(clip.frames[0].a[0] - 45.7052) < 0.01
+    assert abs(clip.frames[0].a[0] - 44.2948) < 0.01
 
 
 def test_get_clip_by_name_case_insensitive(all_clips, sample_clip):
