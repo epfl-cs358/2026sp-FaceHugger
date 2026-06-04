@@ -35,7 +35,7 @@ def test_runtime_package_imports():
     r = _run(
         [
             "-c",
-            "import pybullet_sim.gaits, pybullet_sim.kinematics, "
+            "import pybullet_sim.kinematics, "
             "pybullet_sim.paths, pybullet_sim.sim_monitor",
         ]
     )

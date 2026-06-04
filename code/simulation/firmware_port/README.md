@@ -45,7 +45,7 @@ player = ClipPlayer(robot_id, joint_map, clip)
 player.play_blocking(gui=True)
 ```
 
-`robot_id` and `joint_map` come from the existing PyBullet setup in `gaits.py`
+`robot_id` and `joint_map` come from the existing PyBullet setup in `scene.py`
 (`_connect_and_setup` + `build_joint_map`).
 
 ## Pipeline

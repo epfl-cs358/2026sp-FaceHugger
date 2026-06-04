@@ -24,7 +24,6 @@ _LAZY: dict[str, str] = {
     "build_joint_map": "motor",
     "reset_to_stance": "motor",
     "run_clip": "runner",
-    "run_gait": "runner",
     "run_stand": "runner",
     "connect_and_setup": "scene",
     "print_banner": "scene",
@@ -66,7 +65,6 @@ __all__ = [
     "read_joint_torques",
     "reset_to_stance",
     "run_clip",
-    "run_gait",
     "run_stand",
     "settle",
 ]

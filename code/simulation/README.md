@@ -54,7 +54,7 @@ python code/facehugger.py urdf                 # regenerate generated/facehugger
 python code/facehugger.py sim                  # GUI, standing pose
 python code/facehugger.py sim --walk           # walk gait (EXACT firmware tickGait, via the SIL)
 python code/facehugger.py sim --trot           # trot gait (EXACT firmware tickTrot, via the SIL)
-python code/facehugger.py sim --trot --python-port  # the Python IK gait instead (no C++ toolchain)
+python code/facehugger.py sim --clip "wave" --python-port   # the Python clip re-port (no C++ toolchain; gaits not supported here)
 python code/facehugger.py sim --headless       # no GUI — CI smoke-check
 python code/facehugger.py sim --clip "wave" --headless   # play a baked clip via the interpreter
 python code/facehugger.py blender                          # URDF in Blender, placement-only
@@ -145,8 +145,8 @@ code/simulation/
   README.md                     this file
   docs/                         (empty after the 2026-06 wiki migration; kept as a placeholder)
   pybullet_sim/                 runtime package
-    simulate.py                 PyBullet simulator front-end (constants/helpers/kinematics/gaits)
-    gaits.py kinematics.py helpers.py constants.py sim_monitor.py
+    simulate.py                 PyBullet simulator front-end (constants/helpers/kinematics)
+    kinematics.py helpers.py constants.py sim_monitor.py
   firmware_port/                firmware-faithful clip re-port (Python fallback / parity ref)
     servo_convention.py clip_loader.py clip_player.py gait_interpreter.py (+ tests/)
   urdf_gen/                     build package
