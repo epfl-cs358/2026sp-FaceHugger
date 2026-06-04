@@ -25,47 +25,47 @@
 // back with another T:2). 5 s is well above the 1 s default the app sends.
 #define POSE_EASE_MS_MAX 5000
 
-// Clip-playback servo-clamp half-widths, derived from the URDF joint limits.
-// clampClipServos (motion_math.cpp) uses these to build a per-leg envelope:
+// ---------------------------------------------------------------------------
+// Clip-playback servo clamp — clampClipServos() in motion_math.cpp.
+// Defensive symmetric envelope applied AFTER translateToServo() on the clip
+// path only. The authoritative per-side asymmetric limits live below
+// (SHOULDER_THETA_*) and are enforced by enforceShoulderLimits() before
+// translateToServo() on every tick (gait + clip + T:12 stream).
+//
 //   hip   = [90 - HIP_CLAMP_FROM_NINETY, 90 + HIP_CLAMP_FROM_NINETY]
-//           Uniform across legs. The URDF shoulder window is asymmetric per leg
-//           (one side 90°, the tight side 52°); 52 is safe on every leg.
-//           (Superseded by enforceShoulderLimits for the per-side asymmetric
-//            envelope + inter-leg buffer; this symmetric clamp stays as a
-//            defensive backup on the clip-playback path.)
+//           Uniform [38°, 142°]. The URDF shoulder is asymmetric per leg
+//           (tight side 52°, wide side 90°); 52° is safe on every leg.
 //   thigh = [CALIB_THIGH_BY_LEG[leg] ± THIGH_CLAMP_FROM_CALIB]
-//           URDF thigh range is symmetric ±75° on every leg.
+//           CALIB-relative, symmetric ±75° per the URDF on every leg.
 //   knee  = [CALIB_KNEE_BY_LEG[leg]  ± KNEE_CLAMP_FROM_CALIB]
-//           URDF knee range is symmetric ±90° on every leg.
-// Per-leg + CALIB-relative so post-calibration NEUTRALs (e.g. FL thigh at 27,
-// which is CALIB_FL_THIGH - 60) sit exactly on the lower edge instead of
-// being clipped by a uniform [30, 150] window.
+//           CALIB-relative, symmetric ±90° per the URDF on every leg.
 #define HIP_CLAMP_FROM_NINETY  52
 #define THIGH_CLAMP_FROM_CALIB 75
 #define KNEE_CLAMP_FROM_CALIB  90
 
-// Math-space shoulder safety net — applied by enforceShoulderLimits() before
-// translateToServo() on every gait / clip / T:12-stream tick. Two layers:
-//   1. Per-side asymmetric hard clamp in URDF θ (signed displacement from rest):
-//        LEFT  (FL, BL):  θ ∈ [-NARROW, +WIDE]   (URDF lower side, URDF upper side)
-//        RIGHT (FR, BR):  θ ∈ [-WIDE,   +NARROW] (mirror — same physical shape,
-//                                                 opposite sign because right
-//                                                 legs sit on the other side
-//                                                 of the body)
-//   2. Back-leg inter-leg coupling — back always sits ≥ INTER_LEG_BUFFER_DEG
-//      from the front leg on the same side (front-leads-back-follows), so a
-//      front leg swung deep toward the rear doesn't crash the back leg into
-//      the same arc:
-//        LEFT:  BL_θ ≥ FL_θ + INTER_LEG_BUFFER_DEG
-//        RIGHT: BR_θ ≤ FR_θ - INTER_LEG_BUFFER_DEG
+// ---------------------------------------------------------------------------
+// Math-space shoulder limits — enforceShoulderLimits() in motion_math.cpp.
 //
-// Hard limits dominate the buffer at extremes — when the front leg is at its
-// own hard max, the back leg ends up at the same hard max (buffer collapses
-// to 0°). Bench-test the buffer value (5° default) once before relying on it.
+// Convention: math-space +θ = CCW yaw (looking from +Z down). Neutral
+// shoulders point outward from the body: FR=+45°, FL=+135°, BR=-45°, BL=-135°.
+// All four link1 URDF axes are (0,0,1) uniform +Z.
 //
-// Per-side Fusion-angle equivalents (animator reference):
-//   FL: [-97°, +45°]   BL: [-97°, +45°]   (left rest = -45° per-side)
-//   FR: [-45°, +97°]   BR: [-45°, +97°]   (right rest = +45° per-side)
+// The URDF shoulder window is asymmetric: the tight (inward) side stops at
+// 52° from rest; the wide (outward) side goes to 90°. Left/right mirror
+// each other through the body X-axis.
+//
+//   LEFT  (FL, BL):  θ ∈ [-NARROW, +WIDE]  →  displacement from rest: [-52°, +90°]
+//   RIGHT (FR, BR):  θ ∈ [-WIDE,   +NARROW] →  displacement from rest: [-90°, +52°]
+//
+// Absolute math-space range (rest + displacement):
+//   FL: 135° + [-52°, +90°] = [  83°,  225°]  →  wraps to [-97°, +45°] in [-180,180]
+//   BL: -135° + [-52°, +90°] = [-187°,  -45°]  →  wraps to [+173°, -45°] in [-180,180]
+//   FR:  45° + [-90°, +52°] = [ -45°,  +97°]
+//   BR: -45° + [-90°, +52°] = [-135°,   +7°]
+//
+// Inter-leg buffer: back leg stays 5° away from the front leg on the same
+// side (front-leads-back-follows). Hard limits dominate at extremes — when
+// the front leg is at its hard max, the buffer collapses to 0°.
 #define SHOULDER_THETA_NARROW_DEG 52
 #define SHOULDER_THETA_WIDE_DEG   90
 #define INTER_LEG_BUFFER_DEG       5

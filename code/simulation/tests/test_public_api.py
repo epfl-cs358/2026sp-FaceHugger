@@ -30,7 +30,6 @@ PYBULLET_SIM_API = (
     "read_joint_pos_deg",
     "read_joint_torques",
     "reset_to_stance",
-    "run_clip",
     "run_stand",
     "settle",
 )

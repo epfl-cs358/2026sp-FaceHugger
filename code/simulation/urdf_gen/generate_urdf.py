@@ -653,6 +653,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
     urdf.save(out_path)
     _print_mass_audit_table(state)
     _print_invariant_check(state.occs, cfg, state.joint_defs)
+    _print_limits_summary(state)
 
 
 def _print_mass_audit_table(state: _GenState):
@@ -697,6 +698,85 @@ def _print_invariant_check(occs: list, cfg: dict, joint_defs: list):
             f"  {leg_id:>2}: ({mount_pos[0]:+7.2f}, {mount_pos[1]:+7.2f}, "
             f"{mount_pos[2]:+7.2f})"
         )
+
+
+# ---------------------------------------------------------------------------
+# Limits summary — per-leg, per-joint across three angle spaces
+# ---------------------------------------------------------------------------
+
+def _print_limits_summary(state: _GenState):
+    """Print per-leg, per-joint limits across three angle spaces.
+
+    Columns:
+      Fusion   — absolute CAD joint angles from the Fusion export (degrees)
+      URDF     — <limit lower/upper> as written to facehugger.urdf (displacement from rest)
+      Math     — absolute math-space angle = rest + URDF limit (body frame, CCW +)
+    """
+    joint_defs = state.joint_defs
+    fl_rest_rad = state.fl_rest_rad
+
+    def _norm(a):
+        a = math.fmod(a, 360.0)
+        if a > 180.0:
+            a -= 360.0
+        elif a <= -180.0:
+            a += 360.0
+        return a
+
+    fusion_lo = [
+        math.degrees(joint_defs[0].limits_rad["min"]),
+        joint_defs[1].limits_deg[0],
+        joint_defs[2].limits_deg[0],
+    ]
+    fusion_hi = [
+        math.degrees(joint_defs[0].limits_rad["max"]),
+        joint_defs[1].limits_deg[1],
+        joint_defs[2].limits_deg[1],
+    ]
+
+    print()
+    print("=== Joint limits — Fusion → URDF → Math-space ===")
+    print("    Fusion = absolute CAD joint angles (FL reference for link1)")
+    print("    URDF   = <limit lower/upper> displacement from rest")
+    print("    Math   = rest + URDF limit  (absolute, body frame, CCW +)")
+
+    joint_names = ["link1 (shoulder)", "link2 (thigh)", "link3 (knee)"]
+
+    for joint_idx, jname in enumerate(joint_names):
+        print()
+        print(f"  ── {jname} ──")
+        hdr = f"  {'Leg':>4s}  {'Fusion':>16s}  {'URDF':>16s}  {'Math':>16s}"
+        print(hdr)
+        print(f"  {'':4s}  {'lo':>7s} {'hi':>7s}   {'lo':>7s} {'hi':>7s}   {'lo':>7s} {'hi':>7s}")
+        print("  " + "─" * (len(hdr) - 2))
+
+        for leg in ("fr", "fl", "br", "bl"):
+            side = "R" if leg in ("fr", "bl") else "L"
+            is_left_body = leg.endswith("l")
+            rest_deg = math.degrees(_shoulder_rest_for(leg, fl_rest_rad))
+
+            if joint_idx == 0:
+                f_lo, f_hi = fusion_lo[0], fusion_hi[0]
+                if is_left_body:
+                    u_lo, u_hi = state.shoulder_lower_deg, state.shoulder_upper_deg
+                else:
+                    u_lo, u_hi = -state.shoulder_upper_deg, -state.shoulder_lower_deg
+                m_lo = _norm(rest_deg + u_lo)
+                m_hi = _norm(rest_deg + u_hi)
+            else:
+                f_lo, f_hi = fusion_lo[joint_idx], fusion_hi[joint_idx]
+                if side == "R":
+                    u_lo, u_hi = -f_hi, -f_lo
+                else:
+                    u_lo, u_hi = f_lo, f_hi
+                m_lo, m_hi = u_lo, u_hi
+
+            print(
+                f"  {leg.upper():>4s}  "
+                f"{f_lo:>+7.0f}° {f_hi:>+7.0f}°   "
+                f"{u_lo:>+7.0f}° {u_hi:>+7.0f}°   "
+                f"{m_lo:>+7.0f}° {m_hi:>+7.0f}°"
+            )
 
 
 # ---------------------------------------------------------------------------
