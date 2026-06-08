@@ -1,5 +1,5 @@
 // FaceHugger clip: lie down and stand up
-// Generated 2026-06-04 from Blender animation (math-space; firmware applies CALIB)
+// Generated 2026-06-08 from Blender animation (math-space; firmware applies CALIB)
 //
 // HOW TO RUN (browser):
 //   1. Join the robot Wi-Fi (FaceHugger_Net); robot at 192.168.4.1.
