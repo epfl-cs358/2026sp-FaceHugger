@@ -42,7 +42,7 @@ from urdf_gen.lib.urdf_math import (
     _rot_to_urdf_rpy,
     sub,
 )
-from urdf_gen.lib.urdf_writer import URDF
+from urdf_gen.lib.urdf_writer import CollisionPrimitive, URDF
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +146,8 @@ class _GenState:
     knee_servo_rpy: tuple
     # discovered servo mesh filename (re-origined to ServoMountPoint)
     servo_mesh_name: str | None
+    # foot tip in link3-mesh-local frame (mm), computed once
+    foot_tip_link3_mm: list | None
 
 
 def _build_state(export: dict, cfg: dict) -> _GenState:
@@ -223,7 +225,13 @@ def _build_state(export: dict, cfg: dict) -> _GenState:
             servo_mesh_name = mesh_name
             break
 
-
+    # Foot tip in link3-mesh-local frame (mm). Prefer the explicit Fusion
+    # construction point; fall back to STL distance-from-origin heuristic.
+    foot_tip_mm = _foot_tip_from_export(export)
+    if foot_tip_mm is None:
+        foot_tip_mm = _foot_tip_from_stl(
+            GENERATED_DIR / cfg["mesh_dir"].rstrip("/\\") / "leg_lower.stl"
+        )
 
     return _GenState(
         cfg=cfg,
@@ -248,6 +256,7 @@ def _build_state(export: dict, cfg: dict) -> _GenState:
         hip_servo_rpy=_relative_rpy(R_servo2),
         knee_servo_rpy=_relative_rpy(R_servo3),
         servo_mesh_name=servo_mesh_name,
+        foot_tip_link3_mm=foot_tip_mm,
     )
 
 
@@ -618,6 +627,42 @@ def _emit_leg(urdf: URDF, leg: dict, state: _GenState) -> None:
             # compat when include_servo_mass is false).
             mass += servo_mass_kg
 
+        # Collision override: analytic primitives replace STL meshes.
+        # - link1, link2: box along the bone direction
+        # - link3: sphere at foot tip (single clean contact point)
+        collision_override = None
+        if link_key == "link3" and state.foot_tip_link3_mm is not None:
+            ft = state.foot_tip_link3_mm
+            if side == "R":
+                ft = [-ft[0], ft[1], -ft[2]]
+            collision_override = CollisionPrimitive(
+                shape="sphere",
+                origin_xyz_mm=list(ft),
+                radius=0.005,
+            )
+        elif link_key in ("link1", "link2"):
+            # Bone vector from this link's origin to the next joint.
+            # link1: joint_defs[1] = Link2Revolute offset from link1 frame
+            # link2: joint_defs[2] = Link3Revolute offset from link2 frame
+            link_idx = int(link_key[-1])  # "1" or "2"
+            bone = list(state.joint_defs[link_idx].offset_from_parent_mm)
+            if side == "R":
+                bone[0] = -bone[0]
+            bx, by, bz = bone
+            bone_len = math.hypot(bx, math.hypot(by, bz))
+            if bone_len > 1e-6:
+                # Box centered at midpoint, aligned along bone direction.
+                # URDF box is axis-aligned; use Ry to align +X with bone.
+                mid = [bx / 2, by / 2, bz / 2]
+                theta = math.atan2(-bz, math.hypot(bx, by)) if abs(by) < 1e-6 else 0.0
+                # width/height = 15mm (the leg beam cross-section)
+                collision_override = CollisionPrimitive(
+                    shape="box",
+                    origin_xyz_mm=mid,
+                    origin_rpy=(0.0, theta, 0.0) if abs(theta) > 1e-6 else (0.0, 0.0, 0.0),
+                    size_xyz_mm=[bone_len, 15.0, 15.0],
+                )
+
         urdf.link(
             link_name,
             mesh_name,
@@ -628,6 +673,7 @@ def _emit_leg(urdf: URDF, leg: dict, state: _GenState) -> None:
             origin_shift_mm=_mesh_shift(state.export, mesh_name),
             extra_visuals=link_extra_servos.get(link_key, []),
             mesh_rpy=link_mesh_rpy.get(link_key),
+            collision_override=collision_override,
         )
         # Audit tracking
         sv_count = len(link_extra_servos.get(link_key, []))
