@@ -651,15 +651,17 @@ def _emit_leg(urdf: URDF, leg: dict, state: _GenState) -> None:
             bx, by, bz = bone
             bone_len = math.hypot(bx, math.hypot(by, bz))
             if bone_len > 1e-6:
-                # Box centered at midpoint, aligned along bone direction.
-                # URDF box is axis-aligned; use Ry to align +X with bone.
+                # Box centered at midpoint, +X aligned with bone direction.
+                # URDF RPY: Rz(yaw)*Ry(pitch)*Rx(0) maps +X to bone unit vector.
                 mid = [bx / 2, by / 2, bz / 2]
-                theta = math.atan2(-bz, math.hypot(bx, by)) if abs(by) < 1e-6 else 0.0
-                # width/height = 15mm (the leg beam cross-section)
+                nx, ny, nz = bx / bone_len, by / bone_len, bz / bone_len
+                pitch = math.asin(max(-1.0, min(1.0, -nz)))
+                cp = math.cos(pitch)
+                yaw = math.atan2(ny, nx) if abs(cp) > 1e-9 else 0.0
                 collision_override = CollisionPrimitive(
                     shape="box",
                     origin_xyz_mm=mid,
-                    origin_rpy=(0.0, theta, 0.0) if abs(theta) > 1e-6 else (0.0, 0.0, 0.0),
+                    origin_rpy=(0.0, pitch, yaw),
                     size_xyz_mm=[bone_len, 15.0, 15.0],
                 )
 
