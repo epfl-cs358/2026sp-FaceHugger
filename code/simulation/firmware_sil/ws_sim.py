@@ -24,6 +24,7 @@ IP:81 for hardware.
 import argparse
 import asyncio
 import json
+import math
 import time
 from pathlib import Path
 
@@ -46,7 +47,7 @@ _SSE_PORT = 8082
 class RobotSim:
     """A PyBullet robot driven by the compiled firmware control code."""
 
-    def __init__(self, gui=False):
+    def __init__(self, gui=False, debug=False):
         import pybullet as p
 
         from pybullet_sim.kinematics import build_config
@@ -54,6 +55,7 @@ class RobotSim:
 
         self.p = p
         self.gui = gui
+        self.debug = debug
         self.cfg = build_config()
         self.robot_id, self.joint_map, _ = connect_and_setup(self.cfg, gui)
         self.fc = load_fh_sim().FirmwareControl()
@@ -63,6 +65,79 @@ class RobotSim:
         # rotate the robot in the GUI (Ctrl-drag) and see the firmware's
         # auto-invert path fire just like real hardware.
         self._imu_state = False
+        self._step_count = 0
+
+        # Plane body ID for contact diagnostics.
+        self._plane_id = 0 if not gui else self._find_plane()
+
+        # Startup diagnostic: spawn height + foot-ground contact check.
+        if self.debug:
+            self._startup_diagnostic()
+
+    def _find_plane(self):
+        """Return the bodyUniqueId of the plane, or 0 if not found."""
+        n = self.p.getNumBodies()
+        for i in range(n):
+            info = self.p.getBodyInfo(i)
+            name = info[0].decode() if isinstance(info[0], bytes) else str(info[0])
+            if "plane" in name.lower():
+                return i
+        return 0
+
+    def _startup_diagnostic(self):
+        """One-time print at startup: spawn height and which feet touch ground."""
+        pos, orn = self.p.getBasePositionAndOrientation(self.robot_id)
+        print(f"\n[diag] startup: base pos=({pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}) m")
+        print(f"[diag] startup: body_height={self.cfg.body_height*1000:.1f} mm")
+
+        # Check each foot link for ground contact.
+        foot_names = [n for n in self.joint_map if "link3" in n]
+        touching = []
+        for name in sorted(foot_names):
+            idx = self.joint_map[name]
+            pts = self.p.getContactPoints(
+                bodyA=self.robot_id, bodyB=self._plane_id, linkIndexA=idx
+            )
+            if pts:
+                for pt in pts:
+                    touching.append(
+                        f"  {name}: normalForce={pt[9]:.2f}N  "
+                        f"posOnFoot=({pt[5][0]:.3f},{pt[5][1]:.3f},{pt[5][2]:.3f})"
+                    )
+        if touching:
+            print(f"[diag] startup: feet touching ground:")
+            for t in touching:
+                print(t)
+        else:
+            print(f"[diag] startup: NO feet touching ground — robot is airborne!")
+
+    def _print_contact_diagnostic(self):
+        """Per-frame contact diagnostic for the four foot links."""
+        pos, orn = self.p.getBasePositionAndOrientation(self.robot_id)
+        euler = self.p.getEulerFromQuaternion(orn)
+        print(
+            f"\n[diag] t={self._step_count / _STEP_HZ:.1f}s  "
+            f"base=({pos[0]:+.3f},{pos[1]:+.3f},{pos[2]:+.4f})  "
+            f"rpy=({math.degrees(euler[0]):+.1f},{math.degrees(euler[1]):+.1f},{math.degrees(euler[2]):+.1f})°"
+        )
+
+        foot_names = [n for n in self.joint_map if "link3" in n]
+        for name in sorted(foot_names):
+            idx = self.joint_map[name]
+            pts = self.p.getContactPoints(
+                bodyA=self.robot_id, bodyB=self._plane_id, linkIndexA=idx
+            )
+            if pts:
+                for pt in pts:
+                    normal = pt[7]  # contactNormalOnB
+                    print(
+                        f"  {name}: normal=({normal[0]:+.2f},{normal[1]:+.2f},{normal[2]:+.2f})  "
+                        f"normalForce={pt[9]:.2f}N  "
+                        f"latF1={pt[10]:.2f}  latF2={pt[11]:.2f}  "
+                        f"posOnA=({pt[5][0]:.3f},{pt[5][1]:.3f},{pt[5][2]:.3f})"
+                    )
+            else:
+                print(f"  {name}: NO CONTACT")
 
     def step(self, t_ms):
         from .sil_bridge import update_imu_from_pybullet
@@ -81,6 +156,8 @@ class RobotSim:
                     targetPosition=rad,
                     force=self.cfg.servo_force,
                     maxVelocity=self.cfg.servo_velocity,
+                    positionGain=self.cfg.kp,
+                    velocityGain=self.cfg.kd,
                 )
         self.p.stepSimulation()
 
@@ -139,6 +216,9 @@ async def _sim_loop(sim, telem_queue=None):
     while True:
         now = time.monotonic() - t0
         sim.step(int(now * 1000.0))
+        sim._step_count += 1
+        if sim.debug and sim._step_count % 60 == 0:
+            sim._print_contact_diagnostic()
         if step % _TELEM_EVERY == 0:
             if sim.gui:  # torque-tint the links in the PyBullet window
                 apply_torque_colors(sim.p, sim.robot_id, sim.joint_map)
@@ -212,9 +292,9 @@ def build_telemetry_app(telem_queue, serve_panel=False):
 
 
 async def serve(
-    host="localhost", port=8081, gui=False, sse_port=_SSE_PORT, panel=False
+    host="localhost", port=8081, gui=False, debug=False, sse_port=_SSE_PORT, panel=False
 ):
-    sim = RobotSim(gui=gui)
+    sim = RobotSim(gui=gui, debug=debug)
     clients = set()
     telem_queue = asyncio.Queue(maxsize=1)
 
@@ -272,6 +352,11 @@ def main():
     )
     ap.add_argument("--gui", action="store_true", help="show the PyBullet window")
     ap.add_argument(
+        "--debug",
+        action="store_true",
+        help="print contact force diagnostics every 60 frames (1/4 s) + startup check",
+    )
+    ap.add_argument(
         "--sse-port",
         type=int,
         default=_SSE_PORT,
@@ -285,7 +370,7 @@ def main():
     args = ap.parse_args()
     try:
         asyncio.run(
-            serve(args.host, args.port, args.gui, args.sse_port, panel=args.panel)
+            serve(args.host, args.port, args.gui, args.debug, args.sse_port, panel=args.panel)
         )
     except KeyboardInterrupt:
         pass

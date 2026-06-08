@@ -50,6 +50,8 @@ class DebugSliders:
             "massCorrection": float(sim_cfg["mass"]["mass_correction_factor"]),
             "contactStiffness": float(sim_cfg["contact"]["stiffness"]),
             "contactDamping": float(sim_cfg["contact"]["damping"]),
+            "positionGain": float(sim_cfg.get("motor", {}).get("position_gain", 0.5)),
+            "velocityGain": float(sim_cfg.get("motor", {}).get("velocity_gain", 2.0)),
         }
         self._slider_ids = {
             key: p.addUserDebugParameter(
@@ -61,6 +63,8 @@ class DebugSliders:
                 ("massCorrection", 0.5, 2.0),
                 ("contactStiffness", 0.0, 100000.0),
                 ("contactDamping", 0.0, 500.0),
+                ("positionGain", 0.0, 2.0),
+                ("velocityGain", 0.0, 5.0),
             ]
         }
         self._foot_joint_indices = [idx for name, idx in joint_map.items() if "link3" in name]
@@ -96,6 +100,9 @@ class DebugSliders:
             f"  stiffness: {vals['contactStiffness']:.0f}",
             f"  damping: {vals['contactDamping']:.0f}",
             "  restitution: 0.0",
+            "motor:",
+            f"  position_gain: {vals['positionGain']:.3f}",
+            f"  velocity_gain: {vals['velocityGain']:.3f}",
             "friction:",
             f"  foot_lateral: {vals['lateralFriction']:.3f}",
             f"  foot_spinning: {vals['spinningFriction']:.3f}",
@@ -133,6 +140,11 @@ def connect_and_setup(cfg, gui, float_mode=False, debug=False):
     friction = sim_cfg["friction"]
     solver = sim_cfg["solver"]
 
+    # Sync torque thresholds with the servo's actual stall torque from
+    # facehugger_config.yaml, so changing servo.effort_nm shifts all bands.
+    from .sim_monitor import set_stall_torque
+    set_stall_torque(cfg.servo_force)
+
     p.connect(p.GUI if gui else p.DIRECT)
     if gui:
         p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
@@ -145,7 +157,12 @@ def connect_and_setup(cfg, gui, float_mode=False, debug=False):
     p.setTimeStep(TIMESTEP)
     p.setPhysicsEngineParameter(numSolverIterations=int(solver["iterations"]))
     if not float_mode:
-        p.loadURDF("plane.urdf")
+        plane_id = p.loadURDF("plane.urdf")
+        # PyBullet's plane.urdf defaults to lateralFriction=0.5. With a
+        # 5mm sphere foot contact and geometric-mean friction combining
+        # (effective = sqrt(foot × plane)), that halves the intended grip.
+        # Set the plane side to 1.0 so effective = sqrt(link × plane) ≈ link.
+        p.changeDynamics(plane_id, -1, lateralFriction=1.0)
 
     robot_id = p.loadURDF(
         cfg.urdf_path,
@@ -155,10 +172,27 @@ def connect_and_setup(cfg, gui, float_mode=False, debug=False):
         flags=p.URDF_USE_INERTIA_FROM_FILE,
     )
     joint_map = build_joint_map(robot_id)
+
+    # Damping: PyBullet defaults to linearDamping=0.04 / angularDamping=0.04 on
+    # every link, which creates drag forces whenever joints move. Zero them.
+    damping_cfg = sim_cfg.get("damping", {})
+    linear_damp = float(damping_cfg.get("linear", 0.0))
+    angular_damp = float(damping_cfg.get("angular", 0.0))
+    num_joints = p.getNumJoints(robot_id)
+    for j in range(-1, num_joints):
+        p.changeDynamics(robot_id, j, linearDamping=linear_damp, angularDamping=angular_damp)
+
+    # Default joint motors: loadURDF enables built-in motor friction. Disable
+    # them before applying POSITION_CONTROL so the default force doesn't fight
+    # our target angles.
+    for j in range(num_joints):
+        p.setJointMotorControl2(robot_id, j, p.VELOCITY_CONTROL, targetVelocity=0, force=0)
+
     # stance_rad is already per-leg; reset + motor-command from the same dict.
     reset_to_stance(robot_id, joint_map, cfg.stance_rad)
     apply_leg_pose(
-        robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity
+        robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity,
+        kp=cfg.kp, kd=cfg.kd,
     )
 
     # Foot contact (link3 = the knee joint's child = lower leg/foot).
@@ -262,7 +296,8 @@ def settle(robot_id, joint_map, cfg, duration_s):
     n_steps = int(duration_s / TIMESTEP)
     for _ in range(n_steps):
         apply_leg_pose(
-            robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity
+            robot_id, joint_map, cfg.stance_rad, cfg.servo_force, cfg.servo_velocity,
+            kp=cfg.kp, kd=cfg.kd,
         )
         p.stepSimulation()
 

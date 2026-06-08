@@ -1,4 +1,4 @@
-usage: simulate.py [-h] [--walk] [--trot] [--headless] [--debug] [--settle SETTLE] [--clip NAME] [--loop] [--float] [--monitor] [--log] [--python-port]
+usage: simulate.py [-h] [--walk] [--trot] [--headless] [--debug] [--settle SETTLE] [--clip NAME] [--loop] [--float] [--monitor] [--log]
 
 FaceHugger Quadruped Simulation
 
@@ -9,9 +9,8 @@ options:
   --headless
   --debug          add PyBullet debug sliders for live physics tuning (GUI only)
   --settle SETTLE  Seconds to hold stance before the main loop begins (lets gravity resolve initial overlap). Default 0.5.
-  --clip NAME      play a named animation clip from clips_all.h instead of a gait
+  --clip NAME      play a named animation clip from clips_all.h
   --loop           replay the clip continuously (GUI only) to watch cumulative behaviour over time; physics state carries across loops
   --float          no gravity, no floor, body pinned — watch the clip's pure joint geometry without the robot falling/slipping/collapsing
   --monitor        print a torque + estimated-current status line periodically (per-leg angles, peak torque, total current [WARN >10A], [STALL] joints)
   --log            record per-joint torque/current every step; on exit print a summary table and write sim_log.csv + sim_log.png (additive to --monitor)
-  --python-port    drive clips AND gaits with the Python re-port (firmware_port / the Python IK gait) instead of the default — which is the EXACT compiled firmware (firmware_sil, auto-built). Use --python-port when you have no C++ toolchain.

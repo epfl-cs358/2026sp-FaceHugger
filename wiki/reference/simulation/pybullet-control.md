@@ -15,19 +15,9 @@ flowchart LR
     PB -->|stepSimulation| PB
 ```
 
-Each tick the bridge advances the firmware's clock, runs one `update()`, reads back the 12 servo angles the firmware computed (post-`translateToServo`, post-clamp, the same values the PCA9685 would receive), converts servo degrees to URDF joint radians using the **same per-leg convention the firmware uses** (see [Conventions](../conventions.md)), and commands each joint with `setJointMotorControl2(POSITION_CONTROL)` capped at the servo's effort (2.94 N·m) and velocity. Because the firmware itself is in the loop, a clip or gait that looks right in the sim issues byte-identical servo commands on the robot.
-
-### Default (firmware SIL) vs `--python`
-
-| | Default (firmware SIL) | `--python` |
-|--|--|--|
-| Source of motion | the exact compiled firmware (`fh_sim`) | a Python re-port of the firmware (`firmware_port/`) |
-| Needs | CMake + C++17 + pybind11 (auto-builds) | nothing beyond PyBullet |
-| Use when | you want true parity with the robot | you have no C++ toolchain, or want the reference re-port |
+Each tick the bridge advances the firmware's clock, runs one `update()`, reads back the 12 servo angles the firmware computed (post-`translateToServo`, post-clamp, the same values the PCA9685 would receive), converts servo degrees to URDF joint radians using per-leg axis signs read from the URDF itself, and commands each joint with `setJointMotorControl2(POSITION_CONTROL)` capped at the servo's effort (from `facehugger_config.yaml`) and velocity. Because the firmware itself is in the loop, a clip or gait that looks right in the sim issues byte-identical servo commands on the robot.
 
 The `fh_sim` module **auto-rebuilds** whenever the firmware/HAL/binding sources change, so a fresh `sim` never silently runs stale firmware. The staleness check scans the whole firmware `src/` tree, and `clips_all.h` lives there, so re-exporting clips (which rewrites the firmware copy) marks the module stale and the next launch recompiles it. A parity test suite asserts each clip's full servo-angle trace is bit-identical to a committed golden, so any firmware change that shifts an angle fails CI.
-
-Because the SIL compiles `shared/config.h` directly, it picks up the same per-servo `CALIB_*_THIGH` / `CALIB_*_KNEE` values the robot is flashed with. Both `translateToServo` and the upside-down `applyInvert` mirror (`2 * CALIB - angle`) therefore evaluate identically in the sim and on hardware - editing a CALIB value and relaunching `sim` shifts the simulated robot's stand and mirror in the same way it shifts the real one, with no separate sim-side calibration to keep in sync. See [Invert mirror and CALIB](../conventions.md#invert-mirror-and-calib).
 
 The rebuild happens **at launch**: a long-running process loads `fh_sim` once and a compiled extension is not hot-reloaded. So after re-exporting or re-flashing clips you must **restart** a running `sim` for the new clips to appear; otherwise the old in-memory module keeps serving the previous clip set.
 
@@ -90,9 +80,8 @@ The continuous reference is ≈ ⅓ of stall (a rule of thumb for hobby metal-ge
 | Concern | File (`code/simulation/`) |
 |---------|---------------------------|
 | CLI dispatch | `facehugger.py` |
-| Sim modes, spawn, settle, monitor hook | `pybullet_sim/gaits.py`, `pybullet_sim/simulate.py` |
+| Sim modes, spawn, settle, monitor hook | `pybullet_sim/simulate.py`, `pybullet_sim/scene.py` |
 | Torque/current model + bands | `pybullet_sim/sim_monitor.py` |
 | Firmware SIL bridge (clips, gaits, telemetry) | `firmware_sil/sil_bridge.py` |
 | Compiled-firmware module + build | `firmware_sil/` (`bindings.cpp`, `CMakeLists.txt`, `hal/`) |
 | WebSocket robot API | `firmware_sil/ws_sim.py` |
-| Python re-port (`--python`) | `firmware_port/` |

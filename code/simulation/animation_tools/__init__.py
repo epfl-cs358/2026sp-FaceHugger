@@ -12,7 +12,6 @@ from .servo_convention import (
     servo_to_radians,
 )
 from .clip_loader import ClipFrame, ClipData, load_clips_all_h, get_clip_by_name
-from .clip_player import frame_to_joint_targets, ClipPlayer
 
 # Explicit public API — these are intentional re-exports from the submodules.
 __all__ = [
@@ -31,6 +30,4 @@ __all__ = [
     "ClipData",
     "load_clips_all_h",
     "get_clip_by_name",
-    "frame_to_joint_targets",
-    "ClipPlayer",
 ]

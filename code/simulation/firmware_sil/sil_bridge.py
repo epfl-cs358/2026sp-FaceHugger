@@ -5,7 +5,7 @@ firmware_sil/CMakeLists.txt) and converts the 12 servo angles it computes into
 URDF joint targets — so the sim moves on the firmware's own output, with no
 Python re-port in the loop.
 
-The servo-deg -> URDF-radian mapping reuses firmware_port.servo_convention (the
+The servo-deg -> URDF-radian mapping reuses animation_tools.servo_convention (the
 same servo_to_radians + per-leg URDF axis sign the clip re-port uses); only the
 servo *degrees* differ in origin — here they come straight from the firmware.
 
@@ -18,11 +18,10 @@ import re
 import sys
 import time
 
-from firmware_port.servo_convention import (  # noqa: E402
+from animation_tools.servo_convention import (  # noqa: E402
     LEG_FL,
     LEG_FR,
     LEG_ID_TO_SIM_NAME,
-    LEG_ID_TO_URDF_AXIS_SIGN,
     LEG_RL,
     LEG_RR,
     servo_to_radians,
@@ -45,11 +44,32 @@ _LEG_IDS = (LEG_FR, LEG_FL, LEG_RR, LEG_RL)
 # lines the firmware emitted; we don't synthesize them.
 _OOR_RE = re.compile(r"\[OOR\] servo (\d+) requested ([-\d.]+)")
 
+# Cached axis signs from the URDF — computed once on first call.
+_axis_signs_cache = None
 
+
+def _build_urdf_axis_signs():
+    """Read hip/knee axis signs from the generated URDF."""
+    from pybullet_sim.paths import URDF_PATH
+    from pybullet_sim.urdf_io import _load_urdf_joints
+
+    joints = _load_urdf_joints(URDF_PATH)
+    out = {}
+    for leg_id, sim_name in LEG_ID_TO_SIM_NAME.items():
+        hip_axis = joints[f"{sim_name}_link2_joint"]["axis"]
+        out[leg_id] = 1 if hip_axis[1] >= 0.0 else -1
+    return out
+
+
+def _urdf_axis_sign(leg_id):
+    global _axis_signs_cache
+    if _axis_signs_cache is None:
+        _axis_signs_cache = _build_urdf_axis_signs()
+    return _axis_signs_cache[leg_id]
 def servo_angles_to_joint_targets(angles12):
     """12 firmware servo degrees -> {urdf_joint_name: radians}.
 
-    Mirrors firmware_port.clip_player.frame_to_joint_targets, but the servo
+    Mirrors animation_tools.clip_player.frame_to_joint_targets, but the servo
     degrees come straight from the firmware (already post-translateToServo), so
     this is only the servo-deg -> radian + URDF-axis-sign half.
     """
@@ -59,7 +79,7 @@ def servo_angles_to_joint_targets(angles12):
         thigh = angles12[leg_id * 3 + 1]
         knee = angles12[leg_id * 3 + 2]
         name = LEG_ID_TO_SIM_NAME[leg_id]
-        axis = LEG_ID_TO_URDF_AXIS_SIGN[leg_id]
+        axis = _urdf_axis_sign(leg_id)
         targets[f"{name}_link1_joint"] = servo_to_radians(
             hip
         )  # shoulder axis +Z uniform
@@ -110,6 +130,8 @@ class FirmwareSILDriver:
         clip_name,
         force,
         velocity,
+        kp=None,
+        kd=None,
         gui=True,
         on_step=None,
         timestep=1.0 / 240.0,
@@ -143,14 +165,19 @@ class FirmwareSILDriver:
             ).items():
                 idx = joint_map.get(name)
                 if idx is not None:
-                    p.setJointMotorControl2(
-                        robot_id,
-                        idx,
-                        p.POSITION_CONTROL,
+                    kwargs = dict(
+                        bodyUniqueId=robot_id,
+                        jointIndex=idx,
+                        controlMode=p.POSITION_CONTROL,
                         targetPosition=rad,
                         force=force,
                         maxVelocity=velocity,
                     )
+                    if kp is not None:
+                        kwargs["positionGain"] = kp
+                    if kd is not None:
+                        kwargs["velocityGain"] = kd
+                    p.setJointMotorControl2(**kwargs)
             p.stepSimulation()
             if step % 12 == 0:  # 240 Hz / 12 = 20 Hz visual update
                 apply_torque_colors(p, robot_id, joint_map)
@@ -169,6 +196,8 @@ class FirmwareSILDriver:
         gait_name,
         force,
         velocity,
+        kp=None,
+        kd=None,
         direction="FW",
         gui=True,
         on_step=None,
@@ -207,14 +236,19 @@ class FirmwareSILDriver:
             ).items():
                 idx = joint_map.get(name)
                 if idx is not None:
-                    p.setJointMotorControl2(
-                        robot_id,
-                        idx,
-                        p.POSITION_CONTROL,
+                    kwargs = dict(
+                        bodyUniqueId=robot_id,
+                        jointIndex=idx,
+                        controlMode=p.POSITION_CONTROL,
                         targetPosition=rad,
                         force=force,
                         maxVelocity=velocity,
                     )
+                    if kp is not None:
+                        kwargs["positionGain"] = kp
+                    if kd is not None:
+                        kwargs["velocityGain"] = kd
+                    p.setJointMotorControl2(**kwargs)
             p.stepSimulation()
             if step % 12 == 0:
                 apply_torque_colors(p, robot_id, joint_map)
@@ -246,9 +280,9 @@ def run_clip_sil(
         driver = FirmwareSILDriver()  # auto-builds fh_sim if stale/missing
     except ImportError as e:
         raise SystemExit(
-            f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
-            "play clips with the Python re-port instead:\n"
-            f"  python facehugger.py sim --clip {clip_name!r} --python-port"
+            f"{e}\n\nThe firmware driver is the default and requires a C++ toolchain.\n"
+            "Build the SIL:\n"
+            "  cd code/simulation/firmware_sil && cmake -S . -B build && cmake --build build"
         ) from e
     if clip_name not in driver.clip_names():
         raise KeyError(
@@ -282,6 +316,8 @@ def run_clip_sil(
             clip_name,
             cfg.servo_force,
             cfg.servo_velocity,
+            kp=cfg.kp,
+            kd=cfg.kd,
             gui=gui,
             on_step=_wrapped_on_step,
         )
@@ -310,9 +346,9 @@ def run_gait_sil(
         driver = FirmwareSILDriver()  # auto-builds fh_sim if stale/missing
     except ImportError as e:
         raise SystemExit(
-            f"{e}\n\nThe firmware driver is the default. Without a C++ toolchain, "
-            "run the gait with the Python re-port instead:\n"
-            f"  python facehugger.py sim --{gait_name} --python-port"
+            f"{e}\n\nThe firmware driver is the default and requires a C++ toolchain.\n"
+            "Build the SIL:\n"
+            "  cd code/simulation/firmware_sil && cmake -S . -B build && cmake --build build"
         ) from e
 
     robot_id, joint_map, debug_sliders = connect_and_setup(cfg, gui, float_mode=float_mode, debug=debug)
@@ -342,6 +378,8 @@ def run_gait_sil(
             gait_name,
             cfg.servo_force,
             cfg.servo_velocity,
+            kp=cfg.kp,
+            kd=cfg.kd,
             gui=gui,
             on_step=_wrapped_on_step,
             duration_s=None if gui else 3.0,  # headless: finite smoke run

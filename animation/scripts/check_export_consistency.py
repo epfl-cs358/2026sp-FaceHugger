@@ -34,7 +34,7 @@ _FW_PORT_PARENT = str(Path(__file__).resolve().parents[2] / "code" / "simulation
 if _FW_PORT_PARENT not in sys.path:
     sys.path.insert(0, _FW_PORT_PARENT)
 
-from firmware_port.exporter_parity import _frame_to_servo  # noqa: E402
+from animation_tools.exporter_parity import _frame_to_servo  # noqa: E402
 from servo_math import _scale_from_neutral  # noqa: E402
 
 # Float-vs-text round-trip tolerance for math-space degree comparison.

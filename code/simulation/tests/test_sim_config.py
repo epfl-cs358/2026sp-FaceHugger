@@ -56,7 +56,7 @@ def test_solver_section():
     with open(SIM_CONFIG_YAML) as f:
         cfg = yaml.safe_load(f)
     s = cfg["solver"]
-    for key in ("iterations", "substeps", "timestep"):
+    for key in ("iterations", "substeps"):
         assert key in s, f"Missing solver.{key}"
         assert isinstance(s[key], (int, float)), f"solver.{key} must be numeric"
 

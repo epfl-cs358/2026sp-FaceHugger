@@ -67,8 +67,8 @@ def test_sil_response_matches_port_response_between_frames():
     test to which CALIB header SIL was compiled with.
     """
     drv = _driver_or_skip()
-    from firmware_port.clip_loader import get_clip_by_name, load_clips_all_h
-    from firmware_port.servo_convention import (
+    from animation_tools.clip_loader import get_clip_by_name, load_clips_all_h
+    from animation_tools.servo_convention import (
         LEG_FL,
         LEG_FR,
         LEG_RL,

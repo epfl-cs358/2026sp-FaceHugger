@@ -29,7 +29,7 @@ Two independent checks guard the clip export. Run them before flashing a new cli
 
 ```bash
 cd code/simulation
-python -m urdf_gen.verify_export_parity [--export-dir PATH]
+python -m animation_tools.export_parity [--export-dir PATH]
 ```
 
 `--export-dir` defaults to the directory holding `clips_all.h`. Exit code `0` means all formats agree, `1` means a mismatch, `2` means the files could not be read.

@@ -42,7 +42,7 @@ from urdf_gen.lib.urdf_math import (
     _rot_to_urdf_rpy,
     sub,
 )
-from urdf_gen.lib.urdf_writer import URDF
+from urdf_gen.lib.urdf_writer import CollisionPrimitive, URDF
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +146,8 @@ class _GenState:
     knee_servo_rpy: tuple
     # discovered servo mesh filename (re-origined to ServoMountPoint)
     servo_mesh_name: str | None
+    # foot tip in link3-mesh-local frame (mm), computed once
+    foot_tip_link3_mm: list | None
 
 
 def _build_state(export: dict, cfg: dict) -> _GenState:
@@ -223,12 +225,13 @@ def _build_state(export: dict, cfg: dict) -> _GenState:
             servo_mesh_name = mesh_name
             break
 
-    # `visual_flip_rpy_deg` was a workaround for when servos were emitted with
-    # CAD-source orientation that pointed the wrong way. With the standalone-
-    # servos design (post-Phase G) the mesh is re-origined to ServoMountPoint
-    # and placed at world ServoMountPoint per leg, so no blanket orientation
-    # hack is needed. Field is read for backward yaml compat but not applied.
-    _ = servo_cfg.get("visual_flip_rpy_deg", [0.0, 0.0, 0.0])
+    # Foot tip in link3-mesh-local frame (mm). Prefer the explicit Fusion
+    # construction point; fall back to STL distance-from-origin heuristic.
+    foot_tip_mm = _foot_tip_from_export(export)
+    if foot_tip_mm is None:
+        foot_tip_mm = _foot_tip_from_stl(
+            GENERATED_DIR / cfg["mesh_dir"].rstrip("/\\") / "leg_lower.stl"
+        )
 
     return _GenState(
         cfg=cfg,
@@ -253,6 +256,7 @@ def _build_state(export: dict, cfg: dict) -> _GenState:
         hip_servo_rpy=_relative_rpy(R_servo2),
         knee_servo_rpy=_relative_rpy(R_servo3),
         servo_mesh_name=servo_mesh_name,
+        foot_tip_link3_mm=foot_tip_mm,
     )
 
 
@@ -623,6 +627,46 @@ def _emit_leg(urdf: URDF, leg: dict, state: _GenState) -> None:
             # compat when include_servo_mass is false).
             mass += servo_mass_kg
 
+        # Collision override: analytic primitives replace STL meshes.
+        # - link1, link2: box along the bone direction
+        # - link3: sphere at foot tip (single clean contact point)
+        collision_override = None
+        if link_key == "link3" and state.foot_tip_link3_mm is not None:
+            ft = state.foot_tip_link3_mm
+            if side == "R":
+                ft = [-ft[0], ft[1], -ft[2]]
+            collision_override = CollisionPrimitive(
+                shape="capsule",
+                origin_xyz_mm=list(ft),
+                radius=0.005,
+                length=0.005,
+                origin_rpy=(1.5708, 0.0, 0.0),  # Rx(90°) — align capsule along Y
+            )
+        elif link_key in ("link1", "link2"):
+            # Bone vector from this link's origin to the next joint.
+            # link1: joint_defs[1] = Link2Revolute offset from link1 frame
+            # link2: joint_defs[2] = Link3Revolute offset from link2 frame
+            link_idx = int(link_key[-1])  # "1" or "2"
+            bone = list(state.joint_defs[link_idx].offset_from_parent_mm)
+            if side == "R":
+                bone[0] = -bone[0]
+            bx, by, bz = bone
+            bone_len = math.hypot(bx, math.hypot(by, bz))
+            if bone_len > 1e-6:
+                # Box centered at midpoint, +X aligned with bone direction.
+                # URDF RPY: Rz(yaw)*Ry(pitch)*Rx(0) maps +X to bone unit vector.
+                mid = [bx / 2, by / 2, bz / 2]
+                nx, ny, nz = bx / bone_len, by / bone_len, bz / bone_len
+                pitch = math.asin(max(-1.0, min(1.0, -nz)))
+                cp = math.cos(pitch)
+                yaw = math.atan2(ny, nx) if abs(cp) > 1e-9 else 0.0
+                collision_override = CollisionPrimitive(
+                    shape="box",
+                    origin_xyz_mm=mid,
+                    origin_rpy=(0.0, pitch, yaw),
+                    size_xyz_mm=[bone_len, 15.0, 15.0],
+                )
+
         urdf.link(
             link_name,
             mesh_name,
@@ -633,6 +677,7 @@ def _emit_leg(urdf: URDF, leg: dict, state: _GenState) -> None:
             origin_shift_mm=_mesh_shift(state.export, mesh_name),
             extra_visuals=link_extra_servos.get(link_key, []),
             mesh_rpy=link_mesh_rpy.get(link_key),
+            collision_override=collision_override,
         )
         # Audit tracking
         sv_count = len(link_extra_servos.get(link_key, []))
@@ -653,6 +698,7 @@ def generate(export: dict, cfg: dict, out_path: Path):
     urdf.save(out_path)
     _print_mass_audit_table(state)
     _print_invariant_check(state.occs, cfg, state.joint_defs)
+    _print_limits_summary(state)
 
 
 def _print_mass_audit_table(state: _GenState):
@@ -697,6 +743,85 @@ def _print_invariant_check(occs: list, cfg: dict, joint_defs: list):
             f"  {leg_id:>2}: ({mount_pos[0]:+7.2f}, {mount_pos[1]:+7.2f}, "
             f"{mount_pos[2]:+7.2f})"
         )
+
+
+# ---------------------------------------------------------------------------
+# Limits summary — per-leg, per-joint across three angle spaces
+# ---------------------------------------------------------------------------
+
+def _print_limits_summary(state: _GenState):
+    """Print per-leg, per-joint limits across three angle spaces.
+
+    Columns:
+      Fusion   — absolute CAD joint angles from the Fusion export (degrees)
+      URDF     — <limit lower/upper> as written to facehugger.urdf (displacement from rest)
+      Math     — absolute math-space angle = rest + URDF limit (body frame, CCW +)
+    """
+    joint_defs = state.joint_defs
+    fl_rest_rad = state.fl_rest_rad
+
+    def _norm(a):
+        a = math.fmod(a, 360.0)
+        if a > 180.0:
+            a -= 360.0
+        elif a <= -180.0:
+            a += 360.0
+        return a
+
+    fusion_lo = [
+        math.degrees(joint_defs[0].limits_rad["min"]),
+        joint_defs[1].limits_deg[0],
+        joint_defs[2].limits_deg[0],
+    ]
+    fusion_hi = [
+        math.degrees(joint_defs[0].limits_rad["max"]),
+        joint_defs[1].limits_deg[1],
+        joint_defs[2].limits_deg[1],
+    ]
+
+    print()
+    print("=== Joint limits — Fusion → URDF → Math-space ===")
+    print("    Fusion = absolute CAD joint angles (FL reference for link1)")
+    print("    URDF   = <limit lower/upper> displacement from rest")
+    print("    Math   = rest + URDF limit  (absolute, body frame, CCW +)")
+
+    joint_names = ["link1 (shoulder)", "link2 (thigh)", "link3 (knee)"]
+
+    for joint_idx, jname in enumerate(joint_names):
+        print()
+        print(f"  ── {jname} ──")
+        hdr = f"  {'Leg':>4s}  {'Fusion':>16s}  {'URDF':>16s}  {'Math':>16s}"
+        print(hdr)
+        print(f"  {'':4s}  {'lo':>7s} {'hi':>7s}   {'lo':>7s} {'hi':>7s}   {'lo':>7s} {'hi':>7s}")
+        print("  " + "─" * (len(hdr) - 2))
+
+        for leg in ("fr", "fl", "br", "bl"):
+            side = "R" if leg in ("fr", "bl") else "L"
+            is_left_body = leg.endswith("l")
+            rest_deg = math.degrees(_shoulder_rest_for(leg, fl_rest_rad))
+
+            if joint_idx == 0:
+                f_lo, f_hi = fusion_lo[0], fusion_hi[0]
+                if is_left_body:
+                    u_lo, u_hi = state.shoulder_lower_deg, state.shoulder_upper_deg
+                else:
+                    u_lo, u_hi = -state.shoulder_upper_deg, -state.shoulder_lower_deg
+                m_lo = _norm(rest_deg + u_lo)
+                m_hi = _norm(rest_deg + u_hi)
+            else:
+                f_lo, f_hi = fusion_lo[joint_idx], fusion_hi[joint_idx]
+                if side == "R":
+                    u_lo, u_hi = -f_hi, -f_lo
+                else:
+                    u_lo, u_hi = f_lo, f_hi
+                m_lo, m_hi = u_lo, u_hi
+
+            print(
+                f"  {leg.upper():>4s}  "
+                f"{f_lo:>+7.0f}° {f_hi:>+7.0f}°   "
+                f"{u_lo:>+7.0f}° {u_hi:>+7.0f}°   "
+                f"{m_lo:>+7.0f}° {m_hi:>+7.0f}°"
+            )
 
 
 # ---------------------------------------------------------------------------

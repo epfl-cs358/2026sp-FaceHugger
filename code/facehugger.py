@@ -146,7 +146,7 @@ def _list_clips():
     """Print the clip names + ids the sim/robot will run, parsed from the
     firmware clips_all.h FH_CLIPS[] table (no C++ toolchain needed)."""
     sys.path.insert(0, str(SIM_DIR))
-    from firmware_port.clip_loader import load_clips_all_h
+    from animation_tools.clip_loader import load_clips_all_h
 
     header = REPO_ROOT / "code" / "firmware" / "src" / "nervous_system" / "clips_all.h"
     if not header.is_file():
@@ -195,11 +195,8 @@ def _require_sim_deps(need_build):
         missing.append("pybind11")
     if not missing:
         return
-    extra = None
-    if "pybind11" in missing and "pybullet" not in missing:
-        extra = "Or skip the C++ toolchain: rerun with --python-port"
     _die_missing(
-        ", ".join(missing), "Install the sim dependencies:", SIM_INSTALL, extra
+        ", ".join(missing), "Install the sim dependencies:", SIM_INSTALL
     )
 
 
@@ -212,18 +209,8 @@ def cmd_sim(args):
         or getattr(args, "app", False)
         or getattr(args, "panel", False)
     )
-    # Guard: --python-port is only for clips, not gaits.
-    if getattr(args, "python_port", False) and (args.walk or args.trot):
-        from argparse import ArgumentParser
-
-        p = ArgumentParser()
-        p.error(
-            "Python-port gaits were removed (no parity contract with firmware).\n"
-            "Build the SIL: `cd code/simulation/firmware_sil && cmake -S . -B build && cmake --build build`.\n"
-            "Then re-run without --python-port."
-        )
-    # Default path (non --python-port) and any serve build the firmware SIL.
-    _require_sim_deps(need_build=serving or not getattr(args, "python_port", False))
+    # All paths require the firmware SIL to be built.
+    _require_sim_deps(need_build=serving or True)
     if serving:
         # Drive the sim from an external client (app / panel) over the T: WebSocket
         # API instead of from CLI flags. GUI on by default; --headless turns it off.
@@ -248,8 +235,6 @@ def cmd_sim(args):
         cli.append("--monitor")
     if args.log:
         cli.append("--log")
-    if args.python_port:
-        cli.append("--python-port")
     if args.walk:
         cli.append("--walk")
     if args.trot:
@@ -578,13 +563,6 @@ def main():
         "--log",
         action="store_true",
         help="record per-step torque/current → summary + sim_log.csv + sim_log.png",
-    )
-    ps.add_argument(
-        "--python-port",
-        dest="python_port",
-        action="store_true",
-        help="drive clips AND gaits with the Python re-port instead of the default "
-        "exact compiled firmware (firmware_sil); use when you have no C++ toolchain",
     )
     ps.add_argument(
         "--walk",

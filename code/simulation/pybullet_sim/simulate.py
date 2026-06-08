@@ -19,9 +19,10 @@ Geometry sourcing (no duplication of constants in Python):
 """
 
 import argparse
+import sys
 
 from .kinematics import build_config
-from .runner import run_clip, run_stand
+from .runner import run_stand
 
 
 def main():
@@ -42,7 +43,7 @@ def main():
     parser.add_argument(
         "--clip",
         metavar="NAME",
-        help="play a named animation clip from clips_all.h instead of a gait",
+        help="play a named animation clip from clips_all.h",
     )
     parser.add_argument(
         "--loop",
@@ -69,35 +70,13 @@ def main():
         help="record per-joint torque/current every step; on exit print a "
         "summary table and write sim_log.csv + sim_log.png (additive to --monitor)",
     )
-    parser.add_argument(
-        "--python-port",
-        dest="python_port",
-        action="store_true",
-        help="drive clips AND gaits with the Python re-port (firmware_port / the "
-        "Python IK gait) instead of the default — which is the EXACT compiled firmware "
-        "(firmware_sil, auto-built). Use --python-port when you have no C++ toolchain.",
-    )
     args = parser.parse_args()
+
+    from firmware_sil import run_clip_sil as clip_fn  # noqa: N813
+    from firmware_sil import run_gait_sil as gait_fn  # noqa: N813
 
     cfg = build_config()
     gui = not args.headless
-
-    # Dispatch: --python-port uses pybullet_sim.run_clip / run_gait (Python re-port);
-    # default uses firmware_sil.run_clip_sil / run_gait_sil (compiled firmware).
-    # Importing firmware_sil only when the SIL path is taken keeps the Python
-    # re-port runnable on machines without a C++ toolchain.
-    if args.python_port:
-        clip_fn = run_clip
-
-        def gait_fn(*_a, **_kw):
-            raise SystemExit(
-                "Python-port gaits were removed (no parity contract with firmware).\n"
-                "Build the SIL: `cd code/simulation/firmware_sil && cmake -S . -B build && cmake --build build`.\n"
-                "Then re-run without --python-port."
-            )
-    else:
-        from firmware_sil import run_clip_sil as clip_fn  # noqa: N813
-        from firmware_sil import run_gait_sil as gait_fn  # noqa: N813
 
     if args.clip:
         kwargs = dict(
@@ -107,8 +86,6 @@ def main():
             monitor=args.monitor,
             log=args.log,
         )
-        if args.python_port:
-            kwargs["loop"] = args.loop  # Python-port-only
         clip_fn(cfg, args.clip, debug=args.debug, **kwargs)
     elif args.walk:
         gait_fn(

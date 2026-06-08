@@ -23,8 +23,8 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[2]  # scripts/ -> animation/ -> repo root
 sys.path.insert(0, str(_REPO_ROOT / "code" / "simulation"))
 
-from firmware_port.clip_loader import load_clips_all_h
-from firmware_port.servo_convention import (
+from animation_tools.clip_loader import load_clips_all_h
+from animation_tools.servo_convention import (
     CALIB_KNEE,
     CALIB_THIGH,
     HIP_CLAMP_FROM_NINETY,

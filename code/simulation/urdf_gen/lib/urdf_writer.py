@@ -2,9 +2,27 @@
 final XML. Depends only on the formatting helpers in `urdf_math`.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from .urdf_math import _euler_to_rot, clean_axis, deg2rad, fmt_rpy, fmt_xyz
+
+
+@dataclass
+class CollisionPrimitive:
+    """Analytic collision geometry to replace the STL mesh <collision>.
+
+    Shapes mirror URDF primitives:
+      - sphere:  origin_xyz_mm, radius (metres)
+      - capsule: origin_xyz_mm, origin_rpy, radius (metres), length (metres)
+      - box:     origin_xyz_mm, origin_rpy (radians), size_xyz_mm (metres)
+    """
+    shape: str  # "sphere" | "capsule" | "box"
+    origin_xyz_mm: list  # [x, y, z] mm in link frame
+    origin_rpy: tuple = (0.0, 0.0, 0.0)  # radians
+    radius: float = 0.0  # sphere / capsule radius (metres)
+    length: float = 0.0  # capsule cylindrical section (metres)
+    size_xyz_mm: list | None = None  # [x, y, z] mm for box
 
 
 class URDF:
@@ -31,6 +49,7 @@ class URDF:
         origin_shift_mm: list | None = None,
         extra_visuals: list | None = None,
         mesh_rpy: tuple | None = None,
+        collision_override: CollisionPrimitive | None = None,
     ):
         """Emit a <link> block.
 
@@ -54,6 +73,11 @@ class URDF:
         180° about its own Y axis so the leg geometry extends in the right
         direction. Inertia tensor is left as-is — off-diagonal sign flips
         are 2nd-order and don't affect a stand/walk smoke test.
+
+        `collision_override` (optional) replaces the STL mesh collision with
+        an analytic primitive (sphere / box). The primitive's origin is in the
+        link frame (mm, converted to metres). When None, the STL mesh is used
+        for collision as before.
         """
         if origin_shift_mm is None:
             origin_shift_mm = [0.0, 0.0, 0.0]
@@ -116,10 +140,33 @@ class URDF:
             ]
         self.lines += [
             "    <collision>",
-            f'      <origin xyz="0 0 0" rpy="{primary_rpy_str}"/>',
-            "      <geometry>",
-            f'        <mesh filename="{mesh_dir}{mesh}" scale="0.001 0.001 0.001"/>',
-            "      </geometry>",
+        ]
+        if collision_override is not None:
+            ov = collision_override
+            rpy_str = " ".join(f"{v:.6f}" for v in ov.origin_rpy)
+            xyz = fmt_xyz(ov.origin_xyz_mm)
+            self.lines += [
+                f'      <origin xyz="{xyz}" rpy="{rpy_str}"/>',
+                "      <geometry>",
+            ]
+            if ov.shape == "sphere":
+                self.lines += [f'        <sphere radius="{ov.radius}"/>']
+            elif ov.shape == "capsule":
+                self.lines += [f'        <capsule radius="{ov.radius}" length="{ov.length}"/>']
+            elif ov.shape == "box":
+                size_str = " ".join(f"{s * 1e-3:.6f}" for s in ov.size_xyz_mm)
+                self.lines += [f'        <box size="{size_str}"/>']
+            self.lines += [
+                "      </geometry>",
+            ]
+        else:
+            self.lines += [
+                f'      <origin xyz="0 0 0" rpy="{primary_rpy_str}"/>',
+                "      <geometry>",
+                f'        <mesh filename="{mesh_dir}{mesh}" scale="0.001 0.001 0.001"/>',
+                "      </geometry>",
+            ]
+        self.lines += [
             "    </collision>",
             "  </link>",
         ]

@@ -236,14 +236,14 @@ def test_body_rotation_uniform_mathspace_yaw():
     the exact angles are illustrative, the direction is the convention).
 
     A pure body yaw rotates every foot the same way, so the exported math-space
-    shoulder delta-from-neutral must be IDENTICAL for all four legs. The rig's
-    link1 driver writes the bone-local Z rotation = the true CCW delta times the
-    bone axis_sign (URDF link1 <axis z>: fr -1, fl +1, br +1, bl -1); the export
-    must cancel that sign so math-space comes out uniform.
+    shoulder delta-from-neutral must be IDENTICAL for all four legs. With
+    _LINK1_DELTA_SIGN all +1 (2026-06-04), the rig's link1 bones all encode yaw
+    in the same direction — no per-leg sign cancellation needed. The raw bone
+    delta passes through unflipped into math-space.
 
     Since BR's shoulder was un-mirrored (2026-05-25, slope -1 -> +1), all four
     shoulder SERVOS now move the same direction for a body yaw too. Regression
-    for both the FL inversion and the BR-mirror.
+    for both the uniform-math-space convention and the BR-mirror.
     """
     import sys
     from pathlib import Path as _Path
@@ -259,9 +259,11 @@ def test_body_rotation_uniform_mathspace_yaw():
     _fw = str(_Path(__file__).resolve().parents[3] / "code" / "simulation")
     if _fw not in sys.path:
         sys.path.insert(0, _fw)
-    from firmware_port.exporter_parity import _frame_to_servo
+    from animation_tools.exporter_parity import _frame_to_servo
 
-    axis_sign = {"fr": -1, "fl": +1, "br": +1, "bl": -1}
+    # With _LINK1_DELTA_SIGN all +1, the rig's link1 bones encode yaw
+    # uniformly — no per-leg axis sign needed.
+    axis_sign = {"fr": +1, "fl": +1, "br": +1, "bl": +1}
     n = CONVENTION["neutral_joint_deg"]
     ccw = -12.0  # feet counter-rotate for a body CCW yaw
 

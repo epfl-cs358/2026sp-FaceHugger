@@ -117,9 +117,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="-0.023460 0.011198 -0.015799" rpy="0.000000 0.546109 2.696268"/>
       <geometry>
-        <mesh filename="exported_meshes/leg_shoulder_L.stl" scale="0.001 0.001 0.001"/>
+        <box size="0.060840 0.015000 0.015000"/>
       </geometry>
     </collision>
   </link>
@@ -136,9 +136,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="-0.037350 0.000103 0.000000" rpy="0.000000 -0.000000 3.138848"/>
       <geometry>
-        <mesh filename="exported_meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+        <box size="0.074700 0.015000 0.015000"/>
       </geometry>
     </collision>
   </link>
@@ -161,9 +161,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="-0.078220 -0.020510 0.000000" rpy="1.570800 0.000000 0.000000"/>
       <geometry>
-        <mesh filename="exported_meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+        <capsule radius="0.005" length="0.005"/>
       </geometry>
     </collision>
   </link>
@@ -209,9 +209,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="-0.023460 0.011198 -0.015799" rpy="0.000000 0.546109 2.696268"/>
       <geometry>
-        <mesh filename="exported_meshes/leg_shoulder_L.stl" scale="0.001 0.001 0.001"/>
+        <box size="0.060840 0.015000 0.015000"/>
       </geometry>
     </collision>
   </link>
@@ -228,9 +228,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="-0.037350 0.000103 0.000000" rpy="0.000000 -0.000000 3.138848"/>
       <geometry>
-        <mesh filename="exported_meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+        <box size="0.074700 0.015000 0.015000"/>
       </geometry>
     </collision>
   </link>
@@ -253,9 +253,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="-0.078220 -0.020510 0.000000" rpy="1.570800 0.000000 0.000000"/>
       <geometry>
-        <mesh filename="exported_meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+        <capsule radius="0.005" length="0.005"/>
       </geometry>
     </collision>
   </link>
@@ -301,9 +301,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="0.023460 0.011198 -0.015799" rpy="0.000000 0.546109 0.445325"/>
       <geometry>
-        <mesh filename="exported_meshes/leg_shoulder_R.stl" scale="0.001 0.001 0.001"/>
+        <box size="0.060840 0.015000 0.015000"/>
       </geometry>
     </collision>
   </link>
@@ -320,9 +320,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0.000000 3.141593 0.000000"/>
+      <origin xyz="0.037350 0.000103 0.000000" rpy="0.000000 -0.000000 0.002744"/>
       <geometry>
-        <mesh filename="exported_meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+        <box size="0.074700 0.015000 0.015000"/>
       </geometry>
     </collision>
   </link>
@@ -345,9 +345,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0.000000 3.141593 0.000000"/>
+      <origin xyz="0.078220 -0.020510 -0.000000" rpy="1.570800 0.000000 0.000000"/>
       <geometry>
-        <mesh filename="exported_meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+        <capsule radius="0.005" length="0.005"/>
       </geometry>
     </collision>
   </link>
@@ -393,9 +393,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="0.023460 0.011198 -0.015799" rpy="0.000000 0.546109 0.445325"/>
       <geometry>
-        <mesh filename="exported_meshes/leg_shoulder_R.stl" scale="0.001 0.001 0.001"/>
+        <box size="0.060840 0.015000 0.015000"/>
       </geometry>
     </collision>
   </link>
@@ -412,9 +412,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0.000000 3.141593 0.000000"/>
+      <origin xyz="0.037350 0.000103 0.000000" rpy="0.000000 -0.000000 0.002744"/>
       <geometry>
-        <mesh filename="exported_meshes/leg_upper.stl" scale="0.001 0.001 0.001"/>
+        <box size="0.074700 0.015000 0.015000"/>
       </geometry>
     </collision>
   </link>
@@ -437,9 +437,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0.000000 3.141593 0.000000"/>
+      <origin xyz="0.078220 -0.020510 -0.000000" rpy="1.570800 0.000000 0.000000"/>
       <geometry>
-        <mesh filename="exported_meshes/leg_lower.stl" scale="0.001 0.001 0.001"/>
+        <capsule radius="0.005" length="0.005"/>
       </geometry>
     </collision>
   </link>

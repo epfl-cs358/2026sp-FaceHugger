@@ -61,44 +61,6 @@ def test_cli_help_lists_subcommands_without_view():
     assert "all" not in r.stdout  # folded away: use `urdf` then `sim`
 
 
-def test_clip_playback_headless_runs():
-    """Python re-port pipeline (--python-port): load clips_all.h, build config from the
-    URDF, connect DIRECT, play the clip, disconnect. Uses --python-port so this stays
-    toolchain-free; the default (firmware) clip path is covered by the SIL tests."""
-    r = _run(
-        [
-            FACEHUGGER,
-            "sim",
-            "--clip",
-            CLIP,
-            "--headless",
-            "--settle",
-            "0",
-            "--python-port",
-        ]
-    )
-    assert r.returncode == 0, r.stderr
-    assert CLIP in r.stdout  # "[clip] playing 'wave' (... ms)"
-
-
-def test_clip_monitor_prints_current_status():
-    r = _run(
-        [
-            FACEHUGGER,
-            "sim",
-            "--clip",
-            CLIP,
-            "--headless",
-            "--settle",
-            "0",
-            "--python-port",
-            "--monitor",
-        ]
-    )
-    assert r.returncode == 0, r.stderr
-    assert "est_I=" in r.stdout  # the torque/current status line
-
-
 def test_parity_check_passes():
     script = _find("export_parity.py")
     r = _run([script])

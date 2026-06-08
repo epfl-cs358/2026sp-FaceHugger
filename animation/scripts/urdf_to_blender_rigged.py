@@ -997,10 +997,11 @@ def add_link1_yaw_drivers(
       `(foot_world − shoulder_world)` since both XY are shifted by
       the same body_bottom XY (=0); the atan2 of that is the world
       yaw of the rest foot direction.
-    * `axis_sign = sign(joint.axis.z)` absorbs the per-side joint axis
-      flip: bone-local +Z = world +Z for L-side legs (FL, BR;
-      axis_sign +1) and = world −Z for R-side legs (FR, BL;
-      axis_sign −1).
+    * `axis_sign = sign(joint.axis.z)` = +1 for all four legs because
+      every link1 URDF axis is (0,0,1). The per-side axis flip only
+      applies to link2/link3 — link1 bones share a uniform +Z
+      orientation, so a positive bone-local Z rotation equals a
+      positive (CCW) yaw for every leg.
 
     To get the foot position in `body_ctrl` LOCAL space, the function
     creates a `foot_local_<leg>` PLAIN_AXES Empty per leg, parented

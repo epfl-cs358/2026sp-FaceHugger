@@ -18,15 +18,24 @@ import math
 
 from .paths import TIMESTEP
 
-STALL_TORQUE_NM = 2.94  # QYRC DSS-230MG 30 kg·cm stall (== servo.effort_nm)
 STALL_CURRENT_A = 2.0  # QYRC DSS-230MG — ~2 A max draw at stall
 CURRENT_LIMIT_A = 10.0  # supply / multiplexer budget (12 servos × ~0.8 A realistic avg)
-STALL_WARN_NM = 2.5  # ~85% of stall — flag a joint whose applied torque exceeds this
-# Continuous-torque reference. The DSS-230MG datasheet lists STALL only; hobby
-# metal-gear servos sustain only ~1/3 of stall continuously, so this is a rule of
-# thumb (~0.98 N·m) — refine once measured. Separates a safe sustained hold from
-# burst-only torque in the coloring/monitor (stall = the locked-rotor burst max).
-CONT_TORQUE_NM = round(STALL_TORQUE_NM / 3.0, 2)
+
+# Module-level torque thresholds — call set_stall_torque() once at startup to
+# sync them with facehugger_config.yaml's servo.effort_nm. Without a call,
+# defaults match the DSS-230MG spec (2.94 N·m).
+STALL_TORQUE_NM = 2.94
+CONT_TORQUE_NM = 0.98   # ≈ stall / 3
+STALL_WARN_NM = 2.5     # ~85% of stall
+
+
+def set_stall_torque(stall_torque_nm):
+    """Update all torque thresholds from the servo's actual stall torque.
+    Call once at sim startup with cfg.servo_force from facehugger_config.yaml."""
+    global STALL_TORQUE_NM, CONT_TORQUE_NM, STALL_WARN_NM
+    STALL_TORQUE_NM = stall_torque_nm
+    CONT_TORQUE_NM = round(stall_torque_nm / 3.0, 2)
+    STALL_WARN_NM = round(stall_torque_nm * 0.85, 2)
 
 _LEGS = ("fr", "fl", "br", "bl")
 

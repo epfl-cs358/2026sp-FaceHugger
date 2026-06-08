@@ -130,12 +130,8 @@ servo:
   effort_nm: 2.94       # QYRC DSS-230MG — 30 kg·cm stall torque to N·m
   velocity_rad_s: 5.0
 
-  # Uniform mesh-local rotation applied to every chassis-fixed shoulder
-  # servo <visual>. Useful when the CAD's servo model points the wrong
-  # way — saves a CAD rename/re-export pass. Applied AFTER the source
-  # rotation, so a 180° X flip inverts the servo around its own shaft-
-  # axis direction. Leave at [0, 0, 0] to trust the CAD verbatim.
-  visual_flip_rpy_deg: [180, 0, 0]
+  # visual_flip_rpy_deg removed (was [180, 0, 0]) — the standalone-servo
+  # design places each servo at its CAD-world origin, so no uniform flip is needed.
 
 # ---------------------------------------------------------------------------
 # Reference clip traces for SIL regression testing.

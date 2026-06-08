@@ -38,7 +38,7 @@ def reset_to_stance(robot_id, joint_map, stance):
         p.resetJointState(robot_id, idx, stance[leg_id][jtype])
 
 
-def apply_leg_pose(robot_id, joint_map, per_leg_stance, force, velocity):
+def apply_leg_pose(robot_id, joint_map, per_leg_stance, force, velocity, kp=None, kd=None):
     for name, idx in joint_map.items():
         info = p.getJointInfo(robot_id, idx)
         if info[2] == p.JOINT_FIXED:
@@ -47,27 +47,37 @@ def apply_leg_pose(robot_id, joint_map, per_leg_stance, force, velocity):
         jtype = _joint_type_from_name(name)
         if jtype is None or leg not in per_leg_stance:
             continue
-        p.setJointMotorControl2(
-            robot_id,
-            idx,
-            p.POSITION_CONTROL,
+        kwargs = dict(
+            bodyUniqueId=robot_id,
+            jointIndex=idx,
+            controlMode=p.POSITION_CONTROL,
             targetPosition=per_leg_stance[leg][jtype],
             force=force,
             maxVelocity=velocity,
         )
+        if kp is not None:
+            kwargs["positionGain"] = kp
+        if kd is not None:
+            kwargs["velocityGain"] = kd
+        p.setJointMotorControl2(**kwargs)
 
 
-def apply_joint_targets(robot_id, joint_map, targets, force, velocity):
+def apply_joint_targets(robot_id, joint_map, targets, force, velocity, kp=None, kd=None):
     """targets = {joint_name: angle}"""
     for name, angle in targets.items():
         idx = joint_map.get(name)
         if idx is None:
             continue
-        p.setJointMotorControl2(
-            robot_id,
-            idx,
-            p.POSITION_CONTROL,
+        kwargs = dict(
+            bodyUniqueId=robot_id,
+            jointIndex=idx,
+            controlMode=p.POSITION_CONTROL,
             targetPosition=angle,
             force=force,
             maxVelocity=velocity,
         )
+        if kp is not None:
+            kwargs["positionGain"] = kp
+        if kd is not None:
+            kwargs["velocityGain"] = kd
+        p.setJointMotorControl2(**kwargs)

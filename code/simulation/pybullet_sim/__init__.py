@@ -23,16 +23,19 @@ _LAZY: dict[str, str] = {
     "apply_leg_pose": "motor",
     "build_joint_map": "motor",
     "reset_to_stance": "motor",
-    "run_clip": "runner",
     "run_stand": "runner",
     "connect_and_setup": "scene",
     "print_banner": "scene",
     "settle": "scene",
     "SimLogger": "sim_monitor",
     "band": "sim_monitor",
+    "estimate_current_a": "sim_monitor",
     "format_status": "sim_monitor",
     "read_joint_pos_deg": "sim_monitor",
     "read_joint_torques": "sim_monitor",
+    "set_stall_torque": "sim_monitor",
+    "setup_step_hook": "sim_monitor",
+    "finalize_log": "sim_monitor",
 }
 
 
@@ -64,7 +67,7 @@ __all__ = [
     "read_joint_pos_deg",
     "read_joint_torques",
     "reset_to_stance",
-    "run_clip",
     "run_stand",
+    "set_stall_torque",
     "settle",
 ]
