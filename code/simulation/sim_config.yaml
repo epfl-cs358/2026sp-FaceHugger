@@ -2,9 +2,9 @@
 # All values in SI units (kg, m, s, N, N·m, …) unless noted.
 
 contact:
-  stiffness: 80000
-  damping: 1000
-  restitution: 0.1
+  stiffness: 20000
+  damping: 500
+  restitution: 0.0
 
 motor:
   position_gain: 0.1
