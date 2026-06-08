@@ -2,6 +2,20 @@
 
 CAD, firmware, simulation, and animation tooling for the FaceHugger quadruped.
 
+## See it in action
+
+![FaceHugger at rest](wiki/assets/img/general-robot-pics-videos/main-robot-stance.jpg)
+*FaceHugger at rest — 12 servos, ESP32 brain, PCA9685 driver*
+
+<video src="https://raw.githubusercontent.com/epfl-cs358/2026sp-FaceHugger/main/wiki/assets/img/general-robot-pics-videos/general-moves.MOV" controls width="100%"></video>
+*General moves — walk, trot, and wave clips*
+
+<video src="https://raw.githubusercontent.com/epfl-cs358/2026sp-FaceHugger/main/wiki/assets/img/general-robot-pics-videos/robot-dancing.MOV" controls width="100%"></video>
+*Dancing clip*
+
+<video src="https://raw.githubusercontent.com/epfl-cs358/2026sp-FaceHugger/main/wiki/assets/img/general-robot-pics-videos/robot-flipping.MOV" controls width="100%"></video>
+*Auto-flip — the robot detects when it's upside-down and mirrors its pose*
+
 ## Documentation
 
 Project docs are a MkDocs Material wiki under [`wiki/`](wiki/).

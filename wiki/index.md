@@ -99,6 +99,20 @@ This wiki is two things at once: a **build guide** if you want to reproduce or a
 
 </div>
 
+## See it in action
+
+![FaceHugger at rest](assets/img/general-robot-pics-videos/main-robot-stance.jpg)
+*FaceHugger at rest — 12 servos, ESP32 brain, PCA9685 driver*
+
+<video src="assets/img/general-robot-pics-videos/general-moves.MOV" controls width="100%"></video>
+*General moves — walk, trot, and wave clips*
+
+<video src="assets/img/general-robot-pics-videos/robot-dancing.MOV" controls width="100%"></video>
+*Dancing clip*
+
+<video src="assets/img/general-robot-pics-videos/robot-flipping.MOV" controls width="100%"></video>
+*Auto-flip — the robot detects when it's upside-down and mirrors its pose*
+
 ## The robot at a glance
 
 FaceHugger is driven by an ESP32 that talks to twelve servos (three per leg) through a PCA9685 driver. A mobile app and a browser panel send high-level commands over WebSocket, and the firmware turns them into leg motion using phase-based gait schedules and baked animation clips, with no runtime inverse kinematics in the locomotion path. The same robot model drives a PyBullet simulation that runs the *exact* firmware code, so motion can be designed and validated before it ever reaches hardware.
