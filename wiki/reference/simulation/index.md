@@ -24,6 +24,16 @@ flowchart LR
 
 The URDF is the kinematic source of truth (see [Conventions](../conventions.md) for the angle spaces and per-leg servo mapping that the sim, firmware, and exporter all share). The simulation consumes that URDF for geometry and the compiled firmware for behaviour.
 
+## Limitations
+
+The simulation is a faithful reproduction of the firmware's servo-level motion — clips and gaits issue byte-identical servo commands to what the real robot would receive. However, the physics fidelity has known gaps:
+
+- **Contact model**: Foot-ground contact uses analytic collision shapes (capsules) rather than the robot's actual flat rubber pads. This gives stable single-point contacts that avoid mesh-on-plane jitter, but does not capture the full-pad surface friction and deformation of real rubber.
+
+- **Body dynamics**: The simulated robot has a lighter-than-real body-to-leg mass ratio (~35% body) because the 3D-printed chassis is light and the 8 leg servos are heavy (60g each). The real robot sits firmly on the ground; the sim can appear slightly bouncy, especially during fast clip playback. Treat the sim as authoritative for *joint motion* (does this clip drive the servos correctly?) rather than *full-body dynamics* (does the robot walk without slipping?).
+
+- **Self-collision**: Leg links use simplified box/capsule collision geometry. Self-collision between adjacent links is disabled by PyBullet's default link-tree filter. If the real robot can fold a leg into a position that the sim flags as penetrating, trust the real robot.
+
 ## Requirements
 
 Run everything from `code/simulation/` with **Python 3.12**. On macOS, PyBullet has no PyPI wheel, so install it from conda-forge (`conda install -c conda-forge pybullet`) before `pip install -r requirements.txt`; Linux/CI can `pip install` directly. The firmware SIL additionally needs **CMake ≥ 3.15 + a C++17 compiler + pybind11** (it auto-builds on first use).
