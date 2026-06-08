@@ -2,12 +2,12 @@
 # All values in SI units (kg, m, s, N, N·m, …) unless noted.
 
 contact:
-  stiffness: 30000
-  damping: 100
-  restitution: 0.0
+  stiffness: 80000
+  damping: 1000
+  restitution: 0.1
 
 motor:
-  position_gain: 0.5
+  position_gain: 1.5
   velocity_gain: 2.0
 
 damping:
@@ -15,7 +15,7 @@ damping:
   angular: 0.0
 
 friction:
-  foot_lateral: 2.5
+  foot_lateral: 1.0
   foot_spinning: 0.3
 
 solver:
