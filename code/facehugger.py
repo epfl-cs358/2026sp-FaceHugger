@@ -235,14 +235,6 @@ def cmd_sim(args):
         cli.append("--monitor")
     if args.log:
         cli.append("--log")
-    if getattr(args, "python_port", False):
-        print(
-            "error: --python-port was removed. The SIL (compiled firmware) is the "
-            "only sim path. Build it with:\n"
-            "  cd code/simulation/firmware_sil && cmake -S . -B build && cmake --build build",
-            file=sys.stderr,
-        )
-        return 1
     if args.walk:
         cli.append("--walk")
     if args.trot:

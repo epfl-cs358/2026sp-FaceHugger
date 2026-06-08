@@ -223,12 +223,7 @@ def _build_state(export: dict, cfg: dict) -> _GenState:
             servo_mesh_name = mesh_name
             break
 
-    # `visual_flip_rpy_deg` was a workaround for when servos were emitted with
-    # CAD-source orientation that pointed the wrong way. With the standalone-
-    # servos design (post-Phase G) the mesh is re-origined to ServoMountPoint
-    # and placed at world ServoMountPoint per leg, so no blanket orientation
-    # hack is needed. Field is read for backward yaml compat but not applied.
-    _ = servo_cfg.get("visual_flip_rpy_deg", [0.0, 0.0, 0.0])
+
 
     return _GenState(
         cfg=cfg,

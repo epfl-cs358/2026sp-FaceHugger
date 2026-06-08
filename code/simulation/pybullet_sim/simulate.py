@@ -70,22 +70,7 @@ def main():
         help="record per-joint torque/current every step; on exit print a "
         "summary table and write sim_log.csv + sim_log.png (additive to --monitor)",
     )
-    parser.add_argument(
-        "--python-port",
-        dest="python_port",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
     args = parser.parse_args()
-
-    if args.python_port:
-        print(
-            "error: --python-port was removed. The SIL (compiled firmware) is the "
-            "only sim path. Build it with:\n"
-            "  cd code/simulation/firmware_sil && cmake -S . -B build && cmake --build build",
-            file=sys.stderr,
-        )
-        raise SystemExit(1)
 
     from firmware_sil import run_clip_sil as clip_fn  # noqa: N813
     from firmware_sil import run_gait_sil as gait_fn  # noqa: N813

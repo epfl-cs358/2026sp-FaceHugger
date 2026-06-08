@@ -10,9 +10,10 @@ CLI entrypoints (invoked by `code/facehugger.py`):
 - `python -m firmware_sil.build`          — auto-build the fh_sim pybind module
 - `python -m firmware_sil.gen_references` — regenerate reference clip traces
 
-`run_clip_sil` / `run_gait_sil` are the SIL counterparts of
-`pybullet_sim.run_clip` / `run_gait`; they live here so that
-`pybullet_sim` no longer needs to import `firmware_sil` (one-way edge:
+`run_clip_sil` / `run_gait_sil` are the only clip/gait playback paths;
+the Python-port alternatives (`pybullet_sim.run_clip` / `run_gait`) were
+removed. The SIL run loops live here so that `pybullet_sim` only depends
+on `firmware_sil` via the top-level dispatcher (one-way edge:
 firmware_sil → pybullet_sim).
 """
 
