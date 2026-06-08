@@ -34,7 +34,6 @@ Both are driven by the exact firmware. The robot should step in place / forward 
 python code/facehugger.py sim --trot --float --monitor
 ```
 
-If you have no C++ toolchain, add `--python` to drive the gait from the pure-Python re-port instead of the compiled firmware.
 
 ## Playing a clip
 
@@ -89,7 +88,7 @@ The placement scene should match PyBullet's rest pose. The rigged scene is where
 
 ```bash
 python3 animation/scripts/check_export_consistency.py   # .h/.js round-trip + pose conventions
-python -m urdf_gen.verify_export_parity                  # all three formats agree
+python -m animation_tools.export_parity                  # all three formats agree
 ```
 
 Both exit `0` when everything agrees. Only then wire the clip into the firmware and reflash. The full set of standalone tools and their flags is on the [other tools](scripts-cli.md) page.

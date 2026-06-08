@@ -124,17 +124,18 @@ combined-rule meshes, the servo-role assignment) see
    and `facehugger.urdf` at `(0, 0, body_height + 0.02)`, then builds
    the `joint_name → joint_idx` map.
 3. `pybullet_sim.motor.reset_to_stance` bends each leg to the stance
-   pose: shoulder = 0, hip = -40°, knee = -60° (the `STANCE_DEG`
-   constants in `pybullet_sim.paths`). Without this step the robot
-   stays in rest pose — legs horizontal, the "starfish" layout — which
-   is the visual that a flat URDF importer that doesn't apply joint
+   pose derived from the firmware's NEUTRAL (through `translateToServo`
+   with SIL CALIB=90 → servo_angles_to_joint_targets, cached in
+   `pybullet_sim.kinematics._NEUTRAL_HIP_KNEE`). Without this step the
+   robot stays in rest pose — legs horizontal, the "starfish" layout —
+   which is the visual that a flat URDF importer that doesn't apply joint
    state produces.
 4. `pybullet_sim.motor.apply_leg_pose` then sends matching motor
    targets so gravity doesn't pull the bent joints back to zero.
 
-After settling, `run_stand` idles the sim; `run_gait` per-tick computes
-foot targets via IK and feeds them through `apply_joint_targets` over
-the gait period.
+After settling, `run_stand` idles the sim; for clips and gaits the
+compiled firmware SIL (`firmware_sil.sil_bridge`) computes servo targets
+and drives the joints through `apply_joint_targets`.
 
 The body height (`cfg.body_height`) is computed by `build_config` as
 the lowest foot Z in the neutral pose, so the body spawns clear of the

@@ -32,7 +32,7 @@ The single entry point for the simulation half of the pipeline is [code/facehugg
 - **`cad/scripts/ExportBodiesToURDF/`** — Fusion 360 add-in (Python). Edits to the chassis "combined parts" list (`EXPORT_RULES`) belong here, not downstream — see the troubleshooting table in `code/simulation/README.md`.
 - **`cad/scripts/ExportPrintableSTLs/`** — separate Fusion add-in that exports print-ready STLs (per-body up-axis rotation). Unrelated to the URDF pipeline.
 - **`code/firmware/`** — PlatformIO ESP32 project. Three logical layers under `src/`: `brain/` (network + sensors), `nervous_system/` (kinematics, legs, servos, spinal_cord, movements/poses), `shared/` (config + data). See [code/firmware/src/nervous_system/README.md](code/firmware/src/nervous_system/README.md) for the "80% hardcoded pose / 20% calibration" philosophy.
-- **`code/simulation/`** — Python, split into packages: `pybullet_sim/` (the runtime — `simulate`, `gaits`, `kinematics`, `helpers`, `constants`, `sim_monitor`), `animation_tools/` (the firmware-faithful clip re-port — `servo_convention`, `clip_loader`, `clip_player`, `gait_interpreter`; the Python fallback / parity reference), and `urdf_gen/` (`generate_urdf`, `verify_export_parity`). `facehugger.py` + `facehugger_config.yaml` + `generated/` sit at the top. The `docs/` subfolder is the authoritative spec for the CAD↔URDF↔sim contract. Run modules as `python -m pybullet_sim.simulate` (from `code/simulation/`), not by path.
+- **`code/simulation/`** — Python, split into packages: `pybullet_sim/` (the runtime — `simulate`, `kinematics`, `scene`, `motor`, `sim_monitor`), `animation_tools/` (firmware-faithful clip math — `servo_convention`, `clip_loader`, `export_parity`), `firmware_sil/` (compiled firmware bridge), and `urdf_gen/` (`generate_urdf`). `facehugger.py` + `facehugger_config.yaml` + `generated/` sit at the top. Run modules as `python -m pybullet_sim.simulate` (from `code/simulation/`), not by path.
 - **`code/remote-control-app/MyApp/`** — Expo (React Native + TypeScript) app, uses Zustand for state. Talks to the ESP32 over WebSocket on port 81 per [code/API_SPEC.md](code/API_SPEC.md).
 - **`animation/scripts/`** — Blender 5.x tooling. Two kinds of files live side by side:
   - *Scene builders* (run as `blender --python …`): `visualize_urdf.py` (placement-only, cross-check baseline), `visualize_fusion_export.py` (CAD-side cross-check), `urdf_to_blender_rigged.py` (real armature with FK shoulder + IK on hip/knee). The rigged scene must match the baseline within 0.5 mm at zero pose — if it doesn't, the rig is composing transforms wrong.
@@ -44,7 +44,7 @@ The single entry point for the simulation half of the pipeline is [code/facehugg
 
 ### Simulation (Python via `code/facehugger.py`, run from the repo root)
 
-`facehugger.py` resolves its own paths, so run it from anywhere (the examples assume the repo root). The standalone modules and tests it does not wrap still run from `code/simulation/` (e.g. `python -m urdf_gen.verify_export_parity`, `pytest tests/`).
+`facehugger.py` resolves its own paths, so run it from anywhere (the examples assume the repo root). The standalone modules and tests it does not wrap still run from `code/simulation/` (e.g. `python -m animation_tools.export_parity`, `pytest tests/`).
 
 ```bash
 python code/facehugger.py urdf                       # regenerate generated/facehugger.urdf

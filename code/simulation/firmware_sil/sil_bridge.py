@@ -22,7 +22,6 @@ from animation_tools.servo_convention import (  # noqa: E402
     LEG_FL,
     LEG_FR,
     LEG_ID_TO_SIM_NAME,
-    LEG_ID_TO_URDF_AXIS_SIGN,
     LEG_RL,
     LEG_RR,
     servo_to_radians,
@@ -45,7 +44,28 @@ _LEG_IDS = (LEG_FR, LEG_FL, LEG_RR, LEG_RL)
 # lines the firmware emitted; we don't synthesize them.
 _OOR_RE = re.compile(r"\[OOR\] servo (\d+) requested ([-\d.]+)")
 
+# Cached axis signs from the URDF — computed once on first call.
+_axis_signs_cache = None
 
+
+def _build_urdf_axis_signs():
+    """Read hip/knee axis signs from the generated URDF."""
+    from pybullet_sim.paths import URDF_PATH
+    from pybullet_sim.urdf_io import _load_urdf_joints
+
+    joints = _load_urdf_joints(URDF_PATH)
+    out = {}
+    for leg_id, sim_name in LEG_ID_TO_SIM_NAME.items():
+        hip_axis = joints[f"{sim_name}_link2_joint"]["axis"]
+        out[leg_id] = 1 if hip_axis[1] >= 0.0 else -1
+    return out
+
+
+def _urdf_axis_sign(leg_id):
+    global _axis_signs_cache
+    if _axis_signs_cache is None:
+        _axis_signs_cache = _build_urdf_axis_signs()
+    return _axis_signs_cache[leg_id]
 def servo_angles_to_joint_targets(angles12):
     """12 firmware servo degrees -> {urdf_joint_name: radians}.
 
@@ -59,7 +79,7 @@ def servo_angles_to_joint_targets(angles12):
         thigh = angles12[leg_id * 3 + 1]
         knee = angles12[leg_id * 3 + 2]
         name = LEG_ID_TO_SIM_NAME[leg_id]
-        axis = LEG_ID_TO_URDF_AXIS_SIGN[leg_id]
+        axis = _urdf_axis_sign(leg_id)
         targets[f"{name}_link1_joint"] = servo_to_radians(
             hip
         )  # shoulder axis +Z uniform

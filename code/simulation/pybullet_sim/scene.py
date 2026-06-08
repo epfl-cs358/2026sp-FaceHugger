@@ -140,6 +140,11 @@ def connect_and_setup(cfg, gui, float_mode=False, debug=False):
     friction = sim_cfg["friction"]
     solver = sim_cfg["solver"]
 
+    # Sync torque thresholds with the servo's actual stall torque from
+    # facehugger_config.yaml, so changing servo.effort_nm shifts all bands.
+    from .sim_monitor import set_stall_torque
+    set_stall_torque(cfg.servo_force)
+
     p.connect(p.GUI if gui else p.DIRECT)
     if gui:
         p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)

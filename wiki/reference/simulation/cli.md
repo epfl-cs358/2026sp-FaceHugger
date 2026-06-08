@@ -38,7 +38,7 @@ python code/facehugger.py urdf
 
 ## `sim`: the robot in software
 
-`sim` runs **the robot in software**: the exact compiled firmware driving a PyBullet robot, fronted by the same hardware WebSocket API. With no drive flag the robot just stands. Add one drive mode and any number of the other flags. **By default, clips and gaits are driven by the exact compiled firmware** (see [Controlling the simulation](pybullet-control.md)); `--python` switches to the Python re-port.
+`sim` runs **the robot in software**: the exact compiled firmware driving a PyBullet robot, fronted by the same hardware WebSocket API. With no drive flag the robot just stands. Add one drive mode and any number of the other flags.
 
 **Drive** (pick at most one; none = stand):
 
@@ -47,12 +47,6 @@ python code/facehugger.py urdf
 | `--walk` / `--trot` | run that gait (the exact firmware `tickGait`/`tickTrot`) |
 | `--clip NAME` | play a baked animation clip by name (from `clips_all.h`) |
 | `--loop` | replay the clip continuously (GUI only) to watch cumulative behaviour |
-
-**Backend**:
-
-| Flag | Meaning |
-|------|---------|
-| `--python` | drive clips **and** gaits with the Python re-port instead of the firmware (no C++ toolchain needed) |
 
 **Inspect**:
 

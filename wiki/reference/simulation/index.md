@@ -26,4 +26,4 @@ The URDF is the kinematic source of truth (see [Conventions](../conventions.md) 
 
 ## Requirements
 
-Run everything from `code/simulation/` with **Python 3.12**. On macOS, PyBullet has no PyPI wheel, so install it from conda-forge (`conda install -c conda-forge pybullet`) before `pip install -r requirements.txt`; Linux/CI can `pip install` directly. The firmware SIL additionally needs **CMake ≥ 3.15 + a C++17 compiler + pybind11** (it auto-builds on first use); without a C++ toolchain, pass `--python` to fall back to the pure-Python re-port.
+Run everything from `code/simulation/` with **Python 3.12**. On macOS, PyBullet has no PyPI wheel, so install it from conda-forge (`conda install -c conda-forge pybullet`) before `pip install -r requirements.txt`; Linux/CI can `pip install` directly. The firmware SIL additionally needs **CMake ≥ 3.15 + a C++17 compiler + pybind11** (it auto-builds on first use).
