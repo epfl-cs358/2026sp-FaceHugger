@@ -636,9 +636,11 @@ def _emit_leg(urdf: URDF, leg: dict, state: _GenState) -> None:
             if side == "R":
                 ft = [-ft[0], ft[1], -ft[2]]
             collision_override = CollisionPrimitive(
-                shape="sphere",
+                shape="capsule",
                 origin_xyz_mm=list(ft),
                 radius=0.005,
+                length=0.005,
+                origin_rpy=(1.5708, 0.0, 0.0),  # Rx(90°) — align capsule along Y
             )
         elif link_key in ("link1", "link2"):
             # Bone vector from this link's origin to the next joint.

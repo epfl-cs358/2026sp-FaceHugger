@@ -157,7 +157,12 @@ def connect_and_setup(cfg, gui, float_mode=False, debug=False):
     p.setTimeStep(TIMESTEP)
     p.setPhysicsEngineParameter(numSolverIterations=int(solver["iterations"]))
     if not float_mode:
-        p.loadURDF("plane.urdf")
+        plane_id = p.loadURDF("plane.urdf")
+        # PyBullet's plane.urdf defaults to lateralFriction=0.5. With a
+        # 5mm sphere foot contact and geometric-mean friction combining
+        # (effective = sqrt(foot × plane)), that halves the intended grip.
+        # Set the plane side to 1.0 so effective = sqrt(link × plane) ≈ link.
+        p.changeDynamics(plane_id, -1, lateralFriction=1.0)
 
     robot_id = p.loadURDF(
         cfg.urdf_path,

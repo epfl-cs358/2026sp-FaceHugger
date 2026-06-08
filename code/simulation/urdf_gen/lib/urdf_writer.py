@@ -13,13 +13,15 @@ class CollisionPrimitive:
     """Analytic collision geometry to replace the STL mesh <collision>.
 
     Shapes mirror URDF primitives:
-      - sphere: origin_xyz_mm, radius (metres)
-      - box:    origin_xyz_mm, origin_rpy (radians), size_xyz_mm (metres)
+      - sphere:  origin_xyz_mm, radius (metres)
+      - capsule: origin_xyz_mm, origin_rpy, radius (metres), length (metres)
+      - box:     origin_xyz_mm, origin_rpy (radians), size_xyz_mm (metres)
     """
-    shape: str  # "sphere" | "box"
+    shape: str  # "sphere" | "capsule" | "box"
     origin_xyz_mm: list  # [x, y, z] mm in link frame
     origin_rpy: tuple = (0.0, 0.0, 0.0)  # radians
-    radius: float = 0.0  # sphere radius (metres)
+    radius: float = 0.0  # sphere / capsule radius (metres)
+    length: float = 0.0  # capsule cylindrical section (metres)
     size_xyz_mm: list | None = None  # [x, y, z] mm for box
 
 
@@ -149,6 +151,8 @@ class URDF:
             ]
             if ov.shape == "sphere":
                 self.lines += [f'        <sphere radius="{ov.radius}"/>']
+            elif ov.shape == "capsule":
+                self.lines += [f'        <capsule radius="{ov.radius}" length="{ov.length}"/>']
             elif ov.shape == "box":
                 size_str = " ".join(f"{s * 1e-3:.6f}" for s in ov.size_xyz_mm)
                 self.lines += [f'        <box size="{size_str}"/>']

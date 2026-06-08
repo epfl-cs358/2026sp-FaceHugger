@@ -15,8 +15,8 @@ damping:
   angular: 0.0
 
 friction:
-  foot_lateral: 1.0
-  foot_spinning: 0.3
+  foot_lateral: 3.0
+  foot_spinning: 0.05
 
 solver:
   iterations: 300

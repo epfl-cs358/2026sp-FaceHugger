@@ -161,9 +161,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="-0.078220 -0.020510 0.000000" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="-0.078220 -0.020510 0.000000" rpy="1.570800 0.000000 0.000000"/>
       <geometry>
-        <sphere radius="0.005"/>
+        <capsule radius="0.005" length="0.005"/>
       </geometry>
     </collision>
   </link>
@@ -253,9 +253,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="-0.078220 -0.020510 0.000000" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="-0.078220 -0.020510 0.000000" rpy="1.570800 0.000000 0.000000"/>
       <geometry>
-        <sphere radius="0.005"/>
+        <capsule radius="0.005" length="0.005"/>
       </geometry>
     </collision>
   </link>
@@ -345,9 +345,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0.078220 -0.020510 -0.000000" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="0.078220 -0.020510 -0.000000" rpy="1.570800 0.000000 0.000000"/>
       <geometry>
-        <sphere radius="0.005"/>
+        <capsule radius="0.005" length="0.005"/>
       </geometry>
     </collision>
   </link>
@@ -437,9 +437,9 @@
       </geometry>
     </visual>
     <collision>
-      <origin xyz="0.078220 -0.020510 -0.000000" rpy="0.000000 0.000000 0.000000"/>
+      <origin xyz="0.078220 -0.020510 -0.000000" rpy="1.570800 0.000000 0.000000"/>
       <geometry>
-        <sphere radius="0.005"/>
+        <capsule radius="0.005" length="0.005"/>
       </geometry>
     </collision>
   </link>
