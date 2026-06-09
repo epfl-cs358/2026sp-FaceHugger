@@ -1,20 +1,25 @@
-# FaceHugger - a quadruped robot for MIT Things 2026sp
+# FaceHugger: a quadruped robot for Making Intelligent Things Spring 2026
+
+<img width="50%" alt="main-robot-stance" src="https://github.com/user-attachments/assets/3c2586f5-037b-4c2a-b8e2-0f888ed73f07" />
 
 CAD, firmware, simulation, and animation tooling for the FaceHugger quadruped.
+This robot was designed and built from scratch by a team of 6 students at EPFL in the [Making Intelligent Things course (CS-358)](https://edu.epfl.ch/coursebook/en/making-intelligent-things-b-CS-358-B) at EPFL during the Spring 2026 semester.
+
+Interested in this robot? Find out how to build it and how it works thanks to the _[FaceHugger Wiki](https://epfl-cs358.github.io/2026sp-FaceHugger/)_.
 
 ## See it in action
 
-![FaceHugger at rest](wiki/assets/img/general-robot-pics-videos/main-robot-stance.jpg)
-*FaceHugger at rest: 12 servos, ESP32 brain, PCA9685 driver*
+https://github.com/user-attachments/assets/f48a0bcb-4729-4eee-8e89-9a81a8c70e2d
 
-\[reupload needed\]
 *General moves: walk, trot, and wave clips*
 
-\[reupload needed\]
+https://github.com/user-attachments/assets/28df8788-2bca-48f2-9b82-b47c927adb80
+
 *Dancing clip*
 
-\[reupload needed\]
-*Auto-flip: the robot detects when it's upside-down and mirrors its pose
+https://github.com/user-attachments/assets/d9c9cdf4-f84c-4cda-ada7-795cacb76790
+
+*Auto-flip: the robot detects when it's upside-down and mirrors its pose*
 
 ## Documentation
 
