@@ -1,5 +1,7 @@
 # Blender animation to robot: the clip panel and export pipeline
 
+![FH Clip Panel — the Blender add-on](../../assets/img/animation-pipeline/Blender-addon-panel.png)
+
 This is the last stage of the pipeline: an animator keyframes a gesture on the Blender rig, and it ends up as a clip the robot can replay on its own. The **FH Clip Panel** add-on (`animation/addons/fh_clip_panel.py`, Blender 5.x) is the tool that authors those gestures and, crucially, does the math-to-servo conversion on the host at export time. The robot only ever replays baked frames; it never re-runs the conversion.
 
 If you are extending this, the one idea to hold onto is the responsibility split:
@@ -46,6 +48,10 @@ Both the `.js` and `clips_all.h` formats ship **pre-scaled math-space angles**. 
 See [Conventions](../conventions.md) for the angle spaces and the full per-leg `translateToServo` table.
 
 ## The clip panel features
+
+![FH Clip Panel — tab 1](../../assets/img/animation-pipeline/Blender-addon-1.png)
+
+![FH Clip Panel — tab 2](../../assets/img/animation-pipeline/Blender-addon-2.png)
 
 The add-on adds a "FaceHugger" tab to the 3D viewport sidebar (press `N`). It manages clips, poses, selections, and exports against the rigged scene `animation/fh_rigged_latest.blend`.
 

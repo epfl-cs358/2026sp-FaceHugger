@@ -80,6 +80,8 @@ negative drops it.
 
 ![Hip / knee rotation convention](img/servos-2-3-rotation-convention.png)
 
+![Leg rotation orientation per side](../../assets/img/animation-pipeline/leg-rotation-orientation.png)
+
 ## URDF generation
 
 Entry point: `python code/facehugger.py urdf`, which invokes

@@ -14,9 +14,40 @@ FaceHugger is a quadruped robot built for EPFL's *Making Intelligent Things* cou
 - Architecture decisions go in `docs/decisions/<slug>.md`
 - Agent session logs go in `agent-log/<date>-<slug>.md`
 
-## Python Environment
+## Environments
 
-Use `conda activate facehugger` before any Python scripts (PyBullet is installed via conda on macOS — the global `uv` default does not apply here).
+This project uses four separate environments. Here is how to set up each one:
+
+### Simulation + Blender tooling (Python)
+```bash
+cd code/simulation
+conda env create -f environment.yml   # first time only
+conda activate facehugger             # every session
+```
+Run the sim: `python code/facehugger.py sim`
+
+### Wiki / documentation (MkDocs)
+```bash
+python -m venv .venv-docs              # first time only
+source .venv-docs/bin/activate        # every session
+pip install -r requirements-docs.txt  # first time only
+mkdocs serve                          # local preview at http://localhost:8000
+```
+
+### Remote-control app (Expo / React Native)
+```bash
+cd code/remote-control-app/MyApp
+npm install                           # first time only
+npx expo start --web                  # serves at http://localhost:8080
+```
+
+### Firmware (PlatformIO)
+```bash
+cd code/firmware
+pio run                               # compile
+pio run -t upload                     # flash to ESP32
+pio device monitor                    # serial monitor
+```
 
 ## Stack
 

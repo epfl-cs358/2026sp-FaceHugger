@@ -23,6 +23,8 @@ This frame governs URDF joint placement and Blender rig alignment. It is an auth
     body center (base_link origin)
 ```
 
+![Leg numbering and body-frame layout](../assets/img/animation-pipeline/leg-numbering-conventions.png)
+
 ## Leg Naming and IDs
 
 Naming is context-dependent. Use `fl/fr/bl/br` everywhere except inside firmware. The firmware boundary translates to `FR/FL/RR/RL` internally. Never propagate firmware leg names into Python or Blender code; translation happens only at the boundary (e.g., `spinal_cord.cpp` `NEUTRAL[]` array indexing).

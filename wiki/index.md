@@ -104,13 +104,13 @@ This wiki is two things at once: a **build guide** if you want to reproduce or a
 ![FaceHugger at rest](assets/img/general-robot-pics-videos/main-robot-stance.jpg)
 *FaceHugger at rest — 12 servos, ESP32 brain, PCA9685 driver*
 
-<video src="assets/img/general-robot-pics-videos/general-moves.MOV" controls width="100%"></video>
+<video src="assets/img/general-robot-pics-videos/general-moves.mp4" controls width="100%"></video>
 *General moves — walk, trot, and wave clips*
 
-<video src="assets/img/general-robot-pics-videos/robot-dancing.MOV" controls width="100%"></video>
+<video src="assets/img/general-robot-pics-videos/robot-dancing.mp4" controls width="100%"></video>
 *Dancing clip*
 
-<video src="assets/img/general-robot-pics-videos/robot-flipping.MOV" controls width="100%"></video>
+<video src="assets/img/general-robot-pics-videos/robot-flipping.mp4" controls width="100%"></video>
 *Auto-flip — the robot detects when it's upside-down and mirrors its pose*
 
 ## The robot at a glance

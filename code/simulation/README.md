@@ -43,6 +43,14 @@ controlling the simulation, torque analysis, and limitations — lives in the wi
 
 ## Prerequisites
 
-- Conda env: `conda env create -f environment.yml && conda activate facehugger`
+```bash
+cd code/simulation
+conda env create -f environment.yml   # first time only (macOS: conda, Linux: pip works too)
+conda activate facehugger             # every session
+```
+
+Also needed:
 - Fusion 360 with the ExportBodiesToURDF add-in (`cad/scripts/ExportBodiesToURDF/`)
 - For the SIL: CMake ≥ 3.15 + C++17 compiler + pybind11 (auto-builds on first use)
+
+Other project envs (wiki, app, firmware) — see the [main README](../../README.md).
