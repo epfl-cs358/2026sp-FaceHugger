@@ -7,6 +7,20 @@ This wiki is two things at once: a **build guide** if you want to reproduce or a
 !!! tip "Where to start"
     New here? Read [Design](guide/design.md) for the concept, then follow the build guide top to bottom. Looking for how a specific part works? Go straight to the [Reference](reference/conventions.md). Want to know who built it? See the [Team](team.md).
 
+## See it in action
+
+![FaceHugger at rest](assets/img/general-robot-pics-videos/main-robot-stance.jpg)
+*FaceHugger at rest*
+
+<video src="assets/img/general-robot-pics-videos/general-moves.mp4" controls width="100%"></video>
+*General moves: walk, trot, and wave clips*
+
+<video src="assets/img/general-robot-pics-videos/robot-dancing.mp4" controls width="100%"></video>
+*Dancing clip*
+
+<video src="assets/img/general-robot-pics-videos/robot-flipping.mp4" controls width="100%"></video>
+*Auto-flip: the robot detects when it's upside-down and mirrors its pose*
+
 ## Build the robot
 
 <div class="grid cards" markdown>
@@ -98,20 +112,6 @@ This wiki is two things at once: a **build guide** if you want to reproduce or a
     [:octicons-arrow-right-24: Simulation](reference/simulation/index.md)
 
 </div>
-
-## See it in action
-
-![FaceHugger at rest](assets/img/general-robot-pics-videos/main-robot-stance.jpg)
-*FaceHugger at rest — 12 servos, ESP32 brain, PCA9685 driver*
-
-<video src="assets/img/general-robot-pics-videos/general-moves.mp4" controls width="100%"></video>
-*General moves — walk, trot, and wave clips*
-
-<video src="assets/img/general-robot-pics-videos/robot-dancing.mp4" controls width="100%"></video>
-*Dancing clip*
-
-<video src="assets/img/general-robot-pics-videos/robot-flipping.mp4" controls width="100%"></video>
-*Auto-flip — the robot detects when it's upside-down and mirrors its pose*
 
 ## The robot at a glance
 

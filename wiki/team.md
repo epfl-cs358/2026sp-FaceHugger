@@ -74,6 +74,8 @@ We then brought it all together into one walking robot.
 
 </div>
 
+Everyone participated in general assembly of the robot at various points, giving their all to make this project possible in the limited time we had.
+
 ## How we worked
 
 We ran the project as weekly SCRUM sprints: each week we reviewed progress, replanned, and divided the next set of tasks. Because the robot spans so many disciplines, most work happened in parallel: CAD and printing feeding assembly, firmware and the app developing against a shared command protocol, and the simulation validating motion before it reached hardware.
