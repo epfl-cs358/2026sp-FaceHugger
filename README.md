@@ -1,17 +1,17 @@
-# FaceHugger: a quadruped robot for Making Intelligent Things Spring 2026
+# FaceHugger: An Open-Source Quadruped Robot that Walks, Dances, and Flips
 
 <img width="50%" alt="main-robot-stance" src="https://github.com/user-attachments/assets/3c2586f5-037b-4c2a-b8e2-0f888ed73f07" />
 
-CAD, firmware, simulation, and animation tooling for the FaceHugger quadruped.
-This robot was designed and built from scratch by a team of 6 students at EPFL in the [Making Intelligent Things course (CS-358)](https://edu.epfl.ch/coursebook/en/making-intelligent-things-b-CS-358-B) at EPFL during the Spring 2026 semester.
+In this repo you will find the CAD, firmware, app, simulation, and animation tooling for the FaceHugger quadruped.
+This robot was designed and built from scratch by a team of 6 students at EPFL in the [Making Intelligent Things course (CS-358)](https://edu.epfl.ch/coursebook/en/making-intelligent-things-b-CS-358-B) during the Spring 2026 semester.
 
-Interested in this robot? Find out how to build it and how it works thanks to the _[FaceHugger Wiki](https://epfl-cs358.github.io/2026sp-FaceHugger/)_.
+Find out how to build it and how it works in the _[FaceHugger Wiki](https://epfl-cs358.github.io/2026sp-FaceHugger/)_.
 
 ## See it in action
 
 https://github.com/user-attachments/assets/f48a0bcb-4729-4eee-8e89-9a81a8c70e2d
 
-*General moves: walk, trot, and wave clips*
+*General moves: walk and wave clips*
 
 https://github.com/user-attachments/assets/28df8788-2bca-48f2-9b82-b47c927adb80
 
