@@ -101,18 +101,3 @@ or reimplement the controls as a self-contained Plotly HTML widget embedded in a
 
 **Math & diagrams:** LaTeX via MathJax: inline `\( ... \)`, block `\[ ... \]`. Diagrams via Mermaid: a
 ` ```mermaid ` fenced block. Circuit schematics: export from KiCad as SVG and embed as an image.
-
-## Who writes what
-
-Starting split by theme; reassign names and rebalance per page as you go (this is WIP). Ferdinand's
-firmware+software block is the heaviest; consider sharing the firmware reference.
-
-| Member | Theme | Pages to write |
-|---|---|---|
-| **Antoine V.** | Design & analysis | `wiki/index.md` (Quick Start); `guide/design.md` (concept, how a leg moves, sizing); `reference/simulation/` (torque analysis, torque heatmap) |
-| **Antoine R.** | Parts & 3D printing | `guide/parts.md` (BOM, electronics, hardware & ball bearings, printed parts); `guide/printing.md` |
-| **Ilias S.** | Wiring & assembly | `guide/wiring.md` (schematic, pinout, battery safety); `guide/assembly.md` (step-by-step build + photos) |
-| **Ferdinand C.** | Firmware & software | `guide/software.md` (overview, how-it-works, setup, running); `reference/firmware/` (architecture, kinematics, servo conventions, API, CSV diagnostics) |
-| **Noa D.** | Animation & app | `reference/animation/` (pipeline, Blender rig, URDF pipeline, `.fhc` format, gait design); `reference/remote-control/` (app overview, WebSocket API) |
-
-Full page list and the source-doc mapping: see `WIKI_MIGRATION_PLAN.md` §7 at the repo root.
