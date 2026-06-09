@@ -86,4 +86,4 @@ For the full feature reference (pose library, selection sets, activity heatmap,
 authoring-time warnings, and integration tests), see
 [the Clip Panel reference](../../reference/animation/clip-panel.md).
 
-![Script warning — update your scripts](../../../assets/img/animation-pipeline/script-warning.png)
+![Script warning — update your scripts](../../assets/img/animation-pipeline/script-warning.png)
